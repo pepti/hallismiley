@@ -220,14 +220,15 @@ company/                  gitignored: plans, decisions, logs, market-research st
 
 | | |
 |---|---|
-| Routes | `server/routes/adminNavRoutes.js` → `/api/v1/admin/nav-config` · `server/routes/userRoutes.js` → `PUT /api/v1/users/me/{page-width, page-width-motion, aside-width}` (the layout preferences) |
+| Routes | `server/routes/adminNavRoutes.js` → `/api/v1/admin/nav-config` · `server/routes/adminHomeRoutes.js` → `GET /api/v1/admin/home` (the "Í dag" read) · `server/routes/userRoutes.js` → `PUT /api/v1/users/me/{page-width, page-width-motion, aside-width}` (the layout preferences) |
 | Models | `server/models/AdminNavConfig.js` |
-| Views | `public/js/views/AdminView.js` (the company overview at `/admin`), `AdminProjectsView.js` (unlisted `/admin/projects` board) |
+| Services | `server/services/adminHome.js` (the home's per-view sources, one `Promise.allSettled`) |
+| Views | `public/js/views/AdminView.js` ("Í dag", the admin home at `/admin`), `AdminProjectsView.js` (the `/admin/projects` board, a Vefur line since 2026-09-26) |
 | Components | `public/js/components/AdminSidebar.js` (`ADMIN_NAV`), `adminNavLayout.js`, `adminSurface.js` (`HIDDEN_ADMIN_VIEWS`), `adminTable.js`, `adminPager.js`, `FilterBar.js`, `Toast.js`, `ToastLog.js`, `ErrorDialog.js` (every error toast), `Lightbox.js`, `ChangesList.js`, `PageWidthControl.js`, `AsideWidthControl.js`, `widthMenu.js` |
 | Client | `public/js/services/adminNav.js`, `toastLog.js`, `buildInfo.js`, `pageWidth.js`; `public/js/utils/stickyHScroll.js`, `listState.js`, `localPref.js`, `debounce.js`, `format.js`, `pageTitle.js`, `downloadCsv.js`, `csv.js`, `escHtml.js`, `api.js` |
-| CSS | `public/css/admin-shell.css`, `admin-dashboard.css`, `admin-kit.css`, `layout.css`, `components.css`, `variables.css`, `reset.css` |
-| Jest | `tests/integration/adminNavConfig.test.js`, `admin.test.js`; `tests/unit/admin-surface-parity.test.js`, `admin-views-parity.test.js`, `adminTableKit.test.js`, `kitFormatters.test.js`, `pageTitle.test.js`, `debounce.test.js`, `csvClientParity.test.js`, `pageWidth.client.test.js`; `tests/integration/pageWidth.test.js` |
-| e2e | `e2e/admin.spec.js`, `admin-surface.spec.js`, `admin-list-kit.spec.js`, `admin-sidebar-scroll.spec.js`, `admin-nav-colors.spec.js`, `admin-page-width.spec.js` |
+| CSS | `public/css/admin-shell.css`, `admin-dashboard.css`, `admin-idag.css` (the home; `idag-*` only, tokens only), `admin-kit.css`, `layout.css`, `components.css`, `variables.css`, `reset.css` |
+| Jest | `tests/integration/adminNavConfig.test.js`, `admin.test.js`, `adminHome.test.js`; `tests/unit/admin-surface-parity.test.js`, `admin-views-parity.test.js`, `adminTableKit.test.js`, `kitFormatters.test.js`, `pageTitle.test.js`, `debounce.test.js`, `csvClientParity.test.js`, `pageWidth.client.test.js`; `tests/integration/pageWidth.test.js` |
+| e2e | `e2e/admin.spec.js`, `admin-home.spec.js`, `admin-surface.spec.js`, `admin-list-kit.spec.js`, `admin-sidebar-scroll.spec.js`, `admin-nav-colors.spec.js`, `admin-page-width.spec.js` |
 | Migrations | 053 (nav config), 111 (per-account page width, Mjúk hreyfing, side-column width, cookie choice) |
 | Features | [admin-shell](../features/admin-shell.md), [admin-ui-kit](../features/admin-ui-kit.md) |
 | Feature doc | — (this section) |
@@ -259,16 +260,40 @@ company/                  gitignored: plans, decisions, logs, market-research st
   keys are stable; saved per-admin layouts keep their old placement until Reset
   [r1](HISTORY.md#r1), [admin-reshape](HISTORY.md#admin-reshape). The 12-tint row colours ride the
   existing `admin_nav_config` JSONB — no migration [base-sync](HISTORY.md#base-sync).
-- `AdminProjectsView` at unlisted `/admin/projects` is gated on the `dashboard`
-  view OR editor [admin-reshape](HISTORY.md#admin-reshape).
+- `AdminProjectsView` at `/admin/projects` is gated on its own `projects`
+  view (owned by the `projects` module) OR editor; a Vefur sidebar line since
+  the home replaced the overview that linked to it
+  [admin-reshape](HISTORY.md#admin-reshape), [admin-home-idag-2026-09-26](HISTORY.md#admin-home-idag-2026-09-26).
 - Every admin view carries `destroy()` and a stale-paint sequence guard;
   unmapped enum values print themselves rather than a confidently wrong label
   [review-099](HISTORY.md#review-099).
 - The client CSV writer tracks the server's `PLAIN_NUMBER` exemption
   (`tests/unit/csvClientParity.test.js`) [ui-kit](HISTORY.md#ui-kit).
-- Dashboard cards sit over EXISTING endpoints, each gated on the view its
-  endpoint demands; dashboard-less users are forwarded to their first visible
-  view ([admin-reshape](HISTORY.md#admin-reshape), [sales-staff](HISTORY.md#sales-staff)).
+- **The admin home is ONE role-gated endpoint** ([admin-home-idag-2026-09-26](HISTORY.md#admin-home-idag-2026-09-26)):
+  `GET /api/v1/admin/home`, session + the `dashboard` view. Every block is
+  COMPUTED server-side only for a view the role holds — the views
+  `requireView.resolveViews` resolves (2FA-withheld), minus a switched-off
+  module's, minus (for a `'*'` holder only) the product's
+  `identity.surface.hiddenAdminViews`, the sidebar's rule. A key the role
+  cannot see is ABSENT from the JSON (never null, never 0); the client only
+  re-checks `canSeeView` before it links. Independent sources run in one
+  `Promise.allSettled`; a failing one drops its blocks, is logged, and the
+  answer is still 200 with `errors: [...]`. Amounts integer ISK, times ISO
+  UTC, no labels from the server (the words are `adminHome.*`). Setup (Fyrstu
+  skrefin) is admins only and derived, never stored; `null` once every step
+  is done. A 45 s per-viewer cache is allowed (the header prints "staðan kl.
+  HH:MM"), never polling. Dashboard-less roles are forwarded to their first
+  visible view, an editor with none to the projects board
+  ([admin-reshape](HISTORY.md#admin-reshape), [sales-staff](HISTORY.md#sales-staff)).
+- **Sales channels (`salesToday.byChannel`) — the rule is to confirm with
+  Bókari/Halli**: web = shop orders (ISK) paid today (`orders` view);
+  wholesale = invoices issued today NOT created from an order (`invoices`);
+  pos = till receipts rung up today (`pos`). A channel the instance has but
+  the role lacks is omitted, never zeroed, and the figure says `partial`.
+  The comparison is the same weekday last week up to the same time of day.
+  Till sales are aggregated, never listed in the feed. Change requests have
+  only open/resolved: the home says "N opnar", never "waiting on you"
+  ([admin-home-idag-2026-09-26](HISTORY.md#admin-home-idag-2026-09-26)).
 - Kit contract: `listState` uses `replaceState` only, never `pushState`; page
   size is NOT in the URL; `adminPager.PAGE_SIZES` tops out at 200 because
   `leadsController` clamps `limit` to [1,200]; `sortableTh` emits a real
@@ -281,7 +306,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 - Neutral status chips use `--text-secondary`; `--overlay` is a per-theme token
   ([review-099](HISTORY.md#review-099)).
 
-**History**: [r1](HISTORY.md#r1) · [admin-reshape](HISTORY.md#admin-reshape) · [ui-kit](HISTORY.md#ui-kit) · [harvest-ice-b-2026-09-24](HISTORY.md#harvest-ice-b-2026-09-24)
+**History**: [r1](HISTORY.md#r1) · [admin-reshape](HISTORY.md#admin-reshape) · [ui-kit](HISTORY.md#ui-kit) · [harvest-ice-b-2026-09-24](HISTORY.md#harvest-ice-b-2026-09-24) · [admin-home-idag-2026-09-26](HISTORY.md#admin-home-idag-2026-09-26)
 
 ## 3. Public site — home, /thjonusta, /um-okkur, /hafa-samband, SSR meta, sitemap, SEO
 

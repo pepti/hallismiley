@@ -294,6 +294,7 @@ router's own gate still applies behind it.
 | `/api/v1/admin/background` | `adminBackgroundRoutes.js` | admin (hidden) | — |
 | `/api/v1/admin/change-requests` | `adminChangeRequestRoutes.js` | `feedback` view | — |
 | `/api/v1/admin/nav-config` | `adminNavRoutes.js` | admin (`requireRole`) | — |
+| `/api/v1/admin/home` | `adminHomeRoutes.js` | session + `dashboard` view; `GET /` only, `no-store`. Behind the gate each block is computed only for a view the role holds (absent otherwise); a failing source → 200 with `errors` | [ARCHITECTURE §2](ARCHITECTURE.md#2-admin-shell--sidebar-dashboard-surface-hiding-ui-kit) · [HISTORY](HISTORY.md#admin-home-idag-2026-09-26) |
 | `/api/v1/admin/roles` | `adminRolesRoutes.js` | admin | — |
 | `/api/v1/admin/bins` | `adminBinsRoutes.js` | admin views (hidden) | — |
 | `/api/v1/admin/customers` | `adminCustomerRoutes.js` | `customers` view; `POST /` admin + CSRF — `{ email }` → welcome invite, `invited` only when it reached the customer, else `resetUrl` (+ `emailError`); `{ no_email: true, display_name }` → a name-only login, `{ username, password }` once (`no-store`) | `docs/SALES-STAFF.md` · [HISTORY](HISTORY.md#harvest-ice-a-2026-09-24) |

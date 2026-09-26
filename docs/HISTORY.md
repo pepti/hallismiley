@@ -65,6 +65,7 @@ Which domains an entry touches is read from the `**History**:` footers in `docs/
 | 2026-09-24 | [Ice harvest, chunk C — inventory and the shop floor (lane 2)](#harvest-ice-c-2026-09-24) | On hand / Committed / Available with ONE audited writer (`models/Inventory.js`, migration 112 `inventory_adjustments` + `orders.stock_deducted_at`); committed = paid, unshipped; stock moves at fulfilment, never below zero; the webhook re-checks Available and refunds an oversell; lock order + 40P01 → 409 BUSY; the sold-out basket guard (ENH #25); the search box that dropped letters; bulk product edit; the till scanner (ENH #22); MCP catalogue tools behind `mcp.write.*` switches, all off |
 | 2026-09-24 | [Ice harvest, chunk D — import, export, uploads (lane 2)](#harvest-ice-d-2026-09-24) | One server-side reader for every product file (CSV, .xlsx, PDF; `POST /products/import/parse-file`, `services/productImport`); barcode as the fallback match key (migration 113 `product_variants.barcode`), ambiguous/duplicate refused, order quantities never stock; rows with a Variant cell create one Draft product with its variants, whole or not at all; the orders list as a real .xlsx; product images normalised on upload + lazy `.thumb.webp` (Buffer writes, no mozjpeg); `exceljs` / `pdf-parse` pinned, `sharp` a runtime dependency |
 | 2026-09-25 | [The legal pages name the site they are on; the images are the company's own](#legal-pages-site-host-2026-09-25) | `/terms` and `/personuvernd` took "orangesmiley.is" as a literal, so rekstrarkerfi.is would have said it was orangesmiley.is; the host now comes from the canonical origin (APP_URL) via `utils/identity.js` `siteHost()`; the terms credit the landscape images to Orange Smiley ehf. (iceland-v2), not to licensed photographers; both dated 25. september 2026; copy approved by Halli |
+| 2026-09-26 | ["Í dag" — the admin home replaces the card overview (D-020 step 4)](#admin-home-idag-2026-09-26) | One role-gated read, `GET /api/v1/admin/home`: every block computed server-side only for a view the role holds, absent otherwise; Bíður þín / Staðan / Nýjast / Fyrstu skrefin after Hönnuður's design (`admin-idag.css`, tokens only, container queries); a failing source → 200 + `errors`; sales channels web/wholesale/till (rule to confirm with Bókari/Halli); change requests say "opnar", never "waiting on you"; Verkefni becomes a Vefur sidebar line with its own `projects` view; labels DRÖG; no migration |
 
 ---
 
@@ -3265,3 +3266,105 @@ Everything else in both pages was checked against both sites and still holds
 (company identity, prices indicative + a separate service agreement, the
 IP/contact/disclaimer/liability sections, Icelandic law, Héraðsdómur
 Reykjaness). No migration.
+
+<a id="admin-home-idag-2026-09-26"></a>
+## 2026-09-26 — "Í dag": the admin home replaces the card overview (D-020 step 4)
+
+D-020 step 4 (rk `PLAN.md` R2b step 4): the owner's first screen is what is
+waiting on them today, not seven cards of statistics. Hönnuður's design (spec
+`idag-spec.md`, mock `idag-mockup.src.html`, measured on the engine trio
+and rk's six themes) and Efnishöfundur's DRÖG labels were ready; this is the
+build. It is engine code (`admin-shell`), so it reaches rekstrarkerfid and
+the demo instance by engine-sync.
+
+**One endpoint, gated per block.** `GET /api/v1/admin/home`
+(`server/routes/adminHomeRoutes.js`, logic in `server/services/adminHome.js`)
+replaces the seven calls the overview made. Session + the `dashboard` view,
+as the page itself. Behind that gate each block is computed only when the role
+holds its view — resolved by the SAME `resolveViews(req)` the guards now share
+(`server/auth/requireView.js`), minus a switched-off module's views, minus, for
+a `'*'` holder only, the product's `identity.surface.hiddenAdminViews` (the
+sidebar's rule, so the home never talks about a surface the admin's nav hides —
+on orangesmiley.is that is the shop, the bins and the till). A key the role
+cannot see is absent from the JSON. Sources run in one `Promise.allSettled`; a
+failing one is logged (pino), its blocks are left out, and the answer is still
+200 with `errors: ["figures.vatNext", …]`. A 45 s per-viewer cache (off under
+`NODE_ENV=test`); no polling.
+
+**What it computes** (amounts integer ISK, times ISO UTC, no labels):
+- `todo` (Bíður þín), only kinds with a count, warn → soon → the rest:
+  `invoices_overdue` (ar), `vat_deadline` (vat; the earliest unfiled VSK
+  deadline due today or later, from 14 days out, warn at ≤ 3), `orders_to_ship`
+  (orders; paid, unfulfilled or partial), `leads_new` (leads),
+  `change_requests_open` (feedback), `bins_unshelved` (bins; `Bin.queueCount()`
+  — "án hillu", never "received": there is no goods-received record).
+- `figures` (Staðan): `salesToday`, `openOrders`, `receivables` (with the
+  ageing buckets), `vatNext` (payable from `vatService.deriveReturn`). A new
+  instance shows none until its first order, invoice or sale; the VSK figure
+  waits for the first posted journal entry.
+- `recent` (Nýjast), ≤ 8 newest across paid orders, payments in against
+  invoices (paid / part-paid), enquiries, change requests received / resolved.
+  Till receipts are aggregated in the sales figure, never listed.
+- `setup` (Fyrstu skrefin), admins only, derived, never stored: company
+  details (contact email, address, town in Almennt), a first product, the
+  invoice seller identity (`seller_complete`), two staff accounts (a customer
+  does not count), the viewer's own two-step sign-in. A step exists only when
+  the screen it links to does; `null` once all are done. No "hide" in v1.
+
+**Decisions taken in the build** (Halli's brief, 2026-09-26):
+- **Sales channels — to confirm with Bókari/Halli**: web = shop orders paid
+  today (ISK orders only; the figure is ISK); wholesale = invoices issued today
+  that were NOT created from an order; pos = till receipts rung up today. A
+  channel the instance has but the role lacks is omitted and the figure is
+  `partial`. Compared with the same weekday last week up to the same time.
+- **Change requests** have only open/resolved (`ChangeRequest.js`), so the
+  to-do is "N opnar breytingarbeiðnir" and the feed says received / resolved.
+  "Waiting on you" needs a new state and an expand migration; not built.
+- **Verkefni** (`AdminProjectsView`, `/admin/projects`) is a Vefur sidebar line
+  with its own `projects` view id (`adminViews.js`, parity test; owned by the
+  `projects` module), gated on that view or editor. The sidebar label
+  `admin.nav.dashboard` is unchanged — "Í dag" vs "Stjórnborð" is Halli's.
+- Two bounds the spec did not state, so an open-orders count cannot only grow:
+  "í sendingu" counts orders fulfilled in the last 14 days, "bíður greiðslu"
+  pending orders from the last 24 hours (a Stripe Checkout session's life).
+
+**Client.** `public/js/views/AdminView.js` rewritten; `public/css/admin-idag.css`
+(new, `idag-*` classes only, tokens only, imported after
+`admin-dashboard.css`) is the mock's CSS minus its DRÖG chip. Container
+queries on `.idag` choose the layout (two columns ≥ 760px, a 2×2 rail
+520–759, one column in reading order below). Bar shares are written through
+the CSSOM (`el.style.flexGrow`), never a `style=""` attribute (CSP). Icelandic
+weekday and month names are written out (Chrome ships no Icelandic ICU data);
+names only ever sit as the subject, after a colon or in quotes; counted strings
+go through `plural()`. A moderator with no admin view is forwarded to the
+projects board, which the old overview's header linked to.
+
+**Labels (DRÖG, all of them).** From Efnishöfundur's `labels.json`:
+the `adminHome.*` keys the page uses, and `admin.nav.projects`. New in the
+same style, IS first: `adminHome.asOf`, `partialError`, `waiting.count.*`,
+`waiting.tag.overdue` ("Gjaldfallið"), `waiting.latest`,
+`waiting.overdue.oldest.*`, `waiting.crOpen.*` ("{n} opin
+breytingarbeiðni" / "{n} opnar breytingarbeiðnir" — replacing the label pair
+that said "bíður svars"), `waiting.unshelved.more`, `waiting.vat.period`,
+`figures.title` ("Staðan"), `figures.asOf`, `figures.salesToday.channel.*`
+(Vefverslun / Heildsala / Sölukassi), `.delta`, `.vsLastWeek`, `.lastWeek`,
+`.none`, `.partial`, `figures.openOrders.{toShip,shipped,awaitingPayment}`,
+`figures.receivables.aging`, `feed.changeRequestReceived`, `time.today`.
+Not used (and not added): the `demo.*` keys (another chunk), the greeting pair,
+the "bíður svars" pair, the setup hide/hidden/allDone keys, the unused
+time/feed variants. The old `adminDashboard.*` keys stay in the locale files
+for now.
+
+**Tests.** `tests/integration/adminHome.test.js` (new, 10): the gate (401,
+403 without `dashboard`, a moderator refused), an admin's blocks and shapes,
+the all-clear instance, a counter role (`dashboard, orders, bins, pos`) that
+gets only its blocks — the books and the leads never leave the server —, a
+failing source on DATA (a deadline whose period is no VSK period) → 200 +
+`errors`, the derived setup steps down to `null`, a customer not counted as
+staff, and the sales channels on a fixed clock (today vs a week ago at the same
+time, an order-born invoice never wholesale, `partial` for a role vs for an
+instance). `e2e/admin-home.spec.js` (new, 5): the blocks the server sent are
+the blocks painted, a 390px phone has no sideways scroll, and each theme in the
+picker paints the status line and the rail from its own tokens.
+`e2e/admin-surface.spec.js` adapted (the home, then the board via its new
+sidebar line). No migration.

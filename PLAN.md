@@ -147,6 +147,16 @@ chunk lands; add a HISTORY entry for the story.
   PRs (both deploy on merge); arm `RELEASE_*` per product — orangesmiley's own
   channel first, rekstrarkerfid's next (the hallismiley arming packet of
   2026-09-13 is parked).
+- "Í dag", the admin home (D-020 step 4, branch `feat/admin-home-idag`, not
+  merged — [admin-home-idag-2026-09-26](docs/HISTORY.md#admin-home-idag-2026-09-26)).
+  Open for Halli: (a) every `adminHome.*` string and `admin.nav.projects`
+  are DRÖG, including the ones written in the build (listed in the entry);
+  (b) the sidebar label — keep "Stjórnborð" or rename `admin.nav.dashboard`
+  to "Í dag"; (c) the sales-channel rule (web / wholesale = an invoice not born
+  from an order / till) with Bókari; (d) "waiting on you" for change requests
+  needs a status that means the customer must act (an expand migration); (e)
+  whether an admin may hide Fyrstu skrefin early (then per user, like
+  `page_widths`); (f) "Verkefni" or "Verkefnasafn" for the board's line.
 - Next programme: R2, the product-site build in the sibling `rekstrarkerfid`
   repo per `company/REKSTRARKERFI-BUILD-INSTRUCTIONS.md`.
 
