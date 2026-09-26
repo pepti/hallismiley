@@ -161,6 +161,20 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
   `docs/HISTORY.md` is the frozen archive; every chunk gets a review pass
   before it merges; `docs/TESTING.md` gained the deployed-environment
   walkthrough. This settles chunk F's open item (d) below.
+  - 2026-09-26 — lane 2 (email) on `harvest2/lane2-email`, not merged
+    ([harvest2-lane2-2026-09-26](docs/history.d/2026-09-26-harvest2-lane2-email.md#harvest2-lane2-2026-09-26)):
+    the email shell is the instance's own (light palette from its theme
+    tokens, AA-checked; name, host, legal line and logo from `identity.*`),
+    and an optional Microsoft Graph transport behind `EMAIL_TRANSPORT=graph`.
+    For Halli: (a) **downstreams' emails change look on their next engine
+    sync** — light, their theme's colours, and the Orange Smiley emblem until
+    each sets `identity.email.logo` to its own file in `public/assets/brand/`
+    (icelandicstore: its `logo.png` as a wordmark); (b) the Graph transport
+    needs an **Entra app registration per tenant** (`Mail.Send` + an Exchange
+    application access policy) if ever used — nothing turns it on; (c) the
+    admin email-health readers (`adminController`, `PartyAdminView`) still use
+    the old `resendConfigured` name, kept meaning "the selected transport is
+    configured" — rename them in a follow-up. No new DRAFT strings.
 - Upward harvest from icelandicstore `4694289`, lane 1 (chunks A then B, branch
   `harvest/ice-2026-09-24-ab`, not merged). Chunk A landed on the branch
   ([harvest-ice-a-2026-09-24](docs/HISTORY.md#harvest-ice-a-2026-09-24)): admin
