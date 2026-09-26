@@ -1,0 +1,766 @@
+{
+  "one standard line": {
+    "lines": [
+      {
+        "product_id": "p-12400-1",
+        "sku": null,
+        "description": "Vara 12400",
+        "quantity": 1,
+        "unit_price_gross": 12400,
+        "vat_rate": 24,
+        "gross_before_discount": 12400,
+        "discount_gross": 0,
+        "line_net": 10000,
+        "line_vat": 2400,
+        "line_gross": 12400,
+        "revenue_account": "4100",
+        "is_shipping": false
+      }
+    ],
+    "subtotal_net": 10000,
+    "vat_total": 2400,
+    "total_gross": 12400,
+    "discount_total": 0,
+    "shipping_gross": 0,
+    "by_rate": [
+      {
+        "rate": 24,
+        "net": 10000,
+        "vat": 2400,
+        "gross": 12400
+      }
+    ]
+  },
+  "mixed rates, shipping, both discounts": {
+    "lines": [
+      {
+        "product_id": "p-12400-2",
+        "sku": null,
+        "description": "Vara 12400",
+        "quantity": 2,
+        "unit_price_gross": 12400,
+        "vat_rate": 24,
+        "gross_before_discount": 24800,
+        "discount_gross": 1720,
+        "line_net": 18613,
+        "line_vat": 4467,
+        "line_gross": 23080,
+        "revenue_account": "4100",
+        "is_shipping": false
+      },
+      {
+        "product_id": "p-4990-3",
+        "sku": null,
+        "description": "Vara 4990",
+        "quantity": 3,
+        "unit_price_gross": 4990,
+        "vat_rate": 11,
+        "gross_before_discount": 14970,
+        "discount_gross": 1038,
+        "line_net": 12551,
+        "line_vat": 1381,
+        "line_gross": 13932,
+        "revenue_account": "4200",
+        "is_shipping": false
+      },
+      {
+        "product_id": "p-2500-1",
+        "sku": null,
+        "description": "Vara 2500",
+        "quantity": 1,
+        "unit_price_gross": 2500,
+        "vat_rate": 0,
+        "gross_before_discount": 2500,
+        "discount_gross": 173,
+        "line_net": 2327,
+        "line_vat": 0,
+        "line_gross": 2327,
+        "revenue_account": "4300",
+        "is_shipping": false
+      },
+      {
+        "product_id": null,
+        "sku": null,
+        "description": "Sending",
+        "quantity": 1,
+        "unit_price_gross": 1000,
+        "vat_rate": 24,
+        "gross_before_discount": 1000,
+        "discount_gross": 69,
+        "line_net": 751,
+        "line_vat": 180,
+        "line_gross": 931,
+        "revenue_account": "4100",
+        "is_shipping": true
+      }
+    ],
+    "subtotal_net": 34242,
+    "vat_total": 6028,
+    "total_gross": 40270,
+    "discount_total": 3000,
+    "shipping_gross": 931,
+    "by_rate": [
+      {
+        "rate": 0,
+        "net": 2327,
+        "vat": 0,
+        "gross": 2327
+      },
+      {
+        "rate": 11,
+        "net": 12551,
+        "vat": 1381,
+        "gross": 13932
+      },
+      {
+        "rate": 24,
+        "net": 19364,
+        "vat": 4647,
+        "gross": 24011
+      }
+    ]
+  },
+  "equal lines, a discount that leaves remainders": {
+    "lines": [
+      {
+        "product_id": "a",
+        "sku": null,
+        "description": "Vara 1000",
+        "quantity": 1,
+        "unit_price_gross": 1000,
+        "vat_rate": 24,
+        "gross_before_discount": 1000,
+        "discount_gross": 34,
+        "line_net": 779,
+        "line_vat": 187,
+        "line_gross": 966,
+        "revenue_account": "4100",
+        "is_shipping": false
+      },
+      {
+        "product_id": "b",
+        "sku": null,
+        "description": "Vara 1000",
+        "quantity": 1,
+        "unit_price_gross": 1000,
+        "vat_rate": 11,
+        "gross_before_discount": 1000,
+        "discount_gross": 33,
+        "line_net": 871,
+        "line_vat": 96,
+        "line_gross": 967,
+        "revenue_account": "4200",
+        "is_shipping": false
+      },
+      {
+        "product_id": "c",
+        "sku": null,
+        "description": "Vara 1000",
+        "quantity": 1,
+        "unit_price_gross": 1000,
+        "vat_rate": 24,
+        "gross_before_discount": 1000,
+        "discount_gross": 33,
+        "line_net": 780,
+        "line_vat": 187,
+        "line_gross": 967,
+        "revenue_account": "4100",
+        "is_shipping": false
+      }
+    ],
+    "subtotal_net": 2430,
+    "vat_total": 470,
+    "total_gross": 2900,
+    "discount_total": 100,
+    "shipping_gross": 0,
+    "by_rate": [
+      {
+        "rate": 11,
+        "net": 871,
+        "vat": 96,
+        "gross": 967
+      },
+      {
+        "rate": 24,
+        "net": 1559,
+        "vat": 374,
+        "gross": 1933
+      }
+    ]
+  },
+  "export: goods zero-rated, a service keeps its rate, shipping zero-rated": {
+    "lines": [
+      {
+        "product_id": "p-8900-2",
+        "sku": null,
+        "description": "Vara 8900",
+        "quantity": 2,
+        "unit_price_gross": 8900,
+        "vat_rate": 0,
+        "gross_before_discount": 17800,
+        "discount_gross": 452,
+        "line_net": 17348,
+        "line_vat": 0,
+        "line_gross": 17348,
+        "revenue_account": "4300",
+        "is_shipping": false
+      },
+      {
+        "product_id": "p-24800-1",
+        "sku": null,
+        "description": "Vara 24800",
+        "quantity": 1,
+        "unit_price_gross": 24800,
+        "vat_rate": 24,
+        "gross_before_discount": 24800,
+        "discount_gross": 630,
+        "line_net": 19492,
+        "line_vat": 4678,
+        "line_gross": 24170,
+        "revenue_account": "4110",
+        "is_shipping": false
+      },
+      {
+        "product_id": "p-3100-1",
+        "sku": null,
+        "description": "Vara 3100",
+        "quantity": 1,
+        "unit_price_gross": 3100,
+        "vat_rate": 0,
+        "gross_before_discount": 3100,
+        "discount_gross": 79,
+        "line_net": 3021,
+        "line_vat": 0,
+        "line_gross": 3021,
+        "revenue_account": "4300",
+        "is_shipping": false
+      },
+      {
+        "product_id": null,
+        "sku": null,
+        "description": "Sending",
+        "quantity": 1,
+        "unit_price_gross": 2900,
+        "vat_rate": 0,
+        "gross_before_discount": 2900,
+        "discount_gross": 73,
+        "line_net": 2827,
+        "line_vat": 0,
+        "line_gross": 2827,
+        "revenue_account": "4300",
+        "is_shipping": true
+      }
+    ],
+    "subtotal_net": 42688,
+    "vat_total": 4678,
+    "total_gross": 47366,
+    "discount_total": 1234,
+    "shipping_gross": 2827,
+    "by_rate": [
+      {
+        "rate": 0,
+        "net": 23196,
+        "vat": 0,
+        "gross": 23196
+      },
+      {
+        "rate": 24,
+        "net": 19492,
+        "vat": 4678,
+        "gross": 24170
+      }
+    ]
+  },
+  "a product with no rate row defaults to 24": {
+    "lines": [
+      {
+        "product_id": "p-12400-1",
+        "sku": null,
+        "description": "Vara 12400",
+        "quantity": 1,
+        "unit_price_gross": 12400,
+        "vat_rate": 24,
+        "gross_before_discount": 12400,
+        "discount_gross": 0,
+        "line_net": 10000,
+        "line_vat": 2400,
+        "line_gross": 12400,
+        "revenue_account": "4100",
+        "is_shipping": false
+      },
+      {
+        "product_id": "p-990-4",
+        "sku": null,
+        "description": "Vara 990",
+        "quantity": 4,
+        "unit_price_gross": 990,
+        "vat_rate": 11,
+        "gross_before_discount": 3960,
+        "discount_gross": 0,
+        "line_net": 3568,
+        "line_vat": 392,
+        "line_gross": 3960,
+        "revenue_account": "4200",
+        "is_shipping": false
+      },
+      {
+        "product_id": null,
+        "sku": null,
+        "description": "Sending",
+        "quantity": 1,
+        "unit_price_gross": 990,
+        "vat_rate": 24,
+        "gross_before_discount": 990,
+        "discount_gross": 0,
+        "line_net": 798,
+        "line_vat": 192,
+        "line_gross": 990,
+        "revenue_account": "4100",
+        "is_shipping": true
+      }
+    ],
+    "subtotal_net": 14366,
+    "vat_total": 2984,
+    "total_gross": 17350,
+    "discount_total": 0,
+    "shipping_gross": 990,
+    "by_rate": [
+      {
+        "rate": 11,
+        "net": 3568,
+        "vat": 392,
+        "gross": 3960
+      },
+      {
+        "rate": 24,
+        "net": 10798,
+        "vat": 2592,
+        "gross": 13390
+      }
+    ]
+  },
+  "a 100 % discount": {
+    "lines": [
+      {
+        "product_id": "p-5000-1",
+        "sku": null,
+        "description": "Vara 5000",
+        "quantity": 1,
+        "unit_price_gross": 5000,
+        "vat_rate": 24,
+        "gross_before_discount": 5000,
+        "discount_gross": 5000,
+        "line_net": 0,
+        "line_vat": 0,
+        "line_gross": 0,
+        "revenue_account": "4100",
+        "is_shipping": false
+      },
+      {
+        "product_id": "p-2000-2",
+        "sku": null,
+        "description": "Vara 2000",
+        "quantity": 2,
+        "unit_price_gross": 2000,
+        "vat_rate": 11,
+        "gross_before_discount": 4000,
+        "discount_gross": 4000,
+        "line_net": 0,
+        "line_vat": 0,
+        "line_gross": 0,
+        "revenue_account": "4200",
+        "is_shipping": false
+      }
+    ],
+    "subtotal_net": 0,
+    "vat_total": 0,
+    "total_gross": 0,
+    "discount_total": 9000,
+    "shipping_gross": 0,
+    "by_rate": [
+      {
+        "rate": 11,
+        "net": 0,
+        "vat": 0,
+        "gross": 0
+      },
+      {
+        "rate": 24,
+        "net": 0,
+        "vat": 0,
+        "gross": 0
+      }
+    ]
+  },
+  "large order, odd quantities": {
+    "lines": [
+      {
+        "product_id": "p-1999-7",
+        "sku": null,
+        "description": "Vara 1999",
+        "quantity": 7,
+        "unit_price_gross": 1999,
+        "vat_rate": 24,
+        "gross_before_discount": 13993,
+        "discount_gross": 573,
+        "line_net": 10823,
+        "line_vat": 2597,
+        "line_gross": 13420,
+        "revenue_account": "4100",
+        "is_shipping": false
+      },
+      {
+        "product_id": "p-349-13",
+        "sku": null,
+        "description": "Vara 349",
+        "quantity": 13,
+        "unit_price_gross": 349,
+        "vat_rate": 11,
+        "gross_before_discount": 4537,
+        "discount_gross": 186,
+        "line_net": 3920,
+        "line_vat": 431,
+        "line_gross": 4351,
+        "revenue_account": "4200",
+        "is_shipping": false
+      },
+      {
+        "product_id": "p-79990-1",
+        "sku": null,
+        "description": "Vara 79990",
+        "quantity": 1,
+        "unit_price_gross": 79990,
+        "vat_rate": 24,
+        "gross_before_discount": 79990,
+        "discount_gross": 3276,
+        "line_net": 61866,
+        "line_vat": 14848,
+        "line_gross": 76714,
+        "revenue_account": "4100",
+        "is_shipping": false
+      },
+      {
+        "product_id": "p-5-1000",
+        "sku": null,
+        "description": "Vara 5",
+        "quantity": 1000,
+        "unit_price_gross": 5,
+        "vat_rate": 0,
+        "gross_before_discount": 5000,
+        "discount_gross": 205,
+        "line_net": 4795,
+        "line_vat": 0,
+        "line_gross": 4795,
+        "revenue_account": "4300",
+        "is_shipping": false
+      },
+      {
+        "product_id": null,
+        "sku": null,
+        "description": "Sending",
+        "quantity": 1,
+        "unit_price_gross": 1990,
+        "vat_rate": 24,
+        "gross_before_discount": 1990,
+        "discount_gross": 81,
+        "line_net": 1540,
+        "line_vat": 369,
+        "line_gross": 1909,
+        "revenue_account": "4100",
+        "is_shipping": true
+      }
+    ],
+    "subtotal_net": 82944,
+    "vat_total": 18245,
+    "total_gross": 101189,
+    "discount_total": 4321,
+    "shipping_gross": 1909,
+    "by_rate": [
+      {
+        "rate": 0,
+        "net": 4795,
+        "vat": 0,
+        "gross": 4795
+      },
+      {
+        "rate": 11,
+        "net": 3920,
+        "vat": 431,
+        "gross": 4351
+      },
+      {
+        "rate": 24,
+        "net": 74229,
+        "vat": 17814,
+        "gross": 92043
+      }
+    ]
+  },
+  "translated: one line, shipping": {
+    "lines": [
+      {
+        "product_id": "p-8900-1",
+        "sku": null,
+        "description": "Vara 8900",
+        "quantity": 1,
+        "unit_price_gross": 13350,
+        "vat_rate": 24,
+        "gross_before_discount": 13350,
+        "discount_gross": 0,
+        "line_net": 10766,
+        "line_vat": 2584,
+        "line_gross": 13350,
+        "revenue_account": "4100",
+        "is_shipping": false
+      },
+      {
+        "product_id": null,
+        "sku": null,
+        "description": "Sending",
+        "quantity": 1,
+        "unit_price_gross": 2250,
+        "vat_rate": 24,
+        "gross_before_discount": 2250,
+        "discount_gross": 0,
+        "line_net": 1815,
+        "line_vat": 435,
+        "line_gross": 2250,
+        "revenue_account": "4100",
+        "is_shipping": true
+      }
+    ],
+    "subtotal_net": 12581,
+    "vat_total": 3019,
+    "total_gross": 15600,
+    "discount_total": 0,
+    "shipping_gross": 2250,
+    "by_rate": [
+      {
+        "rate": 24,
+        "net": 12581,
+        "vat": 3019,
+        "gross": 15600
+      }
+    ]
+  },
+  "translated: units that round, a discount": {
+    "lines": [
+      {
+        "product_id": "p-333-3",
+        "sku": null,
+        "description": "Vara 333",
+        "quantity": 3,
+        "unit_price_gross": 499,
+        "vat_rate": 24,
+        "gross_before_discount": 1497,
+        "discount_gross": 123,
+        "line_net": 1108,
+        "line_vat": 266,
+        "line_gross": 1374,
+        "revenue_account": "4100",
+        "is_shipping": false
+      },
+      {
+        "product_id": "p-1250-2",
+        "sku": null,
+        "description": "Vara 1250",
+        "quantity": 2,
+        "unit_price_gross": 1871,
+        "vat_rate": 11,
+        "gross_before_discount": 3742,
+        "discount_gross": 307,
+        "line_net": 3095,
+        "line_vat": 340,
+        "line_gross": 3435,
+        "revenue_account": "4200",
+        "is_shipping": false
+      },
+      {
+        "product_id": "p-999-1",
+        "sku": null,
+        "description": "Vara 999",
+        "quantity": 1,
+        "unit_price_gross": 1496,
+        "vat_rate": 24,
+        "gross_before_discount": 1496,
+        "discount_gross": 123,
+        "line_net": 1107,
+        "line_vat": 266,
+        "line_gross": 1373,
+        "revenue_account": "4100",
+        "is_shipping": false
+      },
+      {
+        "product_id": null,
+        "sku": null,
+        "description": "Sending",
+        "quantity": 1,
+        "unit_price_gross": 1482,
+        "vat_rate": 24,
+        "gross_before_discount": 1482,
+        "discount_gross": 122,
+        "line_net": 1097,
+        "line_vat": 263,
+        "line_gross": 1360,
+        "revenue_account": "4100",
+        "is_shipping": true
+      }
+    ],
+    "subtotal_net": 6407,
+    "vat_total": 1135,
+    "total_gross": 7542,
+    "discount_total": 675,
+    "shipping_gross": 1360,
+    "by_rate": [
+      {
+        "rate": 11,
+        "net": 3095,
+        "vat": 340,
+        "gross": 3435
+      },
+      {
+        "rate": 24,
+        "net": 3312,
+        "vat": 795,
+        "gross": 4107
+      }
+    ]
+  },
+  "translated: rounding shortfall becomes a sléttun line": {
+    "lines": [
+      {
+        "product_id": "p-1-100",
+        "sku": null,
+        "description": "Vara 1",
+        "quantity": 100,
+        "unit_price_gross": 1,
+        "vat_rate": 24,
+        "gross_before_discount": 100,
+        "discount_gross": 0,
+        "line_net": 81,
+        "line_vat": 19,
+        "line_gross": 100,
+        "revenue_account": "4100",
+        "is_shipping": false
+      },
+      {
+        "product_id": "p-333-3",
+        "sku": null,
+        "description": "Vara 333",
+        "quantity": 3,
+        "unit_price_gross": 496,
+        "vat_rate": 11,
+        "gross_before_discount": 1488,
+        "discount_gross": 0,
+        "line_net": 1341,
+        "line_vat": 147,
+        "line_gross": 1488,
+        "revenue_account": "4200",
+        "is_shipping": false
+      },
+      {
+        "product_id": null,
+        "sku": null,
+        "description": "Sléttun",
+        "quantity": 1,
+        "unit_price_gross": 50,
+        "vat_rate": 11,
+        "gross_before_discount": 50,
+        "discount_gross": 0,
+        "line_net": 45,
+        "line_vat": 5,
+        "line_gross": 50,
+        "revenue_account": "4200",
+        "is_shipping": false,
+        "is_rounding": true
+      }
+    ],
+    "subtotal_net": 1467,
+    "vat_total": 171,
+    "total_gross": 1638,
+    "discount_total": 0,
+    "shipping_gross": 0,
+    "by_rate": [
+      {
+        "rate": 11,
+        "net": 1386,
+        "vat": 152,
+        "gross": 1538
+      },
+      {
+        "rate": 24,
+        "net": 81,
+        "vat": 19,
+        "gross": 100
+      }
+    ]
+  },
+  "translated export with a service": {
+    "lines": [
+      {
+        "product_id": "p-4500-2",
+        "sku": null,
+        "description": "Vara 4500",
+        "quantity": 2,
+        "unit_price_gross": 6671,
+        "vat_rate": 0,
+        "gross_before_discount": 13342,
+        "discount_gross": 410,
+        "line_net": 12932,
+        "line_vat": 0,
+        "line_gross": 12932,
+        "revenue_account": "4300",
+        "is_shipping": false
+      },
+      {
+        "product_id": "p-12000-1",
+        "sku": null,
+        "description": "Vara 12000",
+        "quantity": 1,
+        "unit_price_gross": 17790,
+        "vat_rate": 24,
+        "gross_before_discount": 17790,
+        "discount_gross": 547,
+        "line_net": 13906,
+        "line_vat": 3337,
+        "line_gross": 17243,
+        "revenue_account": "4110",
+        "is_shipping": false
+      },
+      {
+        "product_id": null,
+        "sku": null,
+        "description": "Sending",
+        "quantity": 1,
+        "unit_price_gross": 2594,
+        "vat_rate": 0,
+        "gross_before_discount": 2594,
+        "discount_gross": 80,
+        "line_net": 2514,
+        "line_vat": 0,
+        "line_gross": 2514,
+        "revenue_account": "4300",
+        "is_shipping": true
+      }
+    ],
+    "subtotal_net": 29352,
+    "vat_total": 3337,
+    "total_gross": 32689,
+    "discount_total": 1037,
+    "shipping_gross": 2514,
+    "by_rate": [
+      {
+        "rate": 0,
+        "net": 15446,
+        "vat": 0,
+        "gross": 15446
+      },
+      {
+        "rate": 24,
+        "net": 13906,
+        "vat": 3337,
+        "gross": 17243
+      }
+    ]
+  }
+}

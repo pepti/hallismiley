@@ -637,6 +637,37 @@
         "ice #334 made-to-order BIN label (no products.made_to_order in the engine), company/store ship-to lines, the browser variantLabel mirror",
         "ice #352/#381 product-list quick view and /shop quick-order rows (quickOrderRows.js — ice-only surfaces)"
       ]
+    },
+    {
+      "rev": null,
+      "date": "2026-09-26",
+      "upstreamCommits": 0,
+      "conflicts": 0,
+      "note": "harvest",
+      "harvestedFrom": "ice@941cf51d",
+      "chunk": "harvest2 lane 5 (reports)",
+      "commits": [
+        "ad022b2 (#414 period presets, comparison window, net sales headline — dateRanges.js + test ported; the report keeps the engine paid_at/per-currency semantics)",
+        "30b1e14 (#417 attention cards — into the \"Í dag\" admin home: sold out, sign-ups awaiting approval; filtered list links)",
+        "f4baf2b (#419 insights — fulfilment time, new and dormant customers)",
+        "ice server/mcp/tools/orders.js sales_report (shape only; the engine tools are its own, view-gated)"
+      ],
+      "branch": "harvest2/lane5-reports",
+      "features": [
+        "orders",
+        "analytics",
+        "admin-shell",
+        "mcp-connector"
+      ],
+      "migrations": {
+        "121_order_vat_snapshot": "no alias: ice 087 already holds orders.vat_total (and more); IF NOT EXISTS + a backfill WHERE vat_total IS NULL make it a no-op there"
+      },
+      "trimmed": [
+        "ice #414 kpis.revenue by created_at over non-failed orders (the engine counts by paid_at, per currency)",
+        "ice #417 backorders, Regla-unsent and Pressan cards (no engine counterpart); company chip",
+        "ice #419 sales channels, companies, self-service share, own-kennitala exclusion (the engine has none of the data)",
+        "ice list_orders / get_order / order_metrics tools (store locations, line discounts, customer prices — ice-only)"
+      ]
     }
   ]
 }

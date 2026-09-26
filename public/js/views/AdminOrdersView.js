@@ -8,6 +8,15 @@ import { formatDateTime } from '../utils/format.js';
 import { attachStickyHScroll } from '../utils/stickyHScroll.js';
 import { renderAdminShell } from '../components/AdminSidebar.js';
 import { showToast } from '../components/Toast.js';
+import { readListState, syncListState } from '../utils/listState.js';
+
+// The list's filter lives in the address bar (utils/listState.js, harvest 2
+// lane 5): ?view=open is the named view the "Í dag" card links to (the
+// server's Order.ORDER_VIEWS — the card counts with the same predicate),
+// ?filter=pay:paid etc. the status picks, ?q= the search. A reload or a shared
+// link lands on the same list.
+const LIST_DEFAULTS = { view: '', filter: '', q: '' };
+const VIEWS = ['open'];
 
 function _esc(s) {
   return String(s == null ? '' : s)
@@ -25,7 +34,19 @@ function _formatDate(iso) {
 }
 
 export class AdminOrdersView {
-  constructor() { this._view = null; this._orders = []; this._filter = ''; this._q = ''; this._searchDebounce = null; this._selected = new Set(); }
+  constructor() {
+    this._view = null; this._orders = []; this._searchDebounce = null; this._selected = new Set();
+    const st = readListState(LIST_DEFAULTS);
+    // One select carries both: a named view ('view:open') or a status pick.
+    this._filter = VIEWS.includes(st.view) ? `view:${st.view}` : (/^(pay|ful):[a-z_]+$/.test(st.filter) ? st.filter : '');
+    this._q = st.q;
+  }
+
+  _syncUrl() {
+    const view = this._filter.startsWith('view:') ? this._filter.slice(5) : '';
+    syncListState(href('/admin/shop/orders'),
+      { view, filter: view ? '' : this._filter, q: this._q }, LIST_DEFAULTS);
+  }
 
   async render() {
     this._view = document.createElement('div');
@@ -39,6 +60,7 @@ export class AdminOrdersView {
                    placeholder="${t('adminOrders.searchPlaceholder')}" autocomplete="off"/>
             <select id="admin-orders-filter" class="admin-shop__select">
               <option value="">${t('adminOrders.all')}</option>
+              <option value="view:open">${t('adminOrders.viewOpen')}</option>
               <option value="pay:pending">${t('orderPayment.pending')}</option>
               <option value="pay:paid">${t('orderPayment.paid')}</option>
               <option value="ful:unfulfilled">${t('orderFulfillment.unfulfilled')}</option>
@@ -50,15 +72,20 @@ export class AdminOrdersView {
         <div id="admin-orders-body"><p>${t('form.loading')}</p></div>
       </div>
     `;
-    this._view.querySelector('#admin-orders-filter').addEventListener('change', (e) => {
+    const select = this._view.querySelector('#admin-orders-filter');
+    select.value = this._filter;
+    if (select.value !== this._filter) this._filter = '';
+    select.addEventListener('change', (e) => {
       this._filter = e.target.value;
+      this._syncUrl();
       this._load();
     });
     const search = this._view.querySelector('#admin-orders-q');
+    search.value = this._q;
     search.addEventListener('input', (e) => {
       clearTimeout(this._searchDebounce);
       const v = e.target.value;
-      this._searchDebounce = setTimeout(() => { this._q = v; this._load(); }, 250);
+      this._searchDebounce = setTimeout(() => { this._q = v; this._syncUrl(); this._load(); }, 250);
     });
     this._view.querySelector('#admin-orders-export').addEventListener('click', () => this._exportXlsx());
     await this._load();
@@ -68,7 +95,8 @@ export class AdminOrdersView {
   _filterParams() {
     const p = {};
     if (this._q) p.q = this._q;
-    if (this._filter.startsWith('pay:')) p.paymentStatus = this._filter.slice(4);
+    if (this._filter.startsWith('view:')) p.view = this._filter.slice(5);
+    else if (this._filter.startsWith('pay:')) p.paymentStatus = this._filter.slice(4);
     else if (this._filter.startsWith('ful:')) p.fulfillmentStatus = this._filter.slice(4);
     return p;
   }

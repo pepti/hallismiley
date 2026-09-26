@@ -20,10 +20,14 @@ const manage    = require('./tools/manage');
 // its own mcp.write.* switch in config/client.json, all OFF by default, AND
 // the shop module — the third gate below.
 const products  = require('./tools/products');
+// Harvest 2 lane 5 (2026-09-26): read-only sales tools — the period summary
+// and the recent orders. Scope 'read', the shop module, AND a fourth gate: the
+// token owner's admin views (`view` on the tool; mcp/owner.js ownerViewAccess).
+const orders    = require('./tools/orders');
 const { clientConfig, envNameFor } = require('../config/clientConfig');
 const { isModuleEnabled } = require('../config/modules');
 
-const TOOLS = [...system, ...manage, ...products];
+const TOOLS = [...system, ...manage, ...products, ...orders];
 
 // The environment's scope ceiling. Unset → read-only: PROD is safe by default
 // and turning writes on is a deliberate per-stack act (REGLA_WS_ALLOW_LIVE
@@ -45,19 +49,23 @@ function writeFlagOn(flag) {
   return Boolean(clientConfig.mcp && clientConfig.mcp.write && clientConfig.mcp.write[flag]);
 }
 
-function permitted(tool, tokenScopes) {
+// Fourth gate, for a tool that names a `view`: the token OWNER must hold that
+// admin view on this instance (canView from mcp/owner.js ownerViewAccess). No
+// canView given means no answer, which is a no.
+function permitted(tool, tokenScopes, canView = null) {
   const ceiling = allowedScopes();
   const scope = tool.scope || 'read';
   if (!ceiling.includes(scope) || !(tokenScopes || []).includes(scope)) return false;
   if (tool.writeFlag && !writeFlagOn(tool.writeFlag)) return false;
   if (tool.module && !isModuleEnabled(tool.module)) return false;
+  if (tool.view && (typeof canView !== 'function' || !canView(tool.view))) return false;
   return true;
 }
 
 // Tools the presented token may call in this environment (drives tools/list —
 // Claude never sees a tool it would be refused).
-function listTools(tokenScopes) {
-  return TOOLS.filter((t) => permitted(t, tokenScopes))
+function listTools(tokenScopes, canView = null) {
+  return TOOLS.filter((t) => permitted(t, tokenScopes, canView))
     .map(({ name, description, inputSchema }) => ({ name, description, inputSchema }));
 }
 
