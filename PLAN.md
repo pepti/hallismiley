@@ -161,6 +161,22 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
   `docs/HISTORY.md` is the frozen archive; every chunk gets a review pass
   before it merges; `docs/TESTING.md` gained the deployed-environment
   walkthrough. This settles chunk F's open item (d) below.
+- 2026-09-26: Harvest 2 lane 4a, the admin UI kit, is on branch
+  `harvest2/lane4a-uikit` (not merged):
+  [harvest2-lane4a-2026-09-26](docs/history.d/2026-09-26-harvest2-lane4a-uikit.md#harvest2-lane4a-2026-09-26).
+  It adds the Combobox, `downloadBlob`, read-only inputs, keyboard-reachable
+  wide tables, drag-time file checks, detail-view tab titles, the date sweep and
+  the theme contrast test. Open:
+  - (a) Two new strings are **DRAFT** (Halli): `adminKit.scrollRegion` and
+    `adminOrders.documentTitle`.
+  - (b) **The resting input border (`--border-dim`) is under WCAG 1.4.11's
+    3:1** on all three themes. It is a design decision for Halli, and it is a
+    `test.todo` in `themeTokenContrast.test.js`.
+  - (c) The `--gold-light` hover fills under a `--bg-nav` label in
+    `contact.css` and `shop.css` need moving to `--accent-hover` and
+    `--on-accent` by lane 4b or a follow-up.
+  - (d) `AdminUsersView.js:22`'s raw date call is for lane 1b. It is on the
+    `PENDING` list of the date guard; drop the entry when that call is fixed.
 - Upward harvest from icelandicstore `4694289`, lane 1 (chunks A then B, branch
   `harvest/ice-2026-09-24-ab`, not merged). Chunk A landed on the branch
   ([harvest-ice-a-2026-09-24](docs/HISTORY.md#harvest-ice-a-2026-09-24)): admin
