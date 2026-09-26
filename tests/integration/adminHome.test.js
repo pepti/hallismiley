@@ -89,13 +89,32 @@ beforeEach(async () => {
   await db.query(`DELETE FROM tax_deadlines WHERE note = 'adminHome test'`);
 });
 
+// The settings the setup test fills (general.*, books.seller_*) live outside
+// the cleanTables() closure: snapshot the table before the first test and put
+// it back after the last.
+let savedSettings;
+beforeAll(async () => {
+  savedSettings = (await db.query('SELECT * FROM app_settings')).rows;
+});
+
 afterAll(async () => {
   await db.query(`DELETE FROM tax_deadlines WHERE note = 'adminHome test'`);
-  // Leave the worker DB as we found it: the last test's invoices, receipts
-  // (tenderless, numbered 900000+) and orders would otherwise outlive this
-  // file and show up in the next suite on the same worker that does not clean
-  // first (booksPos's receipt list, LedgerLink CI 36259126420).
+  // Leave what this file wrote behind it for nobody (docs/ARCHITECTURE.md
+  // §20): the last test's invoices, receipts (tenderless, numbered 900000+)
+  // and orders go with cleanTables() — they showed up in the next suite on
+  // the same worker that does not clean first (booksPos's receipt list,
+  // LedgerLink CI 36259126420); its products, roles and settings, which
+  // cleanTables() does not touch, go by name or are restored.
   await cleanTables();
+  await db.query(`DELETE FROM products WHERE slug LIKE 'home-%'`);
+  await db.query(`DELETE FROM roles WHERE description = 'adminHome test'`);
+  Role.invalidateCache();
+  await db.query('DELETE FROM app_settings');
+  await db.query(
+    `INSERT INTO app_settings SELECT * FROM jsonb_populate_recordset(NULL::app_settings, $1::jsonb)
+     ON CONFLICT DO NOTHING`,
+    [JSON.stringify(savedSettings)]
+  );
 });
 
 describe('the gate', () => {
