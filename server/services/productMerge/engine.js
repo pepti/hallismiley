@@ -136,6 +136,15 @@ async function takeLocks(q, all, ids) {
   const t = Date.now();
   await q(`SELECT id FROM orders WHERE id IN (SELECT order_id FROM order_items WHERE product_id = ANY($1::text[]))
             ORDER BY id FOR UPDATE`, [all]);
+  // Draft goods receipts that name an involved product (migration 118): their
+  // finalise locks the receipt row before the stock rows, so the merge does
+  // too — a receipt cannot post stock onto a source mid-merge; once the merge
+  // commits, its lines already point at the survivor.
+  await q(`SELECT id FROM goods_receipts
+            WHERE status = 'draft'
+              AND id IN (SELECT receipt_id FROM goods_receipt_lines WHERE product_id = ANY($1::text[])
+                         UNION SELECT receipt_id FROM goods_receipt_scans WHERE product_id = ANY($1::text[]))
+            ORDER BY id FOR UPDATE`, [all]);
   // Products merged earlier INTO a source are re-pointed by the flatten step:
   // they join the product pass here rather than being locked later, out of order.
   const { rows: prior } = await q(`SELECT id FROM products WHERE merged_into_id = ANY($1::text[])`, [ids]);

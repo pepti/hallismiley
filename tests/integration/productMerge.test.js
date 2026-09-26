@@ -155,7 +155,7 @@ describe('refusals write nothing', () => {
 });
 
 describe('simple into simple', () => {
-  let m, s, coll1, coll2, lineOrder, draftLine, issuedLine;
+  let m, s, coll1, coll2, lineOrder, draftLine, issuedLine, receiptId;
   beforeAll(async () => {
     m = await mkProduct('ss-m', { stock: 3, sku: 'SS-M' });
     s = await mkProduct('ss-s', { stock: 5, sku: 'SS-S', barcode: '5690000000022', description: '' });
@@ -168,6 +168,10 @@ describe('simple into simple', () => {
     lineOrder = await mkOrder([{ productId: s.id, quantity: 2 }]); // paid, not fulfilled: commits 2
     draftLine = await mkInvoiceLine(s.id, { issued: false });
     issuedLine = await mkInvoiceLine(s.id, { issued: true });
+    const { rows: gr } = await db.query(`INSERT INTO goods_receipts (supplier_name) VALUES ('PM birgir') RETURNING id`);
+    receiptId = gr[0].id;
+    await db.query(`INSERT INTO goods_receipt_lines (receipt_id, product_id, expected_qty) VALUES ($1, $2, 4)`, [receiptId, s.id]);
+    await db.query(`INSERT INTO goods_receipt_scans (receipt_id, product_id, scanned_code) VALUES ($1, $2, 'SS-S')`, [receiptId, s.id]);
   });
 
   test('one merge moves stock through the ledger, images, collections, order lines and draft invoice lines', async () => {
@@ -206,6 +210,11 @@ describe('simple into simple', () => {
     const byId = Object.fromEntries(il.map(r => [r.id, r.product_id]));
     expect(byId[draftLine]).toBe(m.id);
     expect(byId[issuedLine]).toBe(s.id);
+    // a draft goods receipt's line and scan follow (migration 118)
+    const { rows: grl } = await db.query(
+      `SELECT product_id FROM goods_receipt_lines WHERE receipt_id = $1
+       UNION ALL SELECT product_id FROM goods_receipt_scans WHERE receipt_id = $1`, [receiptId]);
+    expect(grl.map(r => r.product_id)).toEqual([m.id, m.id]);
 
     // the log + the staff audit row
     const log = await db.query('SELECT master_id, merged_id, merged_sku, merged_slug, stock_moved, merged_by FROM product_merges WHERE merged_id = $1', [s.id]);
@@ -336,6 +345,25 @@ describe('concurrency (lock order)', () => {
     const res = await request(app).post('/api/v1/admin/shop/products/merge').set('Cookie', adminCookie)
       .send({ ...p.request, expect: 'not-the-token' });
     expect(res.status).toBe(409);
+  });
+
+  test('a draft goods receipt being finalised (its row held) makes the merge MERGE_BUSY', async () => {
+    const m = await mkProduct('grbusy-m', { stock: 1 });
+    const s = await mkProduct('grbusy-s', { stock: 2 });
+    const { rows: gr } = await db.query(`INSERT INTO goods_receipts (supplier_name) VALUES ('PM') RETURNING id`);
+    await db.query(`INSERT INTO goods_receipt_lines (receipt_id, product_id, expected_qty) VALUES ($1, $2, 1)`, [gr[0].id, s.id]);
+    const p = await mergeEngine.preview({ master: m.id, ids: [s.id] });
+    const holder = await db.pool.connect();
+    try {
+      await holder.query('BEGIN');
+      await holder.query('SELECT id FROM goods_receipts WHERE id = $1 FOR UPDATE', [gr[0].id]);
+      await expect(mergeEngine.apply({ ...p.request, expect: p.expect }, { userId: adminId, lockTimeoutMs: 300 }))
+        .rejects.toMatchObject({ code: 'MERGE_BUSY' });
+    } finally {
+      await holder.query('ROLLBACK');
+      holder.release();
+    }
+    expect((await Product.findById(s.id)).active).toBe(true);
   });
 
   test('a checkout holding the source\'s KEY SHARE commits first; the merge then repoints its line', async () => {

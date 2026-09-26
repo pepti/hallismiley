@@ -2,8 +2,8 @@
 
 // What a product merge does to every row that points at a product or a variant.
 // Ported from icelandicstore #311 (server/services/productMerge/repointSpec.js),
-// cut to the engine's foreign keys: 11 at migration 120 — 9 → products (the
-// merge's own three included) and 2 → product_variants.
+// cut to the engine's foreign keys: 15 at migration 120 — 11 → products (the
+// merge's own three included) and 4 → product_variants.
 //
 // Keyed by table, one entry per (product column, variant column) pair, and it
 // must name EVERY foreign key to products / product_variants that pg_constraint
@@ -38,6 +38,13 @@
 //                    source now point at the master (no redirect chains).
 const SPEC = [
   { table: 'order_items',           product: 'product_id',     variant: 'product_variant_id', policy: 'repoint' },
+  // Goods receiving (migration 118, harvest 2 lane 6a): a draft receipt's
+  // lines and scans follow their unit, so finalising it later puts the stock
+  // on the row it now lives on (the merge locks draft receipts first, as the
+  // receipt's own finalise does). A finalised receipt is history like an order
+  // line and follows too; its stock movements stay in inventory_adjustments.
+  { table: 'goods_receipt_lines',   product: 'product_id',     variant: 'variant_id',         policy: 'repoint' },
+  { table: 'goods_receipt_scans',   product: 'product_id',     variant: 'variant_id',         policy: 'repoint' },
   { table: 'invoice_lines',         product: 'product_id',     variant: null,                 policy: 'repoint_draft' },
   { table: 'product_collections',   product: 'product_id',     variant: null, policy: 'dedupe', key: ['collection_id'] },
   { table: 'product_images',        product: 'product_id',     variant: null,                 policy: 'images' },

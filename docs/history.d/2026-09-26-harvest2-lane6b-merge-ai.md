@@ -64,10 +64,16 @@ typing new axis values for a unit is left to a follow-up.
   only to an active product), and a retired variant SKU resolves to the live row
   it went to in the import match and the scanner (`ProductMerge.resolveLive`).
 
-**Lanes in flight.** 6a (receiving) and 6c (variants / delivery note) may add
-foreign keys to products or variants. `assertCovers` makes merging refuse
-(503 `schema_drift`) and `productMerge.test.js` fails CI until `repointSpec.js`
-names a policy for each — whichever lane lands second adds it.
+**Lanes in flight.** Master (with lane 6a's `118_goods_receipts` and lane 3's
+116/117) was merged into this branch before the review fixes: 6a's four new
+foreign keys (`goods_receipt_lines` / `goods_receipt_scans` →
+products / variants) follow their unit (`repoint`), and the merge locks DRAFT
+goods receipts that name an involved product FOR UPDATE right after the orders
+— a receipt's finalise takes its own row before the stock rows, so it cannot
+post stock onto a source mid-merge. Lane 6c (variants / delivery note) may add
+more: `assertCovers` makes merging refuse (503 `schema_drift`) and
+`productMerge.test.js` fails CI until `repointSpec.js` names a policy for each.
+Migration order is now 115, 116, 117, 118, **120** (119 is lane 6c's).
 
 **Found on the screenshot pass, fixed.** The engine's
 `uniq_product_variants_attrs` index covers switched-off rows (ice's excludes
@@ -139,15 +145,57 @@ and pdf-lib.
 **Not verified against the real API**: every test stubs the model
 (`aiExtract._setClientFactory`); no call reached Anthropic from this branch.
 
+### Review (invariant-reviewer, 2026-09-26) and what was done
+
+Asked specifically about the merge transaction, the lock order, books
+immutability and the AI cost gate. Verdict: the transaction is atomic (one
+client, BEGIN…COMMIT, no savepoints), the lock order matches `Inventory.js`,
+`lockReferences`, `setOrderStatuses` and the webhook, stock moves only through
+the one `applyLines`, issued invoice lines never change, migration 120 is
+expand-only and idempotent, the general invariants hold. Findings:
+
+1. **Blocker (after master moved): lane 6a's four FKs had no policy** — fixed:
+   master merged in, `goods_receipt_lines`/`goods_receipt_scans` repoint, draft
+   receipts locked with the orders; tests for both.
+2. **Should-fix: a failed AI read always refunded its pages** (a PDF built to
+   trip the echo guard would read for free) — fixed: only an API error status
+   (nothing billed) is refundable; an unusable reply or a timeout stays charged.
+3. **Should-fix: the freeze lived on the routes only** (MCP `update_product` /
+   `set_stock`, `/products/bulk`) — fixed: `Product.update` and
+   `ProductVariant.update` refuse (typed 409 `product_merged`), bulk skips.
+4. Nit: a product that has variant rows but is referenced by a product-level
+   line is a "parent" for the merge and a "level" row for a checkout, and
+   products merged earlier into a source join the product pass by the same
+   rule; unsorted multi-row writers elsewhere (collections, image reorder) can
+   meet the merge in a cycle. **Won't fix**: Postgres detects the cycle, the
+   merge answers 409 `merge_busy` (the other side 409 `BUSY`), nothing is left
+   half-done; the admin retries.
+5. Nit: `lock_timeout` (3 s) is per lock, and every order that ever named the
+   products is locked. **Won't fix** now: needed so a later un-fulfil follows
+   the repoint; a long-selling product's merge is heavier but bounded, and a
+   busy row still ends it as `merge_busy`.
+6. Nit: an invoice issued mid-merge gave a 500 — fixed: `restrict_violation`
+   from the books' trigger → 409 `stale_preview` (nothing was written).
+7. Nit: a connection whose ROLLBACK failed went back to the pool — fixed:
+   released as broken.
+8. Nit: the Duplicates page compares every pair of names (O(n²)) on each GET.
+   **Won't fix** in this lane: fine for the catalogues the engine runs today
+   (hundreds); a big retail downstream wants a token index — noted for Halli.
+9. Nit: the merged-product guard runs before CSRF on writes. **Won't fix**:
+   it only reads, behind requireAuth + the products view, and answers 409.
+10. Nit: merging is gated like product editing (`products` view), though it
+    cannot be undone. **Won't fix**: the scope Halli approved says
+    "staff-only (requireView products)"; making it admin-only is his call.
+
 ### Tests
 
 Unit 53 new (`productDedupe` 10, `productMergePlanner` 7,
 `productImportAiExtract` 21, `aiPdfChunks.client` 7, `importMarkup.client` 6,
-`pdfLibVendor` 2); integration 25 new (`productMerge` 14 — gate, suggestions,
+`pdfLibVendor` 2); integration 29 new (`productMerge` 17 — gate, suggestions,
 refusals write nothing, simple→simple, variants→variants, 301s, frozen writes,
 retired-SKU resolution, MERGE_BUSY on a held order, a checkout holding the
 source's KEY SHARE commits first and its line is repointed, a checkout after the
-merge refused, the FK guard both ways; `adminProductImportAi` 11); e2e
+merge refused, a held draft goods receipt → MERGE_BUSY, the freeze in the models and bulk, the FK guard both ways; `adminProductImportAi` 12); e2e
 `admin-product-duplicates.spec.js` (plants a pair, previews, merges, checks the
 301 and the stock). `node server/scripts/migrate.js --plan` on a database at
 master's schema: only `120_product_merge` RUN.

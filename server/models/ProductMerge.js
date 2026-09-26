@@ -12,7 +12,7 @@ const { findDuplicateGroups, SIGNAL_RANK } = require('../utils/productDedupe');
 // Every foreign key pointing at products / product_variants, read from the
 // catalog rather than hard-coded: a new table with a product FK is counted the
 // day its migration lands, and the merge engine refuses to run until
-// repointSpec names a policy for it. 11 at migration 120.
+// repointSpec names a policy for it. 15 at migration 120.
 let fkCache = null;
 async function productForeignKeys() {
   if (fkCache) return fkCache;
