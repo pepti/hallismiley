@@ -1108,7 +1108,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | CSS | `public/css/admin-handbok.css` |
 | Jest | `tests/integration/salesGuides.test.js`, `salesGuidesServicesPage.test.js`, `salesGuidesD001.test.js`, `salesGuidesD022.test.js`, `salesGuidesQueueSpread.test.js` |
 | e2e | `e2e/sales-handbook.spec.js` (+ `e2e/lib/salesUser.js`) |
-| Migrations | 090, 104, os_001, os_003, os_004 |
+| Migrations | 090, 104, os_001, os_003, os_004, os_005 |
 | Features | [sales-handbook](../features/sales-handbook.md) |
 | Feature doc | `docs/SALES-STAFF.md` |
 
