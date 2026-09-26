@@ -2,11 +2,12 @@
 // Parameterised queries throughout (A03: prevents SQL injection).
 const db = require('../config/database');
 const Inventory = require('./Inventory');
+const { normaliseColorTag } = require('../utils/colorMatch');
 
 // Admin-facing column list: surfaces both locales' raw fields so the CMS
 // editor can render EN + IS inputs side-by-side.
 const COLUMNS = 'id, slug, name, description, name_is, description_is, price_isk, price_eur, stock, weight_grams, shape, capacity_litres, category, subcategory, duration_minutes, delivery_format, is_bookable, variant_axes, sku, barcode, bin, active, vat_rate, created_at, updated_at';
-const IMG_COLUMNS = 'id, product_id, url, position, alt_text, created_at';
+const IMG_COLUMNS = 'id, product_id, url, position, alt_text, color, created_at';
 
 // Public-facing column list: COALESCE the IS sibling columns into the primary
 // field names so callers see `name` / `description` in the reader's language.
@@ -106,7 +107,7 @@ class Product {
               (p.active AND v.active) AS active
          FROM product_variants v
          JOIN products p ON p.id = v.product_id
-        WHERE v.sku = $1 OR v.barcode = $1
+        WHERE (v.sku = $1 OR v.barcode = $1) AND v.archived_at IS NULL
         ORDER BY (v.sku = $1) DESC
         LIMIT 1`,
       [c]
@@ -410,6 +411,22 @@ class Product {
     return rows[0] || null;
   }
 
+  // Tag one photo with the variant colour it shows (ported from icelandicstore
+  // #182/#265; migration 119). Scoped by product as well as id so a photo
+  // cannot be retagged through another product's URL. The tag is stored
+  // folded (utils/colorMatch.normaliseColorTag: "Sage Green" → "sage-green");
+  // blank clears it — "not colour-specific" is a real answer for a lifestyle
+  // shot. Returns null when the image is not this product's.
+  static async updateImageColor(productId, imageId, color) {
+    const { rows } = await db.query(
+      `UPDATE product_images SET color = $3
+        WHERE id = $1 AND product_id = $2
+        RETURNING ${IMG_COLUMNS}`,
+      [String(imageId), String(productId), normaliseColorTag(color)]
+    );
+    return rows[0] || null;
+  }
+
   static async reorderImages(productId, order) {
     const client = await db.pool.connect();
     try {
@@ -448,7 +465,7 @@ class Product {
               v.price_eur AS variant_price_eur, v.stock AS variant_stock,
               v.active AS variant_active
          FROM products p
-         LEFT JOIN product_variants v ON v.product_id = p.id
+         LEFT JOIN product_variants v ON v.product_id = p.id AND v.archived_at IS NULL
         ORDER BY lower(p.name), v.sku ASC NULLS FIRST`
     );
     return rows;
@@ -469,7 +486,7 @@ class Product {
     );
     const { rows: vrows } = await db.query(
       `SELECT id AS variant_id, product_id, sku, bin, price_isk, price_eur, stock, active
-         FROM product_variants WHERE sku = ANY($1::text[])`,
+         FROM product_variants WHERE sku = ANY($1::text[]) AND archived_at IS NULL`,
       [list]
     );
     // Products first, then variants override the same sku (variant precedence).
@@ -500,7 +517,7 @@ class Product {
     );
     const { rows: vrows } = await db.query(
       `SELECT id AS variant_id, product_id, sku, barcode, bin, price_isk, price_eur, stock, active
-         FROM product_variants WHERE barcode = ANY($1::text[])`,
+         FROM product_variants WHERE barcode = ANY($1::text[]) AND archived_at IS NULL`,
       [list]
     );
     const hits = new Map();
@@ -532,7 +549,7 @@ class Product {
     if (!list.length) return [];
     const { rows } = await db.query(
       `SELECT barcode FROM products WHERE barcode = ANY($1::text[])
-       UNION SELECT barcode FROM product_variants WHERE barcode = ANY($1::text[])`,
+       UNION SELECT barcode FROM product_variants WHERE barcode = ANY($1::text[]) AND archived_at IS NULL`,
       [list]
     );
     return rows.map(r => r.barcode);

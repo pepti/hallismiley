@@ -5609,6 +5609,87 @@ END; $$ LANGUAGE plpgsql`,
       `ALTER TABLE orders ADD COLUMN IF NOT EXISTS notes TEXT`,
     ],
   },
+  {
+    // Variants that work, and a colour per product photo (harvest 2 lane 6c,
+    // 2026-09-26; ported from icelandicstore #194 = ice 099_variant_archive
+    // and #182/#265 = ice 096_product_image_color). PROVISIONAL number — the
+    // harvest renumbers at merge.
+    //
+    // 1. product_images.color — which variant colour a photo shows. The
+    //    storefront resolves variant colours against it server-side
+    //    (server/utils/colorMatch.js → `color_images` on the product payload)
+    //    and the product page swaps the photo when a colour is picked. NULL =
+    //    "not colour-specific" (a lifestyle shot), which is how every existing
+    //    photo reads. Ice has no index on it and neither do we: it is only ever
+    //    read with the product's own images.
+    //
+    // 2. product_variants.archived_at — "deleted, but an order still names it".
+    //    The admin variant grid used to "delete" by setting active = false,
+    //    which left the row holding the GLOBAL unique `sku` and its
+    //    (product_id, attributes) slot for ever: re-adding that size then 409'd
+    //    with no way out. A real delete now removes a variant nothing
+    //    references; one that is on an order (order_items ON DELETE RESTRICT)
+    //    or carries stock history (inventory_adjustments, ON DELETE CASCADE —
+    //    a delete would take the audit trail with it) is ARCHIVED instead:
+    //    archived_at set, active false, out of every list. Order history is
+    //    unaffected — order_items keeps its own variant_attributes snapshot.
+    //
+    // 3. The two unique rules become PARTIAL (WHERE archived_at IS NULL) so an
+    //    archived row stops reserving its SKU and its attribute combination.
+    //    Each partial index is CREATED before the old rule is DROPPED, so
+    //    there is no moment without uniqueness on live rows. The column-level
+    //    UNIQUE from 024 is found in pg_constraint rather than dropped by a
+    //    guessed name (product_variants_sku_key): an IF EXISTS on the wrong
+    //    name would no-op silently and leave the global rule in place (ice's
+    //    review finding on #194). `ON CONFLICT (product_id, attributes)` must
+    //    now name the predicate too — seed-shop.js does.
+    //
+    // Expand/contract (invariant 14): the previous release neither reads nor
+    // writes either column, and every SELECT it runs names its columns. Old
+    // code during the swap still soft-deletes (active = false), which the new
+    // indexes permit; it would LIST an archived row as an inactive variant
+    // until the swap completes — cosmetic, and only for a row archived in
+    // that window. Loosening a unique rule is not a contract: no release
+    // relies on a conflict the partial index no longer raises (archived rows
+    // exist only once this release writes them). Rollback of the schema:
+    // DROP COLUMN product_images.color / product_variants.archived_at once no
+    // release reads them; restoring the global SKU rule would first need the
+    // duplicate SKUs of archived rows renamed.
+    //
+    // On icelandicstore every statement is a no-op (its databases hold 096 and
+    // 099 under their own names, same DDL, IF NOT EXISTS; the pg_constraint
+    // loop finds nothing left to drop), so ice needs no `aliases` entry.
+    // Reference copy: server/migrations/119_product_image_color.sql
+    name: '119_product_image_color',
+    statements: [
+      `ALTER TABLE product_images ADD COLUMN IF NOT EXISTS color TEXT`,
+      `ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS uniq_product_variants_sku_live
+         ON product_variants (sku) WHERE archived_at IS NULL`,
+      `DO $$
+         DECLARE c text;
+         BEGIN
+           FOR c IN
+             SELECT con.conname
+               FROM pg_constraint con
+               JOIN pg_class rel ON rel.oid = con.conrelid
+               JOIN pg_attribute att
+                 ON att.attrelid = con.conrelid AND att.attnum = ANY (con.conkey)
+              WHERE rel.relname = 'product_variants'
+                AND con.contype = 'u'
+                AND array_length(con.conkey, 1) = 1
+                AND att.attname = 'sku'
+           LOOP
+             EXECUTE format('ALTER TABLE product_variants DROP CONSTRAINT %I', c);
+           END LOOP;
+         END $$`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS uniq_product_variants_attrs_live
+         ON product_variants (product_id, attributes) WHERE archived_at IS NULL`,
+      `DROP INDEX IF EXISTS uniq_product_variants_attrs`,
+      `CREATE INDEX IF NOT EXISTS idx_product_variants_live
+         ON product_variants (product_id) WHERE archived_at IS NULL`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

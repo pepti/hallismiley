@@ -423,6 +423,47 @@
         "ice #400 orders-list store label split, coverage messages, prettyColor fallback",
         "ice #51 product-card net-price VAT note (engine prices are gross); CheckoutSuccessView (its payload is shopController, lane 1a this round)"
       ]
+    },
+    {
+      "rev": null,
+      "date": "2026-09-26",
+      "upstreamCommits": 0,
+      "conflicts": 0,
+      "note": "harvest",
+      "harvestedFrom": "ice@941cf51d",
+      "chunk": "harvest2 lane 6c (variants, swatch, delivery note)",
+      "commits": [
+        "3ccf8a00 (#194 variants that work: add/delete rows, archive + partial unique indexes, validateVariant, res.ok checks, Combobox pickers)",
+        "477981b4 (#352 variantArrange: colour → size, XS → 2XL)",
+        "b25b1010 (#381 variantSort: header-click sorting, click-order badges)",
+        "965014ee (#430 variantAddValue: \"Bæta við lit\", paste SKU + barcode — merged onto 941cf51d the same day)",
+        "d13c6553 (#432 variantAdd bulk route + MCP add_variants / list_variants + validateArgs arrays/objects — merged onto 941cf51d the same day)",
+        "b8fba561 (#182 colour swatches that swap the photo)",
+        "adc8ca1b (#265 colour → photo matched on the server, colorMatch.js)",
+        "50033a85 (#270 photo-colour picker lists active colours only)",
+        "bd4ae8d2 (#273 e2e shop-colour-swatch.spec.js)",
+        "23774db9 (#334 delivery note: pictures, sizes)",
+        "fd112870 (#335 no double size on the delivery note)",
+        "0a073b5e (#8 skuCompare / compareBin — the BIN walk order)"
+      ],
+      "branch": "harvest2/lane6c-variants",
+      "features": [
+        "shop-catalog",
+        "orders",
+        "mcp-connector"
+      ],
+      "migrations": {
+        "119_product_image_color": "PROVISIONAL number (renumber at merge). ice needs NO alias: its databases hold the same DDL as ice 096_product_image_color (product_images.color) and 099_variant_archive (archived_at + the partial unique indexes, found-by-lookup constraint drop); every statement is IF NOT EXISTS / a pg_constraint loop that finds nothing, so on ice the entry runs as a no-op (docs/MIGRATIONS.md: the downstream migration did as much or more)."
+      },
+      "trimmed": [
+        "ice #194 ProductFormView page (the engine keeps the product modal; the grid is components/VariantGrid.js), Tegund/Birgir/Flokkur comboboxes (the engine has only subcategory — it gets the Combobox), pack_qty / next_incoming_date, /products/filters categories, validateProduct variants refusal",
+        "ice #194/#432 refuseMergedProduct and merged-SKU checks (no product merges until lane 6b)",
+        "ice #432 archived variant SKUs counted as taken in the bulk writer (the engine frees them on both paths), Bin.writeBin shelf audit (the engine writes variants.bin directly), supplierCount colour table + seed-components (ice-only), internal/component products (always inactive here)",
+        "ice #432 list_variants always listed (the engine puts it behind the variantCreate switch — v1 read surface unchanged)",
+        "ice #265 demoData TEST seed + the 096 DEMO- rows (ice-only sample data)",
+        "ice #334 made-to-order BIN label (no products.made_to_order in the engine), company/store ship-to lines, the browser variantLabel mirror",
+        "ice #352/#381 product-list quick view and /shop quick-order rows (quickOrderRows.js — ice-only surfaces)"
+      ]
     }
   ]
 }

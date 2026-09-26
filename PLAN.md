@@ -234,6 +234,19 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
   product page's editable `vat_note` chrome still says 24 %; (d) the contact
   form now refuses a malformed phone (ice's shared rule) — Halli may prefer it
   looser there.
+- Harvest 2 lane 6c (2026-09-26, branch `harvest2/lane6c-variants`,
+  [harvest2-lane6c-2026-09-26](docs/history.d/2026-09-26-harvest2-lane6c-variants.md#harvest2-lane6c-2026-09-26)):
+  the variant grid (add / delete / archive, colour → size order, header sort,
+  "+ Add a colour"), the bulk variants route + MCP `add_variants` /
+  `list_variants` (switch `mcp.write.variantCreate`, off), colour swatches that
+  swap the photo, the delivery note as a pick list, and the lane 4a
+  `--gold-light` leftover. Provisional engine migration
+  `119_product_image_color` (renumber at merge). Open: (a) **the new
+  `adminProducts.*`, `variants.*`, `shop.sortByCol`, `errors.variantAdd.*`,
+  `validation.variant.*` strings are DRAFT** (Halli; listed in the fragment);
+  (b) when lane 6b (merges) lands, `variantAdd` and the variant routes need
+  its merged-product refusal; (c) the other `--bg-nav` labels on `--gold`
+  fills (cart, checkout, add-to-cart) want the same `--on-accent` treatment.
 - Upward harvest from icelandicstore `4694289`, lane 1 (chunks A then B, branch
   `harvest/ice-2026-09-24-ab`, not merged). Chunk A landed on the branch
   ([harvest-ice-a-2026-09-24](docs/HISTORY.md#harvest-ice-a-2026-09-24)): admin

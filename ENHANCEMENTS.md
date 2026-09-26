@@ -268,6 +268,13 @@ The survey's headline is that **the harvest is not one-directional**. This repo'
 **Why.** The footer markup lives inside `HomeView.js` here, so most routes have no footer at all. icelandicstore's is a component with an explicit comment about the stale-locale trap it had to solve.
 **Effort.** S. **Risk.** Low.
 
+### 27. ✅ Variants that work, colour → photo, the delivery note as a pick list — approved 2026-09-26 (harvest 2)
+
+**Status.** Approved by Halli 2026-09-26 as harvest 2 lane 6c; built on branch `harvest2/lane6c-variants` ([history](docs/history.d/2026-09-26-harvest2-lane6c-variants.md#harvest2-lane6c-2026-09-26)). New strings DRAFT.
+**What.** From icelandicstore #194, #352/#381, #430, #432, #182/#265/#270/#273, #334/#335 and #8: a product-editor variant grid that can add and delete rows (a variant on an order or with stock history is archived and frees its SKU — migration 119), arranges colour → size and sorts by header, and adds a whole colour from a spreadsheet paste; a bulk variants route and MCP `add_variants` / `list_variants` behind an off-by-default switch; colour swatches on the product page that show the colour's own photo (matched on the server); a delivery note with a picture, the size, BIN and SKU per line, walked by shelf.
+**Why.** The engine's variant table could not add a row, "delete" kept the SKU taken for ever, and the delivery note was a list of identical names.
+**Effort.** L (done). **Risk.** Medium — a unique rule became partial (expand-safe; see the migration's comment).
+
 ### Reverse queue — this repo → icelandicstore and the base
 
 Where the core is ahead. Queue for icelandicstore's next window; fold into the base PR where it fits.

@@ -9,6 +9,8 @@ const Order   = require('../models/Order');
 const Collection = require('../models/Collection');
 const Setting = require('../models/Setting');
 const { streamDeliveryNote, streamBulkDeliveryNotes } = require('../services/pdfService');
+// Harvest 2 lane 6c (ported from icelandicstore #432).
+const variantAdd = require('../services/variantAdd');
 const { UPLOAD_ROOT } = require('../config/paths');
 const { normaliseUpload, thumbPathFor } = require('../services/productImages');
 const orderExport = require('../services/orderExport');
@@ -671,6 +673,27 @@ const adminShopController = {
     } catch (err) { next(err); }
   },
 
+  // PATCH /products/:id/images/:imageId { color } — which variant colour this
+  // photo shows (ported from icelandicstore #182/#265; migration 119). Blank or
+  // null clears it. The editor offers only the product's ACTIVE colours
+  // (ice #270); the server stores the folded tag and matches it to the
+  // variants when the product page asks (utils/colorMatch.js).
+  async updateImageColor(req, res, next) {
+    try {
+      const body = req.body || {};
+      if (!('color' in body)) {
+        return res.status(400).json({ error: t(req.locale, 'errors.admin.imageColorRequired'), code: 400 });
+      }
+      const c = body.color;
+      if (c !== null && (typeof c !== 'string' || c.length > 100)) {
+        return res.status(400).json({ error: t(req.locale, 'errors.admin.imageColorRequired'), code: 400 });
+      }
+      const image = await Product.updateImageColor(req.params.id, req.params.imageId, c);
+      if (!image) return res.status(404).json({ error: t(req.locale, 'errors.admin.imageNotFound'), code: 404 });
+      return res.json({ image });
+    } catch (err) { next(err); }
+  },
+
   async reorderImages(req, res, next) {
     try {
       const { order } = req.body;
@@ -724,23 +747,23 @@ const adminShopController = {
       const product = await Product.findById(req.params.id);
       if (!product) return res.status(404).json({ error: t(req.locale, 'errors.admin.productNotFound'), code: 404 });
 
-      const { sku, attributes, price_isk, price_eur, stock, active } = req.body || {};
+      // Shape checks live in validateVariant (middleware/validate.js, ported
+      // from icelandicstore #194) so the messages are i18n'd. `barcode` and
+      // `bin` used to be dropped here although the model writes both — a
+      // barcode typed on a new grid row was silently lost (ice #194).
+      const { sku, attributes, price_isk, price_eur, stock, active, barcode, bin } = req.body || {};
       const stockErr = stockError(req, req.body);
       if (stockErr) return res.status(400).json({ error: stockErr, code: 400 });
-      if (!sku || typeof sku !== 'string' || sku.length > 100) {
-        return res.status(400).json({ error: 'sku is required (max 100 chars)', code: 400 });
-      }
-      if (!attributes || typeof attributes !== 'object' || Array.isArray(attributes)) {
-        return res.status(400).json({ error: 'attributes must be an object', code: 400 });
-      }
 
       const variant = await ProductVariant.create({
         product_id: product.id,
-        sku, attributes,
+        sku: String(sku).trim(), attributes,
         price_isk: price_isk != null ? Number(price_isk) : null,
         price_eur: price_eur != null ? Number(price_eur) : null,
         stock: Number(stock) || 0,
         active: active !== false,
+        barcode: typeof barcode === 'string' && barcode.trim() ? barcode.trim() : null,
+        bin: typeof bin === 'string' && bin.trim() ? bin.trim() : null,
       }, { userId: actorId(req) });
       return res.status(201).json({ variant });
     } catch (err) {
@@ -758,9 +781,10 @@ const adminShopController = {
     try {
       const stockErr = stockError(req, req.body);
       if (stockErr) return res.status(400).json({ error: stockErr, code: 400 });
-      // A variant of ANOTHER product is not this route's to edit.
-      const owned = await ProductVariant.findById(req.params.variantId);
-      if (!owned || String(owned.product_id) !== String(req.params.id)) {
+      // A variant of ANOTHER product — or an archived one — is not this
+      // route's to edit.
+      const owned = await ProductVariant.findByIdForProduct(req.params.variantId, req.params.id);
+      if (!owned) {
         return res.status(404).json({ error: t(req.locale, 'errors.admin.variantNotFound'), code: 404 });
       }
       // stockOpts: a stock cell edit lands in inventory_adjustments naming who
@@ -770,17 +794,61 @@ const adminShopController = {
       return res.json({ variant });
     } catch (err) {
       if (err.code === '23505') {
-        return res.status(409).json({ error: t(req.locale, 'errors.admin.skuTaken'), code: 409 });
+        // The live SKU index or the live attribute-combination index.
+        const key = /attrs/.test(String(err.constraint || '')) ? 'errors.admin.variantAttrsTaken' : 'errors.admin.skuTaken';
+        return res.status(409).json({ error: t(req.locale, key), code: 409 });
       }
       next(err);
     }
   },
 
-  async deactivateVariant(req, res, next) {
+  // DELETE a variant for real (ported from icelandicstore #194). It used to
+  // mean active = false, which kept the SKU and the size taken for ever. A
+  // variant nothing names is deleted and frees both; one an order or the stock
+  // history still names is ARCHIVED (migration 119: out of every list, SKU and
+  // attribute slot freed, row kept). The answer says which, so the grid can
+  // explain it.
+  async deleteVariant(req, res, next) {
     try {
-      const variant = await ProductVariant.update(req.params.variantId, { active: false });
-      if (!variant) return res.status(404).json({ error: t(req.locale, 'errors.admin.variantNotFound'), code: 404 });
-      return res.json({ variant });
+      const owned = await ProductVariant.findByIdForProduct(req.params.variantId, req.params.id);
+      if (!owned) return res.status(404).json({ error: t(req.locale, 'errors.admin.variantNotFound'), code: 404 });
+
+      const archiveInstead = async () => {
+        const variant = await ProductVariant.archive(req.params.variantId, req.params.id);
+        if (!variant) return res.status(404).json({ error: t(req.locale, 'errors.admin.variantNotFound'), code: 404 });
+        return res.json({ deleted: false, archived: true, variant, message: t(req.locale, 'errors.admin.variantArchived') });
+      };
+      if (await ProductVariant.hasReferences(req.params.variantId)) return archiveInstead();
+      try {
+        const gone = await ProductVariant.deleteForProduct(req.params.variantId, req.params.id);
+        if (!gone) return res.status(404).json({ error: t(req.locale, 'errors.admin.variantNotFound'), code: 404 });
+        return res.json({ deleted: true, archived: false, id: gone.id });
+      } catch (err) {
+        // Backstop: a reference created between the check and the delete.
+        if (err.code !== '23503') throw err;
+        return archiveInstead();
+      }
+    } catch (err) { next(err); }
+  },
+
+  // POST /products/:id/variants/bulk { variants: [...], dry_run? } — several
+  // variants at once, whole or not at all (services/variantAdd.js, shared with
+  // the MCP add_variants tool; ported from icelandicstore #432). dry_run
+  // answers what would be created without writing.
+  async createVariantsBulk(req, res, next) {
+    try {
+      const body = req.body || {};
+      const result = await variantAdd.addVariants(req.params.id, body.variants, {
+        userId: actorId(req), source: 'admin', dryRun: body.dry_run === true,
+      });
+      if (!result.ok) {
+        if (result.reason === 'not_found') return res.status(404).json({ error: t(req.locale, 'errors.admin.productNotFound'), code: 404 });
+        if (result.reason === 'conflict') return res.status(409).json({ error: t(req.locale, 'errors.variantAdd.conflict'), code: 409 });
+        const axes = Array.isArray(result.product && result.product.variant_axes) ? result.product.variant_axes : [];
+        const errors = variantAdd.describe(result.errors, req.locale, axes);
+        return res.status(result.status).json({ error: errors.map(e => e.message).join('; '), code: result.status, errors });
+      }
+      return res.status(result.dryRun ? 200 : 201).json({ dry_run: result.dryRun, axes: result.axes, variants: result.variants });
     } catch (err) { next(err); }
   },
 

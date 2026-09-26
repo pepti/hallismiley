@@ -1028,15 +1028,15 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Routes | `server/routes/shopRoutes.js` → `/api/v1/shop` · `adminShopRoutes.js` → `/api/v1/admin/shop` · `adminDiscountRoutes.js` → `/api/v1/admin/discounts` · `adminBinsRoutes.js` → `/api/v1/admin/bins` |
 | Controllers | `server/controllers/shopController.js`, `adminShopController.js`, `adminDiscountController.js`, `adminBinsController.js` |
 | Models | `server/models/Product.js`, `ProductVariant.js`, `Collection.js`, `Order.js`, `Discount.js`, `Bin.js`, `Inventory.js` (On hand / Committed / Available, the one audited stock writer, the lock order) |
-| Services | `server/services/stripeService.js`, `discountEngine.js`, `orderExport.js` (the orders list as .xlsx); `server/services/productImport/parseFile.js`, `headerMap.js`, `parseXlsx.js`, `parsePdf.js`, `headerHints.js`, `tradeLabels.js`, `variantCell.js`, `variantGroups.js` (the one reader for every product file, harvested from icelandicstore); `server/config/stripe.js`, `shipping.js`; `server/utils/qr.js`, `variantAxis.js` |
+| Services | `server/services/stripeService.js`, `discountEngine.js`, `orderExport.js` (the orders list as .xlsx); `server/services/productImport/parseFile.js`, `headerMap.js`, `parseXlsx.js`, `parsePdf.js`, `headerHints.js`, `tradeLabels.js`, `variantCell.js`, `variantGroups.js` (the one reader for every product file, harvested from icelandicstore); `server/services/variantAdd.js` (many variants of one product, all or none — the bulk route and MCP `add_variants`); `server/config/stripe.js`, `shipping.js`; `server/utils/qr.js`, `variantAxis.js`, `colorMatch.js` (which photo a variant colour shows — matched here only) |
 | Views | `public/js/views/ShopView.js`, `ProductView.js`, `CartView.js`, `CheckoutView.js`, `CheckoutSuccessView.js`, `CheckoutCancelView.js`, `OrderHistoryView.js`, `AdminProductsView.js`, `AdminOrdersView.js`, `AdminOrderDetailView.js`, `AdminCollectionsView.js`, `AdminDiscountsView.js`, `AdminBinsView.js`, `AdminSalesView.js` |
-| Components | `public/js/components/ProductCard.js`, `ShopFilters.js`, `CartIcon.js`, `CurrencySelector.js`, `BarcodeScanner.js` |
-| Client | `public/js/services/cart.js`, `adminProducts.js`, `adminOrders.js`, `adminCollections.js`, `adminDiscounts.js`, `adminBins.js`; `public/js/utils/availability.js` (the basket's sold-out gate), `imageUrl.js` (the `.thumb.webp` URL), `colorLabels.js` (colour names + picker labels as locale keys), `duplicateNames.js` (the SKU chip on a shared name), `vat.js` (the per-rate VAT display — twin of `server/utils/vat.js` + `invoiceService.buildLines`) |
+| Components | `public/js/components/ProductCard.js`, `ShopFilters.js`, `CartIcon.js`, `CurrencySelector.js`, `BarcodeScanner.js`, `VariantGrid.js` (the product editor's variant table: add, edit, delete, arrange, "+ Add a colour") |
+| Client | `public/js/services/cart.js`, `adminProducts.js`, `adminOrders.js`, `adminCollections.js`, `adminDiscounts.js`, `adminBins.js`; `public/js/utils/availability.js` (the basket's sold-out gate), `imageUrl.js` (the `.thumb.webp` URL), `colorLabels.js` (colour names + picker labels as locale keys), `duplicateNames.js` (the SKU chip on a shared name), `vat.js` (the per-rate VAT display — twin of `server/utils/vat.js` + `invoiceService.buildLines`); `public/js/utils/variantAxis.js` (twin of the server's), `colorMatch.js` (display twin: swatch fill, labels, the admin photo-colour picker — never the photo match), `variantArrange.js` (colour → size, XS → 2XL), `variantSort.js` (header-click sorting), `variantAddValue.js` (the "+ Add a colour" planner and paste reader) |
 | Scripts | `server/scripts/seed-shop.js`, `import-products-csv.js` |
 | CSS | `public/css/shop.css`, `admin-products.css`, `admin-orders.css`, `admin-collections.css`, `admin-discounts.css`, `admin-bins.css`, `admin-sales.css`, `barcode-scanner.css` |
-| Jest | `tests/integration/shop.test.js`, `discounts.test.js`, `adminOrderBulk.test.js`, `adminProductImportExport.test.js`, `sections.test.js`, `inventoryThreeNumbers.test.js`, `adminProductImportFile.test.js`, `adminOrderExport.test.js`; `tests/unit/discountEngine.test.js`, `shopFilters.test.js`, `bins-grid.test.js`, `qr.test.js`, `availability.client.test.js`, `productImportParseFile.test.js`, `productImportVariantCell.test.js`, `productImportVariantGroups.test.js`, `parsePdfWorker.test.js`, `imageUrl.test.js` (fixture `tests/fixtures/pdfFixture.js`), `colorLabels.client.test.js`, `duplicateNames.client.test.js`, `vatDisplay.client.test.js`, `cartPriceSync.client.test.js` |
-| e2e | `e2e/admin-product-group.spec.js`, `cart-sold-out.spec.js` |
-| Migrations | 022–025, 045, 048, 049, 050, 054, 055, 057, 074, 112, 113, 115 (`orders.notes`, the checkout note) |
+| Jest | `tests/integration/shop.test.js`, `discounts.test.js`, `adminOrderBulk.test.js`, `adminProductImportExport.test.js`, `sections.test.js`, `inventoryThreeNumbers.test.js`, `adminProductImportFile.test.js`, `adminOrderExport.test.js`; `tests/unit/discountEngine.test.js`, `shopFilters.test.js`, `bins-grid.test.js`, `qr.test.js`, `availability.client.test.js`, `productImportParseFile.test.js`, `productImportVariantCell.test.js`, `productImportVariantGroups.test.js`, `parsePdfWorker.test.js`, `imageUrl.test.js` (fixture `tests/fixtures/pdfFixture.js`), `colorLabels.client.test.js`, `duplicateNames.client.test.js`, `vatDisplay.client.test.js`, `cartPriceSync.client.test.js`, `colorMatch.test.js`, `variantArrange.client.test.js`, `variantSort.client.test.js`, `variantAddValue.client.test.js`, `variantAxisParity.test.js`; `tests/integration/adminShopVariants.test.js` |
+| e2e | `e2e/admin-product-group.spec.js`, `cart-sold-out.spec.js`, `admin-product-variants.spec.js`, `shop-colour-swatch.spec.js` |
+| Migrations | 022–025, 045, 048, 049, 050, 054, 055, 057, 074, 112, 113, 115 (`orders.notes`, the checkout note), 119 (`product_images.color`; `product_variants.archived_at` and the live-only SKU / option unique rules) |
 | Features | [cart-checkout](../features/cart-checkout.md), [discounts](../features/discounts.md), [orders](../features/orders.md), [shop-catalog](../features/shop-catalog.md) |
 | Feature doc | — (retail is hidden here; ENHANCEMENTS #22, #23, #25 landed by the 2026-09-24 ice harvest, #24 in part; #26 remains) |
 
@@ -1094,6 +1094,41 @@ company/                  gitignored: plans, decisions, logs, market-research st
   of `Order`'s `COLUMNS`, which back every customer-facing order payload.
 - A name two different products share gets the SKU chip on the card
   (`utils/duplicateNames.js`); rows of one product never collide.
+- **Deleting a variant deletes it — unless something still names it**
+  ([harvest2-lane6c](history.d/2026-09-26-harvest2-lane6c-variants.md#harvest2-lane6c-2026-09-26)):
+  `DELETE /products/:id/variants/:variantId` removes a variant nothing
+  references and ARCHIVES one an order line or the stock history names
+  (`archived_at` set, `active` false, shelf cleared). `hasReferences` reads
+  every foreign key onto `product_variants` from the catalogue — never a
+  hand-kept list — because `inventory_adjustments` is CASCADE and a delete
+  would take the audit trail with it. The SKU and the `(product_id,
+  attributes)` unique rules are partial on `archived_at IS NULL` (119), so an
+  archived row frees both; every LIST excludes archived rows, by-id lookups do
+  not (an old order still resolves its variant), `findBySku` prefers the live
+  row, and an `ON CONFLICT (product_id, attributes)` must name the predicate.
+  Variant routes are scoped to the product in the path (`findByIdForProduct`);
+  `validateVariant` checks the shape.
+- **Many variants are added whole or not at all**: `services/variantAdd.js`
+  behind `POST /products/:id/variants/bulk` (with `dry_run`) and MCP
+  `add_variants`; every problem comes back in one answer, SKUs and barcodes
+  are checked case-blind against the live catalogue as either code, the batch
+  is re-checked under advisory locks inside the transaction, stock starts at 0.
+  An archived variant's SKU is free on both paths.
+- **Which photo a colour shows is decided on the server only**
+  (`utils/colorMatch.js` → `color_images` on the public product; exact, then
+  unambiguous token containment): the browser consumes the map and never
+  re-derives it (icelandicstore #265 shipped a browser matcher that missed
+  "French Navy (FRNA)" against a `navy` photo). The admin photo-colour picker
+  lists ACTIVE variant colours only (#270); the tag is stored folded. Swatch
+  fills are garment colours and literal by design; every surface around them
+  is tokens.
+- **Variant order is colour → size, XS → 2XL** (`utils/variantArrange.js`) on
+  the storefront picker, the admin grid and the detail panel; SQL order stays
+  SKU. Header sorting (`utils/variantSort.js`) is display only, remembered per
+  browser.
+- The product modal checks `res.ok` on every load it builds a save on: the
+  collection ids are sent only once the collection list actually loaded (an
+  empty set is otherwise "remove from every collection").
 - "Needs action" order pills (not paid, not sent, partly sent) are the
   `--warning` ink on `--warning-dim`; no status pill carries a colour literal.
 - Bulk product edit (`POST /products/bulk`) sets type, subcategory, VAT rate,
@@ -1131,7 +1166,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
   `sanitizeBody` re-applied; `app.js` skips its global parser for that path.
   Never mount a large parser for an admin path at app level again ([ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23)).
 
-**History**: [harvest-2](HISTORY.md#harvest-2) · [ui-kit](HISTORY.md#ui-kit) · [ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23) · [harvest-ice-c-2026-09-24](HISTORY.md#harvest-ice-c-2026-09-24) · [harvest-ice-d-2026-09-24](HISTORY.md#harvest-ice-d-2026-09-24)
+**History**: [harvest-2](HISTORY.md#harvest-2) · [ui-kit](HISTORY.md#ui-kit) · [ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23) · [harvest-ice-c-2026-09-24](HISTORY.md#harvest-ice-c-2026-09-24) · [harvest-ice-d-2026-09-24](HISTORY.md#harvest-ice-d-2026-09-24) · [harvest2-lane6c-2026-09-26](history.d/2026-09-26-harvest2-lane6c-variants.md#harvest2-lane6c-2026-09-26)
 
 ## 12. News, projects, party, bio (hidden portfolio)
 
@@ -1295,7 +1330,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Middleware / core | `server/middleware/mcpAuth.js`; `server/mcp/transport.js`, `registry.js`, `envTag.js`, `oauth.js` (the OAuth protocol rules), `owner.js` (the owner re-check), `server/mcp/tools/system.js`, `manage.js`, `products.js` (catalogue writes) |
 | Views | `public/js/views/AdminMcpSettingsView.js`, `ConnectClaudeView.js` (`/tengja/:id`, the consent page) |
 | Client | `public/js/services/adminMcp.js` |
-| Jest | `tests/integration/mcp.test.js`, `mcpOAuth.test.js`, `mcpWriteTools.test.js`, `mcpCatalogTools.test.js`; `tests/unit/mcpOAuth.test.js` · e2e `e2e/mcp-oauth.spec.js` |
+| Jest | `tests/integration/mcp.test.js`, `mcpOAuth.test.js`, `mcpWriteTools.test.js`, `mcpCatalogTools.test.js`; `tests/unit/mcpOAuth.test.js`, `mcpValidateArgs.test.js` · e2e `e2e/mcp-oauth.spec.js` |
 | Migrations | 088, 110 |
 | Features | [mcp-connector](../features/mcp-connector.md) |
 | Feature doc | `docs/mcp.md` |
@@ -1336,11 +1371,21 @@ company/                  gitignored: plans, decisions, logs, market-research st
   a third gate after the scope double-gate. A created product is always a
   Draft; `update_product` never takes stock; `set_stock` goes through the
   audited writer with the token owner as the actor.
+- **Variant tools ride one switch** ([harvest2-lane6c](history.d/2026-09-26-harvest2-lane6c-variants.md#harvest2-lane6c-2026-09-26)):
+  `add_variants` (write) and `list_variants` (read — it writes nothing, but it
+  exists to serve `add_variants`) both need `mcp.write.variantCreate`, OFF by
+  default, so the default read surface stays the v1 system tools.
+  `add_variants` goes through `services/variantAdd.js` (the admin bulk route's
+  writer) and creates INACTIVE variants at stock 0.
+- **`validateArgs` refuses an unknown key at every level**: arrays
+  (`minItems` / `maxItems` / `items`) and nested objects (`properties`,
+  `required`, `additionalProperties` as a schema) since `add_variants`; props
+  are looked up with `Object.hasOwn` (an inherited name is not a schema).
 - **A token is only as good as its owner**: `mcpAuth` and the token endpoint
   re-resolve the owner on every call (`server/mcp/owner.js` — role set, then
   the 2FA policy); not an admin, or disabled → 401.
 
-**History**: [harvest-1](HISTORY.md#harvest-1) · [mcp-oauth-2026-09-24](HISTORY.md#mcp-oauth-2026-09-24) · [mcp-write-tools-2026-09-24](HISTORY.md#mcp-write-tools-2026-09-24) · [harvest-ice-c-2026-09-24](HISTORY.md#harvest-ice-c-2026-09-24)
+**History**: [harvest-1](HISTORY.md#harvest-1) · [mcp-oauth-2026-09-24](HISTORY.md#mcp-oauth-2026-09-24) · [mcp-write-tools-2026-09-24](HISTORY.md#mcp-write-tools-2026-09-24) · [harvest-ice-c-2026-09-24](HISTORY.md#harvest-ice-c-2026-09-24) · [harvest2-lane6c-2026-09-26](history.d/2026-09-26-harvest2-lane6c-variants.md#harvest2-lane6c-2026-09-26)
 
 ## 16. Change requests — Breytingarbeiðnir
 

@@ -16,6 +16,7 @@ const { t }                = require('../i18n');
 const { AnalyticsEvent }   = require('../models/Analytics');
 const { computeForCode, computeForCheckout } = require('../services/discountEngine');
 const Discount             = require('../models/Discount');
+const { decorateColorImages } = require('../utils/colorMatch');
 
 const MAX_QTY_PER_ITEM   = 50;
 const MAX_ITEMS_PER_ORDER = 20;
@@ -173,6 +174,9 @@ const shopController = {
         ProductVariant.listForProduct(product.id, { activeOnly: true }),
       ]);
       const full = await Inventory.decorate({ ...product, images, variants });
+      // `color_images` — which photo each colour shows, matched HERE, never in
+      // the browser (utils/colorMatch.js; ported from icelandicstore #265).
+      decorateColorImages(full);
       return res.json({ product: stripStockInternals(full) });
     } catch (err) { next(err); }
   },
