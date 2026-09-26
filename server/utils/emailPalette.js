@@ -4,7 +4,7 @@
 //
 // Ported from icelandicstore #179 (2026-08-19): every email moved off the
 // inherited DARK shell (near-black page, #111 card, gold #c9a84c, a #444
-// footer at 2.7:1) onto the site's LIGHT palette, with a text ramp that clears
+// footer at 2.00:1 on #0d0d0d) onto the site's LIGHT palette, with a text ramp that clears
 // WCAG AA on the surface it sits on. Ice spelled its palette out as literal
 // hex; the engine cannot — every downstream has its own theme — so the values
 // are READ from the instance's theme tokens at boot (harvest 2 lane 2,

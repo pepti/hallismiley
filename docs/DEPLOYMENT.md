@@ -126,7 +126,7 @@ for the version being promoted.
 | `ALLOWED_ORIGINS` | comma-separated CORS origins |
 | `CSRF_SECRET` | 32+ random chars |
 | `NODE_ENV` | `production` on every deployed stack (also on TEST stacks — it is not the environment label) |
-| `RESEND_API_KEY` | **required when `APP_ENV=production`** — a silent mail transport would no-op verification, resets and receipts while returning 200 |
+| `RESEND_API_KEY` | **required when `APP_ENV=production`** on the default transport — a silent mail transport would no-op verification, resets and receipts while returning 200. With `EMAIL_TRANSPORT=graph` the rule moves to the four Graph settings below instead (`services/mailTransport.js` `missingSettings`) |
 | `UPLOAD_ROOT` | required when `NODE_ENV=production` (`server/config/paths.js` throws) — the persistent uploads mount, e.g. `/app/uploads` |
 
 Also set on any real instance:
@@ -135,7 +135,9 @@ Also set on any real instance:
 |---|---|
 | `APP_ENV` | `production` / `test` — the environment label (`server/config/appEnv.js`); drives the RESEND rule above, the MCP `[TEST]/[PROD]` tag and the change-request gate |
 | `APP_URL` | canonical origin: email links, sitemap, SSR canonical/og/JSON-LD, the canonical-host 301, `{siteHost}` in the email strings. **The code fallback (`https://www.orangesmiley.is` since 2026-09-22; before that the base's hallismiley.is) is the ENGINE's origin, not the instance's** — it is not part of the identity seam, so every downstream sets `APP_URL` on its App Service (or `deploy.yml`); a product that forgets inherits the engine's host in its canonical tags, sitemap and email links, and its canonical-host 301 sends traffic to the engine's site |
-| `EMAIL_FROM` | sender. Production = `orangesmiley@mail.orangesmiley.is` (D-015 fleet sending domain, verified in Resend); code default `info@orangesmiley.is` |
+| `EMAIL_FROM` | sender address; the display name is `identity.brand.name`. Production = `orangesmiley@mail.orangesmiley.is` (D-015 fleet sending domain, verified in Resend); code default `identity.organization.email` (`info@orangesmiley.is` here) |
+| `EMAIL_TRANSPORT` | `resend` (default) or `graph` — the ONE switch for the mail transport (`server/services/mailTransport.js`). The Graph settings alone never switch it; an unknown value counts as "not configured" and every send fails loudly |
+| `GRAPH_TENANT_ID`, `GRAPH_CLIENT_ID`, `GRAPH_CLIENT_SECRET`, `GRAPH_SENDER` | only with `EMAIL_TRANSPORT=graph`: send through Microsoft Graph `sendMail` from a Microsoft 365 mailbox in the CUSTOMER's tenant (icelandicstore #173). Needs an **Entra app registration in that tenant** with the application permission `Mail.Send` (admin consent), narrowed to the one mailbox by an Exchange application access policy (`New-ApplicationAccessPolicy -AccessRight RestrictAccess`). `GRAPH_SENDER` is the mailbox (default: the address in `EMAIL_FROM`); the secret is a Key Vault reference and lives at most 24 months — put its expiry on the watch. Messages are not saved to Sent Items; the id a sender returns is the minted `client-request-id`, the value an Exchange message trace finds. `EMAIL_ALLOWLIST` applies exactly as on Resend |
 | `EMAIL_REPLY_TO` | where replies go — the sending domain has no inbox. Added to every message that does not set its own (lead notifications reply to the enquirer). Unset = no Reply-To |
 | `LEAD_NOTIFY_EMAIL` | inbox for `/hafa-samband` leads (defaults to `EMAIL_FROM`, which on production is not a mailbox — set it) |
 | `CLIENT_CONFIG_MODULES_SELF_UPDATE_ENABLED` | `false` on orangesmiley.is until the release host exists (D-014); `config/client.json` points at a manifest URL nothing serves yet |
@@ -152,7 +154,7 @@ Also set on any real instance:
 | `APPLICATIONINSIGHTS_ROLE_NAME` | optional cloud-role name in the Application Map; default the App Service site name (`WEBSITE_SITE_NAME`), else the package name — set it when several instances share one App Insights resource and the site names do not say which is which |
 
 Do **not** set `SMTP_USER` / `SMTP_PASS` / `REQUIRE_EMAIL_VERIFICATION` —
-nothing reads them (the mail transport is Resend).
+nothing reads them (the mail transport is Resend, or Graph by `EMAIL_TRANSPORT`).
 
 ### Anthropic authentication (workload identity, no stored secret)
 

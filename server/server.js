@@ -24,8 +24,14 @@ const missing = REQUIRED_ENV.filter(k => !process.env[k]);
 // receipts all no-op while every request returns 200 (ice #180). Fatal at
 // boot, where the config error is cheap to see. APP_ENV, not NODE_ENV —
 // NODE_ENV is 'production' on TEST stacks and CI boot-smoke too.
-if (process.env.APP_ENV === 'production' && !process.env.RESEND_API_KEY) {
-  missing.push('RESEND_API_KEY (required when APP_ENV=production)');
+// The SELECTED transport's settings (RESEND_API_KEY, or the GRAPH_* set under
+// EMAIL_TRANSPORT=graph — services/mailTransport.js, harvest 2 lane 2).
+const mailTransport = require('./services/mailTransport');
+// The sender falls back to the From address exactly as emailService's does.
+const MAIL_FROM = process.env.EMAIL_FROM || require('./config/identity').identity.organization.email;
+if (process.env.APP_ENV === 'production') {
+  const mailMissing = mailTransport.missingSettings(process.env, MAIL_FROM);
+  for (const m of mailMissing) missing.push(`${m} (required when APP_ENV=production)`);
 }
 if (missing.length) {
   logger.fatal({ missing }, '[server] Missing required environment variables');
@@ -111,8 +117,10 @@ async function start() {
 
   // One-shot boot-time notice if outbound email isn't configured. RSVP
   // confirmations + admin notifications silently no-op when this is missing.
-  if (!process.env.RESEND_API_KEY) {
-    logger.warn('[server] RESEND_API_KEY not set — outbound email (RSVP notifications, verification, order receipts) will not send');
+  const mailMissing = mailTransport.missingSettings(process.env, MAIL_FROM);
+  if (mailMissing.length) {
+    logger.warn({ transport: mailTransport.transportName(), missing: mailMissing },
+      '[server] mail transport not configured — outbound email (RSVP notifications, verification, order receipts) will not send');
   }
 
   const server = app.listen(PORT, '0.0.0.0', () => {

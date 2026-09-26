@@ -1,6 +1,10 @@
-// Email service using Resend API.
-// Falls back to a no-op with a logged notice when RESEND_API_KEY is not set (dev/test mode).
+// Transactional email: one shell (emailShell), one choke point (deliver),
+// one transport behind it — Resend by default, Microsoft Graph sendMail when
+// EMAIL_TRANSPORT=graph (services/mailTransport.js, ice #173). Every sender
+// no-ops LOUDLY (error log + critical alert) when the selected transport is
+// not configured (dev/test), and production refuses to boot without it.
 const { Resend } = require('resend');
+const mailTransport = require('./mailTransport');
 const { t, siteHost } = require('../i18n');
 // Every sender logs through pino (stack invariant 6; the last console.* calls
 // here were converted in harvest-ice-f-2026-09-24, and ESLint's no-console now
@@ -76,18 +80,35 @@ function alertOnce(key, title, details) {
 }
 
 function transportNotConfigured(channel, details = {}) {
-  logger.error({ channel, ...details },
-    `email.${channel} NOT SENT — Resend transport not configured (RESEND_API_KEY)`);
-  alertOnce('transport', 'Email not sent — transport not configured', { channel, ...details });
+  const transport = mailTransport.transportName() || 'unknown';
+  const missing = mailTransport.missingSettings(process.env, FROM_ADDR);
+  logger.error({ channel, transport, missing, ...details },
+    `email.${channel} NOT SENT — ${transport} transport not configured (${missing.join(', ')})`);
+  alertOnce('transport', 'Email not sent — transport not configured', { channel, transport, missing, ...details });
 }
 
 function sendFailed(channel, detail) {
-  logger.error({ channel, detail }, 'email send FAILED (Resend)');
-  alertOnce('send:' + String(detail).slice(0, 40), 'Email send failed', { channel, detail });
+  const transport = mailTransport.transportName() || 'unknown';
+  logger.error({ channel, transport, detail }, `email send FAILED (${transport})`);
+  alertOnce('send:' + String(detail).slice(0, 40), 'Email send failed', { channel, transport, detail });
 }
 
-// The single choke point every sender goes through: allowlist rewrite,
-// bounded wait, loud failure. Returns Resend's { data, error } shape.
+// The transport behind deliver(): Resend (default) or Microsoft Graph when
+// EMAIL_TRANSPORT=graph (services/mailTransport.js — the one switch, and why
+// the Graph variables alone never flip it). Both answer Resend's
+// { data: { id }, error } shape; Graph's id is its minted client-request-id.
+function sendThroughTransport(msg) {
+  const name = mailTransport.transportName();
+  if (name === 'graph') {
+    return mailTransport.sendViaGraph(msg, { fallbackSender: FROM_ADDR, timeoutMs: EMAIL_TIMEOUT_MS });
+  }
+  if (name === 'resend') return getClient().emails.send(msg);
+  return Promise.resolve({ data: null, error: { message: mailTransport.missingSettings()[0] } });
+}
+
+// The single choke point every sender goes through: placeholder drop,
+// allowlist rewrite, Reply-To, bounded wait, loud failure. Returns Resend's
+// { data, error } shape whatever the transport.
 async function deliver(payload, channel = 'generic') {
   // Nobody left to send to (only placeholder addresses): not sent at all.
   // `id: null` reads as "not sent" to every caller that returns the id.
@@ -96,33 +117,51 @@ async function deliver(payload, channel = 'generic') {
     return { data: { id: null }, error: null };
   }
   const msg = { ...payload, to: applyAllowlist(deliverable(payload.to)) };
+  // The allowlist is "every message goes ONLY to these addresses": a copy
+  // line would slip past it, so under the allowlist there is none.
+  if (ALLOWLIST.length) { delete msg.cc; delete msg.bcc; }
   if (!msg.replyTo && REPLY_TO) msg.replyTo = REPLY_TO;
+  let timer;
   try {
     const result = await Promise.race([
-      getClient().emails.send(msg),
-      new Promise((_, reject) => setTimeout(() => reject(new Error(`send timed out after ${EMAIL_TIMEOUT_MS}ms`)), EMAIL_TIMEOUT_MS)),
+      sendThroughTransport(msg),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`send timed out after ${EMAIL_TIMEOUT_MS}ms`)), EMAIL_TIMEOUT_MS);
+      }),
     ]);
     if (result && result.error) sendFailed(channel, result.error.message || String(result.error));
     return result;
   } catch (err) {
     sendFailed(channel, err.message);
     return { data: null, error: { message: err.message } };
+  } finally {
+    // A settled send must not leave its timeout armed (it kept the process
+    // — and every Jest worker — alive for EMAIL_TIMEOUT_MS after the send).
+    clearTimeout(timer);
   }
 }
 
+// Is the SELECTED transport configured? Read per call, like the env it reads.
 function isConfigured() {
-  return !!process.env.RESEND_API_KEY;
+  return mailTransport.isTransportConfigured(process.env, FROM_ADDR);
 }
 
 // Basic transport-layer health check. DB-dependent checks (e.g. which admin
 // emails are verified) belong in the caller — this stays DB-free so the
 // emailService module stays reusable outside request context.
 function emailHealthCheck() {
+  const configured = isConfigured();
   return {
-    resendConfigured: !!process.env.RESEND_API_KEY,
-    fromAddressSet:   !!process.env.EMAIL_FROM,
-    fromAddress:      FROM_ADDR,
-    allowlistActive:  ALLOWLIST.length > 0,
+    transport:           mailTransport.transportName(),
+    transportConfigured: configured,
+    missingSettings:     mailTransport.missingSettings(process.env, FROM_ADDR),
+    // The pre-Graph name, still read by adminController.getEmailHealth
+    // (`healthy`) and PartyAdminView: it now means "the selected transport
+    // is configured", so a Graph instance does not report itself broken.
+    resendConfigured:    configured,
+    fromAddressSet:      !!process.env.EMAIL_FROM,
+    fromAddress:         FROM_ADDR,
+    allowlistActive:     ALLOWLIST.length > 0,
   };
 }
 
@@ -141,8 +180,8 @@ function getClient() {
 //   P.border                    hairlines
 //   P.heading · P.text · P.muted  the ink ramp, darkest first — INVERTED from
 //                               the old dark shell, where brighter meant more
-//                               prominent (its #444 footer would have been
-//                               2.7:1 on a light page)
+//                               prominent (its #444 footer on #0d0d0d
+//                               measured 2.00:1 — under AA)
 //   P.accent                    links + accent emphasis (the text-safe accent)
 //   P.button / P.onButton       the filled call-to-action and its label
 //
@@ -293,7 +332,7 @@ async function sendVerificationEmail(to, token, locale = 'en') {
 
   // Log the Resend message ID (not the recipient address — that's PII)
   const { data, error } = await deliver({ from: FROM, to, subject, html });
-  if (error) throw new Error(`Resend error: ${error.message}`);
+  if (error) throw new Error(`Email send error: ${error.message}`);
   if (!data.id) return false;   // skipped by deliver(): no deliverable recipient
   logger.info({ id: data.id }, '[EmailService] Verification email sent');
   return data.id;
@@ -340,7 +379,7 @@ async function sendPasswordResetEmail(to, token, locale = 'en') {
 
   // Log the Resend message ID (not the recipient address — that's PII)
   const { data, error } = await deliver({ from: FROM, to, subject, html });
-  if (error) throw new Error(`Resend error: ${error.message}`);
+  if (error) throw new Error(`Email send error: ${error.message}`);
   if (!data.id) return false;   // skipped by deliver(): no deliverable recipient
   logger.info({ id: data.id }, '[EmailService] Password reset email sent');
   // Return the id, like sendWelcomeInviteEmail does (ice #258): this used to
@@ -408,7 +447,7 @@ async function sendWelcomeInviteEmail(to, token, locale = 'en', overrides = {}) 
     locale,
   });
   const { data, error } = await deliver({ from: FROM, to, subject, html });
-  if (error) throw new Error(`Resend error: ${error.message}`);
+  if (error) throw new Error(`Email send error: ${error.message}`);
   if (!data.id) return false;   // skipped by deliver(): no deliverable recipient
   logger.info({ id: data.id }, '[EmailService] Welcome invite sent');
   return data?.id;
@@ -533,7 +572,7 @@ async function sendOrderReceipt(order, items, locale = 'en', { hasBookableItems 
   `, locale);
 
   const { data, error } = await deliver({ from: FROM, to, subject, html });
-  if (error) throw new Error(`Resend error: ${error.message}`);
+  if (error) throw new Error(`Email send error: ${error.message}`);
   logger.info({ orderNumber: order.order_number, id: data.id }, '[EmailService] Order receipt sent');
 }
 
@@ -608,7 +647,7 @@ async function sendBookingNotification({ order, bookableItems, adminEmails }) {
   const { data, error } = await deliver({
     from: FROM, to: adminEmails, subject, html,
   });
-  if (error) throw new Error(`Resend error: ${error.message}`);
+  if (error) throw new Error(`Email send error: ${error.message}`);
   logger.info({ orderNumber: order.order_number, items: bookableItems.length, recipients: adminEmails.length, id: data.id }, '[EmailService] Booking notification sent');
 }
 
@@ -682,7 +721,7 @@ async function sendRsvpNotification({ user, answers, rsvpForm, isUpdate, adminEm
   const { data, error } = await deliver({
     from: FROM, to: adminEmails, subject, html,
   });
-  if (error) throw new Error(`Resend error: ${error.message}`);
+  if (error) throw new Error(`Email send error: ${error.message}`);
   logger.info({ userId: user.id, isUpdate, recipients: adminEmails.length, id: data.id }, '[EmailService] RSVP notification sent');
 }
 
@@ -769,7 +808,7 @@ async function sendRsvpConfirmation({ user, answers, rsvpForm, isUpdate, partyIn
   `, locale);
 
   const { data, error } = await deliver({ from: FROM, to: user.email, subject, html });
-  if (error) throw new Error(`Resend error: ${error.message}`);
+  if (error) throw new Error(`Email send error: ${error.message}`);
   logger.info({ userId: user.id, isUpdate, id: data.id }, '[EmailService] RSVP confirmation sent');
 }
 
@@ -855,17 +894,21 @@ async function sendPartyAnnouncement({ recipients, subject, body, partyInfo }) {
   // Fan out one-by-one so no recipient sees another's address. Use
   // allSettled so one bounce doesn't abort the rest of the send. Accepts
   // legacy plain-string recipients (treated as Icelandic default).
-  const client = getClient();
+  // Through deliver(), like every other sender (it used to call the Resend
+  // client directly, which skipped EMAIL_ALLOWLIST and the placeholder drop,
+  // and would have ignored EMAIL_TRANSPORT) — harvest 2 lane 2.
   const results = await Promise.allSettled(
     recipients.map(r => {
       const to = typeof r === 'string' ? r : r.email;
       const { subject: finalSubject, html } = renderFor((typeof r === 'object' && r.locale) || 'is');
-      return client.emails.send({ from: FROM, to, subject: finalSubject, html, ...(REPLY_TO && { replyTo: REPLY_TO }) });
+      return deliver({ from: FROM, to, subject: finalSubject, html }, 'party');
     })
   );
 
   let sent = 0, failed = 0;
   results.forEach((r, i) => {
+    // A placeholder-only guest is skipped by deliver() (id null): neither sent nor failed.
+    if (r.status === 'fulfilled' && !r.value.error && r.value.data && r.value.data.id === null) return;
     if (r.status === 'fulfilled' && !r.value.error) sent++;
     else {
       failed++;
@@ -933,7 +976,7 @@ async function sendPartyRequestNotification({ request, adminEmails, approveUrl, 
   `, locale);
 
   const { data, error } = await deliver({ from: FROM, to: adminEmails, subject, html });
-  if (error) throw new Error(`Resend error: ${error.message}`);
+  if (error) throw new Error(`Email send error: ${error.message}`);
   logger.info({ recipients: adminEmails.length, id: data.id }, '[EmailService] Party request notification sent');
 }
 
@@ -979,7 +1022,7 @@ async function sendPartyInviteEmail({ to, name, token, locale = 'is' }) {
   `, locale);
 
   const { data, error } = await deliver({ from: FROM, to, subject, html });
-  if (error) throw new Error(`Resend error: ${error.message}`);
+  if (error) throw new Error(`Email send error: ${error.message}`);
   logger.info({ id: data.id }, '[EmailService] Party invite email sent');
 }
 
@@ -1155,7 +1198,7 @@ async function sendPartyWelcomeEmail({ user, partyInfo, locale = 'is' }) {
   `, locale);
 
   const { data, error } = await deliver({ from: FROM, to: user.email, subject, html });
-  if (error) throw new Error(`Resend error: ${error.message}`);
+  if (error) throw new Error(`Email send error: ${error.message}`);
   logger.info({ userId: user.id, id: data.id }, '[EmailService] Party welcome email sent');
 }
 
@@ -1201,7 +1244,7 @@ async function sendLeadNotification({ submissionId, name, email, message, compan
   `, locale);
 
   const { data, error } = await deliver({ from: FROM, to, replyTo: email, subject, html });
-  if (error) throw new Error(`Resend error: ${error.message}`);
+  if (error) throw new Error(`Email send error: ${error.message}`);
   logger.info({ submissionId, messageId: data.id }, 'lead notification sent');
   return true;
 }
