@@ -17,7 +17,7 @@ paths:
 migrations: []
 since: 2026-09-26
 origin: null
-history: [demo-instance-2026-09-26]
+history: [demo-instance-2026-09-26, test-db-followups-2026-09-26]
 ---
 
 An instance of a product that holds sample data only and throws it away every night and on request (R2b, D-020 — demo.rekstrarkerfi.is). `DEMO_INSTANCE=true` turns it on, only on a demo environment (`APP_ENV=demo`, `DEMO_DATABASE_NAME` = the connected database; checked at boot). While on: email, payments, MCP and IndexNow are off whatever the env holds; `robots.txt` disallows everything and responses carry `X-Robots-Tag: noindex, nofollow`; every page shows a slim banner (`<html data-demo-instance>` from ssrMeta); an admin sees last/next reset and "reset now" on `/admin/general` (`/api/v1/admin/demo`).

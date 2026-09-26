@@ -191,6 +191,18 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
   then `--yes`) on `:5432` clears the old `orangesmiley_*` leftovers; the
   branch whose test creates `demo_reset_${pid}_test` switches to
   `createExtraTestDb('demoreset')`.
+  - 2026-09-26 follow-ups landed on `chore/test-db-hygiene-followups`
+    ([test-db-followups-2026-09-26](docs/history.d/2026-09-26-chore-test-db-hygiene-followups.md#test-db-followups-2026-09-26)):
+    the demo-reset test owns its database (`createExtraTestDb('demo')` —
+    `demoreset` would fail the reset's "demo as a word" guard), the sweep
+    test cleans its own leftovers, `.wt/` is gitignored, and site-factory's
+    `engine-sync.js` gained `--cleanup <date>` plus the `TEST_PG_URL`
+    pass-through (a sync that would test on `:5432` is refused). Still owed:
+    the `--legacy --sweep` pass on `:5432` after each downstream syncs; in
+    site-factory, review findings B1–B3 from the fragment (`--cleanup` must
+    check the PR really merged before removing the worktree and branch;
+    `TEST_DATABASE_URL` vs the `:5432` gate; the no-server database step as a
+    dry run).
 
 - Harvest 2 started 2026-09-26 (Halli approved the scope that day): generic
   icelandicstore work up to `ice@941cf51d` ported into the engine in lanes 0–9,
