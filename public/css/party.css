@@ -2455,6 +2455,10 @@ button.party-admin__stat:focus-visible {
   font-size: 0.85rem;
   padding: 2px 6px;
 }
+/* Once focused the input sits inside the Combobox wrapper (admin-kit.css), which
+   becomes the flex item; the input fills it. */
+.party-admin__assignees > .combobox { flex: 0 1 160px; min-width: 120px; }
+.party-admin__assignees > .combobox .party-admin__assignee-input { width: 100%; min-width: 0; }
 
 /* Subtasks — indented under their TODO. */
 .party-admin__subtasks {

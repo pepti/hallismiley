@@ -4,14 +4,16 @@
 import { isAuthenticated, isAdmin, getCSRFToken } from '../services/auth.js';
 import { escHtml } from '../utils/escHtml.js';
 import { t, href } from '../i18n/i18n.js';
+import { formatDateTime } from '../utils/format.js';
 import { navigateReplace } from '../navigate.js';
 import { renderAdminShell } from '../components/AdminSidebar.js';
 import { showToast } from '../components/Toast.js';
 
 const FILTERS = ['all', 'open', 'resolved'];
 
+// App-locale date + time (was the browser's own toLocaleString(); ice #324).
 function fmtDate(d) {
-  try { return new Date(d).toLocaleString(); } catch { return String(d || ''); }
+  try { return formatDateTime(d); } catch { return String(d || ''); }
 }
 
 export class AdminChangeRequestsView {

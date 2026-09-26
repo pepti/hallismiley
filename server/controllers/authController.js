@@ -11,9 +11,15 @@ const { Scrypt }          = require('oslo/password');
 const { sendVerificationEmail, sendPasswordResetEmail } = require('../services/emailService');
 const securityLogger      = require('../observability/securityLogger');
 const { trackFailedLogin } = require('../observability/alerts');
+// auth_login_attempts_total{result} — defined since the observability work but
+// never incremented until harvest2 (ported from icelandicstore #55).
+const { authLoginAttempts } = require('../observability/metrics');
 const mfaService          = require('../services/mfaService');
 const { userIsAdminAnywhere, userHoldsView } = require('../utils/adminRole');
 const { isPublishedSeller } = require('../auth/publishedSeller');
+// Time-limited logins (migration 114): every sign-in path here refuses an
+// expired account, and /auth/session reads an expired one as signed out.
+const accountExpiry = require('../auth/accountExpiry');
 
 /**
  * May this account enrol in 2FA? Exactly the set the login path challenges
@@ -117,7 +123,7 @@ const authController = {
       const { rows } = await dbQuery(
         `SELECT id, username, email, role, password_hash,
                 failed_login_attempts, locked_until,
-                disabled, disabled_reason,
+                disabled, disabled_reason, expires_at,
                 avatar, display_name, phone, totp_enabled, theme,
                 page_widths, page_width_motion, aside_widths, cookie_consent,
                 email_verified, party_access, approval_status
@@ -132,6 +138,7 @@ const authController = {
       // Check lockout before password work — a locked account already reveals
       // the username exists, so an early return is acceptable here.
       if (user && user.locked_until && new Date(user.locked_until) > new Date()) {
+        authLoginAttempts.inc({ result: 'locked' });
         return res.status(401).json({ error: t(req.locale, 'errors.auth.accountLocked'), code: 401 });
       }
 
@@ -166,21 +173,35 @@ const authController = {
         } else {
           securityLogger.loginFailed(req.ip, username);
         }
+        authLoginAttempts.inc({ result: 'failure' });
         return res.status(401).json({ error: t(req.locale, 'errors.auth.invalidCredentials'), code: 401 });
       }
 
       // Block disabled accounts after credentials are confirmed valid
+      // (metric: the password was right but the account may not sign in — a
+      // `refused`, kept apart from `failure` so a brute-force spike reads clean.)
       if (user.disabled) {
+        authLoginAttempts.inc({ result: 'refused' });
         return res.status(403).json({ error: t(req.locale, 'errors.auth.accountDisabled'), code: 403 });
+      }
+
+      // …and time-limited logins whose day has passed (migration 114). After
+      // the password check, like `disabled`: the refusal must not tell a
+      // guesser that the username exists. No counter reset, no session.
+      if (accountExpiry.isExpired(user)) {
+        securityLogger.loginFailed(req.ip, `${user.username} (login expired)`);
+        throw new accountExpiry.AccountExpiredError();
       }
 
       // Block party guests who haven't been approved yet. approval_status
       // defaults to 'approved', so existing users and the normal signup flow
       // pass straight through — only pending/declined party requests are gated.
       if (user.approval_status === 'pending') {
+        authLoginAttempts.inc({ result: 'refused' });
         return res.status(403).json({ error: t(req.locale, 'errors.party.approvalPending'), code: 403 });
       }
       if (user.approval_status === 'declined') {
+        authLoginAttempts.inc({ result: 'refused' });
         return res.status(403).json({ error: t(req.locale, 'errors.party.requestDeclined'), code: 403 });
       }
 
@@ -208,6 +229,9 @@ const authController = {
           userAgent: req.headers['user-agent'] ?? null,
         });
         securityLogger.loginSuccess(req.ip, `${user.username} (password ok, awaiting 2FA)`, user.id);
+        // Not a success yet: the session is minted by /login/totp, which
+        // counts its own success/failure.
+        authLoginAttempts.inc({ result: 'totp_required' });
         return res.json({
           mfaRequired: true,
           challengeId,
@@ -222,6 +246,7 @@ const authController = {
       res.setHeader('Set-Cookie', lucia.createSessionCookie(session.id).serialize());
 
       securityLogger.loginSuccess(req.ip, user.username, user.id);
+      authLoginAttempts.inc({ result: 'success' });
 
       return res.json({
         user: {
@@ -276,6 +301,7 @@ const authController = {
           BAD_CODE:          'errors.auth.mfaBadCode',
         };
         securityLogger.loginFailed(req.ip, `2FA ${result.reason}`);
+        authLoginAttempts.inc({ result: 'failure' });
         return res.status(401).json({
           error: t(req.locale, messages[result.reason] || messages.BAD_CODE),
           code: 401,
@@ -284,7 +310,7 @@ const authController = {
       }
 
       const { rows } = await dbQuery(
-        `SELECT id, username, email, role, avatar, display_name, phone, disabled, theme,
+        `SELECT id, username, email, role, avatar, display_name, phone, disabled, expires_at, theme,
                 page_widths, page_width_motion, aside_widths, cookie_consent,
                 email_verified, party_access, approval_status, totp_enabled
            FROM users
@@ -297,8 +323,11 @@ const authController = {
       // and withhold its role from the very session this call mints.
       // The account could have been disabled between the two steps.
       if (!user || user.disabled) {
+        authLoginAttempts.inc({ result: 'refused' });
         return res.status(403).json({ error: t(req.locale, 'errors.auth.accountDisabled'), code: 403 });
       }
+      // …or its time-limited login could have run out (migration 114).
+      accountExpiry.assertNotExpired(user);
 
       const session = await lucia.createSession(user.id, {
         ip_address: req.ip ?? null,
@@ -307,6 +336,7 @@ const authController = {
       res.setHeader('Set-Cookie', lucia.createSessionCookie(session.id).serialize());
 
       securityLogger.loginSuccess(req.ip, user.username, user.id);
+      authLoginAttempts.inc({ result: 'success' });
 
       const recoveryCodesRemaining = await mfaService.remainingRecoveryCodes(user.id);
 
@@ -460,7 +490,7 @@ const authController = {
 
       const { rows } = await dbQuery(
         `SELECT id, username, email, role, avatar, display_name, phone,
-                disabled, approval_status
+                disabled, expires_at, approval_status
          FROM users
          WHERE magic_login_token_hash = $1
          LIMIT 1`,
@@ -469,12 +499,18 @@ const authController = {
       const user = rows[0] ?? null;
 
       if (!user) {
+        authLoginAttempts.inc({ result: 'failure' });
         return res.status(400).json({ error: t(req.locale, 'errors.party.invalidMagicLink'), code: 400 });
       }
       if (user.disabled) {
+        authLoginAttempts.inc({ result: 'refused' });
         return res.status(403).json({ error: t(req.locale, 'errors.auth.accountDisabled'), code: 403 });
       }
+      // A magic link is a permanent bearer credential — the login's expiry
+      // (migration 114) is what bounds it for a time-limited account.
+      accountExpiry.assertNotExpired(user);
       if (user.approval_status === 'declined') {
+        authLoginAttempts.inc({ result: 'refused' });
         return res.status(403).json({ error: t(req.locale, 'errors.party.requestDeclined'), code: 403 });
       }
       // A magic link is a permanent, reusable bearer credential that mints a
@@ -484,6 +520,7 @@ const authController = {
       // challenge lives on the password path only. Admins sign in there.
       if (await userIsAdminAnywhere(dbQuery, user.id)) {
         securityLogger.loginFailed(req.ip, `magic-link login refused for admin account ${user.username}`);
+        authLoginAttempts.inc({ result: 'refused' });
         return res.status(403).json({ error: t(req.locale, 'errors.auth.forbidden'), code: 403 });
       }
 
@@ -506,6 +543,7 @@ const authController = {
       res.setHeader('Set-Cookie', lucia.createSessionCookie(session.id).serialize());
 
       securityLogger.loginSuccess(req.ip, user.username, user.id);
+      authLoginAttempts.inc({ result: 'success' });
 
       return res.json({
         user: {
@@ -578,13 +616,16 @@ const authController = {
       );
       const newUser = rows[0];
 
-      // Fire-and-log the verification email. Verification is optional, so a
-      // delivery failure must not block signup — the resend flow covers retries.
-      try {
-        await sendVerificationEmail(email.toLowerCase(), verifyToken, req.locale);
-      } catch (emailErr) {
-        logger.error({ err: emailErr }, '[signup] Verification email failed');
-      }
+      // Fire-and-log the verification email — genuinely detached, NOT awaited.
+      // The account is committed by now, so anything that delays this response
+      // strands the visitor on "Creating account…" for a signup that actually
+      // succeeded (icelandicstore PROD 2026-08-21: 201 logged, response never
+      // arrived). Verification is optional and the resend flow covers retries,
+      // so the send has no claim on the request; emailService's own timeout
+      // bounds it, but the response should not wait even that long.
+      // Ported from icelandicstore #199.
+      sendVerificationEmail(email.toLowerCase(), verifyToken, req.locale)
+        .catch((emailErr) => logger.warn({ err: emailErr }, '[signup] Verification email failed'));
 
       // Log the new user in immediately — no extra round-trip through /login.
       const session = await lucia.createSession(newUser.id, {
@@ -657,7 +698,8 @@ const authController = {
 
       const { rows } = await dbQuery(
         `SELECT id, preferred_locale FROM users
-          WHERE email = $1 AND disabled = FALSE AND ${realEmailSql('email')}`,
+          WHERE email = $1 AND disabled = FALSE AND ${realEmailSql('email')}
+            AND (expires_at IS NULL OR expires_at > NOW())`,
         [email.toLowerCase()]
       );
 
@@ -749,10 +791,12 @@ const authController = {
         return res.json({ authenticated: false });
       }
 
-      const { session, user } = await lucia.validateSession(sessionId);
+      // An expired time-limited login (migration 114) comes back as no
+      // session, its sessions deleted; `reason` lets the SPA say why.
+      const { session, user, expired } = await accountExpiry.validateSession(sessionId);
       if (!session) {
         res.setHeader('Set-Cookie', lucia.createBlankSessionCookie().serialize());
-        return res.json({ authenticated: false });
+        return res.json({ authenticated: false, ...(expired ? { reason: accountExpiry.ACCOUNT_EXPIRED } : {}) });
       }
 
       if (session.fresh) {
@@ -814,7 +858,8 @@ const authController = {
 
       const { rows } = await dbQuery(
         `SELECT id, email_verified, email_verify_token, email_verify_expires
-         FROM users WHERE email = $1 AND disabled = FALSE AND ${realEmailSql('email')}`,
+         FROM users WHERE email = $1 AND disabled = FALSE AND ${realEmailSql('email')}
+           AND (expires_at IS NULL OR expires_at > NOW())`,
         [email.toLowerCase()]
       );
 

@@ -110,6 +110,12 @@ function sendThroughTransport(msg, signal) {
 // allowlist rewrite, Reply-To, bounded wait, loud failure. Returns Resend's
 // { data, error } shape whatever the transport.
 async function deliver(payload, channel = 'generic') {
+  // A demo instance (config/demoInstance.js) sends nothing, whatever the env
+  // holds: its recipients are sample data. `id: null` reads as "not sent".
+  if (require('../config/demoInstance').isDemoInstance()) {
+    logger.info({ channel }, 'email skipped: demo instance');
+    return { data: { id: null }, error: null };
+  }
   // Nobody left to send to (only placeholder addresses): not sent at all.
   // `id: null` reads as "not sent" to every caller that returns the id.
   if (deliverable(payload.to).length === 0) {
@@ -150,6 +156,8 @@ async function deliver(payload, channel = 'generic') {
 
 // Is the SELECTED transport configured? Read per call, like the env it reads.
 function isConfigured() {
+  // A demo instance sends nothing, whatever the env holds (config/demoInstance.js).
+  if (require('../config/demoInstance').isDemoInstance()) return false;
   return mailTransport.isTransportConfigured(process.env, FROM_ADDR);
 }
 

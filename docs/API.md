@@ -73,7 +73,13 @@ limiter), which sets the cookie and answers
 
 **Errors:** `400` missing fields · `401` invalid credentials · `401` account
 temporarily locked (after 5 failed attempts) · `403` account disabled ·
-`403` party-guest approval pending · `403` party-guest request declined
+`403` party-guest approval pending · `403` party-guest request declined ·
+`403` `reason: account_expired` — a time-limited login whose `users.expires_at`
+has passed (migration 114; only AFTER the password checked out, so it never
+tells a guesser the account exists). The 2FA step, the party magic link and the
+Google/Facebook callbacks (`?error=account_expired`) refuse it the same way; a
+live session of such a login dies on its next request (`401`
+`reason: account_expired`) — [HISTORY](history.d/2026-09-26-feat-login-expiry.md#login-expiry-2026-09-26).
 
 ---
 
@@ -99,7 +105,9 @@ Return the current session/user info without requiring auth.
 { "authenticated": true, "user": { "id": "uuid", "username": "admin", "email": "admin@example.com", "role": "admin" } }
 ```
 
-**Response `200 OK`** (not logged in): `{ "authenticated": false }`
+**Response `200 OK`** (not logged in): `{ "authenticated": false }` — plus
+`"reason": "account_expired"` when the cookie belonged to a time-limited login
+that has run out (its sessions are deleted on the spot).
 
 Use this on page load to restore session state.
 
@@ -235,6 +243,27 @@ Every other error returns the envelope from `server/middleware/errorHandler.js`:
 { "error": "Human-readable message", "code": 400 }
 ```
 
+Two optional fields ride on that shape; a client that ignores them loses
+nothing:
+
+- **`reason`** — a stable, machine-readable string next to the translated
+  `error`, for a client that must branch on WHY. The central handler emits it
+  for a TYPED 4xx error (one carrying an i18n `messageKey`, whose `error` it
+  translates for the request's locale), e.g. `account_expired` (403 on a
+  sign-in, 401 when a live session dies) and `admin_account` (409 on
+  `PATCH /api/v1/admin/users/:id/expiry`) —
+  [login-expiry-2026-09-26](history.d/2026-09-26-feat-login-expiry.md#login-expiry-2026-09-26). Some
+  controllers set it inline the same way (`password_required`,
+  `username_taken`, `POSSIBLE_DUPLICATE`, `INSUFFICIENT_STOCK`…). A 5xx never
+  carries one.
+- **`retryable: true`** — on the two "busy, send it again" answers; nothing
+  happened, send the same request again:
+
+| Status | Body | When |
+|--------|------|------|
+| `409` | `{ "error": …, "code": 409, "reason": "BUSY", "retryable": true }` | Postgres picked the request as a deadlock victim (40P01); nothing was changed |
+| `429` + `Retry-After: <seconds>` | `{ "error": …, "code": 429, "reason": "AI_BUSY", "retryable": true }` | a request-path paid AI call found every `aiGate` slot taken (`AI_MAX_CONCURRENT`, default 4; `server/services/aiGate.js`, [harvest2-lane1b](history.d/2026-09-26-harvest2-lane1b-defects.md#harvest2-lane1b-2026-09-26)). No engine route raises it yet — the translator, today's only Claude caller, queues for a slot instead and never fails a save — so it is the contract for the next request-path AI endpoint |
+
 ## Rate limits (`express-rate-limit`, all skipped when `NODE_ENV` is `test` or `development`)
 
 | Scope | Limit | Where |
@@ -280,6 +309,7 @@ router's own gate still applies behind it.
 | `/api/v1/seller-publish` | `sellerPublishRoutes.js` | mounted BEFORE `express.json` (raw body); `INSTANCE_ROLE=public` + `SELLER_PUBLISH_SECRET`, else 404; HMAC signature (401), shape (400), newer-than-last (409); own limiter 30/15 min | [ARCHITECTURE §21](ARCHITECTURE.md#21-seller-area--the-published-copy-on-the-public-instance) · [HISTORY](HISTORY.md#seller-area) |
 | `/.well-known/oauth-protected-resource[/api/v1/mcp]`, `/.well-known/oauth-authorization-server`, `/oauth/register`, `/oauth/authorize`, `/oauth/token`, `/oauth/revoke`, `/api/v1/oauth/requests/:id[/approve\|/deny]` | `mcpOAuthRoutes.js` (mounted at `/`, after the MCP router) | every route `MCP_ENABLED` else 404; register/token/revoke: no cookies, own IP limiters, RFC 6749 error bodies; authorize: validates, stores a pending request, 302 to `/<lc>/tengja/<id>`; consent API: session + `admin` + CSRF on writes | [ARCHITECTURE §15](ARCHITECTURE.md#15-mcp-connector) · [HISTORY](HISTORY.md#mcp-oauth-2026-09-24) |
 | `/api/v1/admin/modules` | `adminModulesRoutes.js` | session + `admin`; `PATCH /:id` CSRF — `{ enabled }`, the contract is the ceiling (400 beyond it) | [ARCHITECTURE §20](ARCHITECTURE.md#20-infrastructure-and-cross-cutting) · [HISTORY](HISTORY.md#mcp-write-tools-2026-09-24) |
+| `/api/v1/admin/demo` | `adminDemoRoutes.js` | 404 unless `DEMO_INSTANCE=true`; session + `admin`; `GET /` status, `POST /reset` CSRF → 202 (the reset runs after the answer and restarts the site) | [ARCHITECTURE §20](ARCHITECTURE.md#20-infrastructure-and-cross-cutting) · [HISTORY](history.d/2026-09-26-feat-demo-mode.md#demo-instance-2026-09-26) |
 | `/auth` | `authRoutes.js` | per route (above); `/auth/signup`, `/auth/check-username`, `/auth/check-email` belong to the `signup` module (404 before auth when it is off, [HISTORY](HISTORY.md#signup-switch-2026-09-24)) | — |
 | `/api/v1/projects` | `projectRoutes.js` | public reads; admin/moderator writes | — |
 | `/api/v1/contact` | `contactRoutes.js` | public, 5/h | `docs/SALES-STAFF.md` |
@@ -287,16 +317,19 @@ router's own gate still applies behind it.
 | `/api/v1/analytics` | `analyticsRoutes.js` | public beacon | `RUNBOOK.md` (Analytics) |
 | `/api/v1/change-requests` | `changeRequestRoutes.js` | `changeRequestGate` (admin, and non-prod or switch on) | — |
 | `/api/v1/system` | `systemRoutes.js` | `/changes` admin (above the module gate); `/version`, `/updates` and the writes are behind the `modules.selfUpdate.enabled` gate (404 when off) and the `updates` view / admin | `docs/SELF-UPDATE.md` |
-| `/api/v1/admin/shop` | `adminShopRoutes.js` | `products` / `collections` / `sales` views per sub-path (hidden retail surface) | — |
+| `/api/v1/admin/shop` | `adminShopRoutes.js` | `products` / `collections` / `sales` views per sub-path (hidden retail surface); `GET /reports/inventory` (Inventory Watch → `{ report: { items, counts, total, window_days } }`) is the `inventory` view, answered before the `/reports` prefix asks for `sales`. Products → Duplicates (migration 120): `GET /products/duplicates` → `{ groups }` (read-only); `POST /products/merge/preview` CSRF `{ master, ids[≤20], variant_map? }` → the plan + `request` + `expect` (writes nothing); `POST /products/merge` CSRF + **admin** (else 403 `merge_admin_only`) `{ …request, expect }` → `{ mergeIds, masterId, merged, counts, summary }` — 400 `reason` (`master_in_sources` = into itself, `ids_missing`, …), 404 unknown id, 409 `merge_refused` + `refusals[]` / `stale_preview` / `merge_busy` (`Retry-After`), 503 `schema_drift`. Every non-GET under `/products/:id` of a merged product → 409 `product_merged` + `movedTo`. "Read with AI" (dark: `PRODUCT_IMPORT_AI_ENABLED`): `GET /products/import/ai-config` → always 200 `{ enabled, chunkPages, maxPages, maxFilePages, remainingPages }`; `POST /products/import/ai-extract?from=&to=` multipart ONE PDF chunk — CSRF → 404 when off → 429 `pageBudget` (+`Retry-After`, before the upload is read) → 400 `pdfOnly`/`unreadable` → 422 `tooManyPages`/`fileTooLong` → 429 `AI_BUSY` → `{ rows, from, to, pages, truncated, remainingPages, summary }` (rows in the import shape, `__ai`, `__page`, `__uncertain`; never written) · 502 model failure (pages refunded) · 499 client gone. `/import/preview`+`/apply` refuse an `__ai` row that matches a product (`aiCreateOnly`) | [ARCHITECTURE §11](ARCHITECTURE.md#11-shop--cart-checkout-orders-products-collections-bins-discounts-hidden-surface) · [history](history.d/2026-09-26-harvest2-lane6a-stock.md#harvest2-lane6a-2026-09-26) · [history](history.d/2026-09-26-harvest2-lane6b-merge-ai.md#harvest2-lane6b-2026-09-26) |
 | `/api/v1/admin/analytics` | `analyticsAdminRoutes.js` | `analytics` view | — |
 | `/api/v1/admin/general-settings` | `adminGeneralSettingsRoutes.js` | `general` view | — |
 | `/api/v1/admin/discounts` | `adminDiscountRoutes.js` | admin views (hidden) | — |
 | `/api/v1/admin/background` | `adminBackgroundRoutes.js` | admin (hidden) | — |
 | `/api/v1/admin/change-requests` | `adminChangeRequestRoutes.js` | `feedback` view | — |
 | `/api/v1/admin/nav-config` | `adminNavRoutes.js` | admin (`requireRole`) | — |
-| `/api/v1/admin/roles` | `adminRolesRoutes.js` | admin | — |
+| `/api/v1/admin/home` | `adminHomeRoutes.js` | session + `dashboard` view; `GET /` only, `no-store`. Behind the gate each block is computed only for a view the role holds (absent otherwise); a failing source → 200 with `errors` | [ARCHITECTURE §2](ARCHITECTURE.md#2-admin-shell--sidebar-dashboard-surface-hiding-ui-kit) · [HISTORY](history.d/2026-09-26-feat-admin-home-idag.md#admin-home-idag-2026-09-26) |
+| `/api/v1/admin/roles` | `adminRolesRoutes.js` | admin — `POST /` takes `{ label }` (the slug is derived; reserved names 409), `PATCH /:name` `{ label?, description?, view_access? }` (the slug never changes; `user` never gains a view), `DELETE /:name` 409 `roleInUse` with `count` | [harvest2-lane3](history.d/2026-09-26-harvest2-lane3-users.md#harvest2-lane3-2026-09-26) |
 | `/api/v1/admin/bins` | `adminBinsRoutes.js` | admin views (hidden) | — |
-| `/api/v1/admin/customers` | `adminCustomerRoutes.js` | `customers` view; `POST /` admin + CSRF — `{ email }` → welcome invite, `invited` only when it reached the customer, else `resetUrl` (+ `emailError`); `{ no_email: true, display_name }` → a name-only login, `{ username, password }` once (`no-store`) | `docs/SALES-STAFF.md` · [HISTORY](HISTORY.md#harvest-ice-a-2026-09-24) |
+| `/api/v1/admin/inventory` | `adminInventoryRoutes.js` | `inventory` view (hidden); `GET /lookup?code=` → `{ items, variantRequired }`, `GET /search?q=` → `{ items }`; `PATCH /stock` CSRF `{ productId, variantId?, stock, reason, note? }` — whole 0..100 000 000, a JSON number or numeric string, reason from `Inventory.ADJUSTMENT_REASONS` → `{ previous, stock, delta, adjustmentId, item }`; `POST /count` CSRF `{ lines: [{ productId, variantId?, mode: set\|increment\|decrement, qty }] (≤ 500), reason?, note?, clientToken? }` → `{ batchId, results }`, all or nothing: 400 `BATCH_INVALID` + `line`, 409 `INSUFFICIENT_STOCK`/`BATCH_REFUSED` + `lines[]` (every refused line), 409 `DUPLICATE_BATCH` | [ARCHITECTURE §11](ARCHITECTURE.md#11-shop--cart-checkout-orders-products-collections-bins-discounts-hidden-surface) · [history](history.d/2026-09-26-harvest2-lane6a-stock.md#harvest2-lane6a-2026-09-26) |
+| `/api/v1/admin/receiving` | `adminReceivingRoutes.js` | `receiving` view (hidden); `GET /`, `GET /search?q=` (the line matcher, stocked units), `POST /` CSRF `{ supplierName, reference?, note? }`, `GET /:id` (the state: `{ receipt, lines, extras, scans, summary }`), `GET /:id/receipt.pdf`, `POST /:id/lines/import` CSRF multipart `file` (.csv/.xlsx/.pdf, 10 MB, memory), `PATCH /:id/lines/:lineId` CSRF `{ productId?, variantId?, matchStatus?, expectedQty? }`, `POST /:id/scan` CSRF `{ code, qty? }` (own per-user limiter, 1500/15 min; 422 unknown or variant-parent code), `DELETE /:id/scans/:scanId`, `POST /:id/finalize` CSRF `{ excludeExtras? }` → state + `finalized: { batchId, units, lines }` (409 `ALREADY_FINALIZED` / `RECEIPT_CLOSED` / `INCOMPLETE` + `lineIds`), `POST /:id/cancel` CSRF; every write on a non-draft is 409; an item deleted mid-write is 409 `ITEM_CHANGED` | [ARCHITECTURE §11](ARCHITECTURE.md#11-shop--cart-checkout-orders-products-collections-bins-discounts-hidden-surface) · [history](history.d/2026-09-26-harvest2-lane6a-stock.md#harvest2-lane6a-2026-09-26) |
+| `/api/v1/admin/customers` | `adminCustomerRoutes.js` | `customers` view; `POST /` admin + CSRF — `{ email }` → welcome invite, `invited` only when it reached the customer, else `resetUrl` (+ `emailError`); `{ no_email: true, display_name }` → a name-only login, `{ username, password }` once (`no-store`); either takes an optional future `expires_at` (a time-limited login, migration 114); `send_invite: false` creates without mailing (no link). `GET`/`PATCH /:id` (CSRF) and `POST /:id/invite` (CSRF) on the `customers` view, a plain customer only (else 404): contact + address (migration 117), a changed email needs admin (403 `email_admin_only`); the invite never returns the link | `docs/SALES-STAFF.md` · [HISTORY](HISTORY.md#harvest-ice-a-2026-09-24) · [harvest2-lane3](history.d/2026-09-26-harvest2-lane3-users.md#harvest2-lane3-2026-09-26) |
 | `/api/v1/admin/customer-notes` | `adminCustomerNotesRoutes.js` | `customers` view | — |
 | `/api/v1/admin/bookkeeping` | `adminBookkeepingRoutes.js` (76 routes) | `books`/`invoices`/`expenses`/`ar`/`vat`/`bank`/`ledger`/`payroll`/`pos` views; admin for issuing | `docs/BOOKKEEPING-SYSTEM.md` |
 | `/api/v1/admin/handbok` | `salesGuidesRoutes.js` | `handbok` view; admin/moderator edit | `docs/SALES-STAFF.md` |
@@ -305,7 +338,7 @@ router's own gate still applies behind it.
 | `/api/v1/admin/accounts` | `adminAccountRoutes.js` | `accounts` view + `accountScope` | [ARCHITECTURE §8](ARCHITECTURE.md#8-customer-accounts-commission-staff-audit) · [HISTORY](HISTORY.md#accounts-commission) |
 | `/api/v1/admin/commission` | `adminCommissionRoutes.js` | `commission` view + `commissionScope`; writes admin | [ARCHITECTURE §8](ARCHITECTURE.md#8-customer-accounts-commission-staff-audit) · [HISTORY](HISTORY.md#migrations-100-102) |
 | `/api/v1/admin/audit` | `adminAuditRoutes.js` | admin | [ARCHITECTURE §8](ARCHITECTURE.md#8-customer-accounts-commission-staff-audit) · [HISTORY](HISTORY.md#accounts-commission) |
-| `/api/v1/admin` | `adminRoutes.js` | admin views (catch-all); `POST /users/:id/totp/reset` admin + CSRF (never self; a staff target needs the acting admin's `{ password }`, else 400 `reason: password_required` / 403); `POST /users/:id/new-password` admin + CSRF (placeholder-address, non-staff logins only, else 409; answers once, `no-store`) | [HISTORY](HISTORY.md#harvest-ice-a-2026-09-24) |
+| `/api/v1/admin` | `adminRoutes.js` | admin views (catch-all); `POST /users/:id/totp/reset` admin + CSRF (never self; a staff target needs the acting admin's `{ password }`, else 400 `reason: password_required` / 403); `POST /users/:id/new-password` admin + CSRF (placeholder-address, non-staff logins only, else 409; answers once, `no-store`); `PATCH /users/:id/expiry` admin + CSRF `{ expires_at }` — ISO date-time with `Z`/±hh:mm, `YYYY-MM-DD` (end of day UTC) or `null`; future only, never self (400), never an account with admin powers (409 `reason: admin_account`; clearing is allowed); reviving an already-expired login revokes its MCP tokens first | [HISTORY](HISTORY.md#harvest-ice-a-2026-09-24) · [HISTORY](history.d/2026-09-26-feat-login-expiry.md#login-expiry-2026-09-26) |
 | `/api/v1/content` | `contentRoutes.js` | public reads; admin writes | — |
 | `/api/v1/seller` | `sellerRoutes.js` | GET only; `INSTANCE_ROLE=public` else 404; session; published seller (proven email) else 404; 2FA except `/me` only under `security.mfa.enrolment = required` (mfa-reminder-2026-09-23); per-section view else 403 | [ARCHITECTURE §21](ARCHITECTURE.md#21-seller-area--the-published-copy-on-the-public-instance) · [HISTORY](HISTORY.md#seller-area) |
 | `/api/v1/mcp` | `mcpRoutes.js` | `MCP_ENABLED` + bearer token | `docs/mcp.md` |
@@ -315,7 +348,7 @@ router's own gate still applies behind it.
 | `/api/v1/ambience` | `ambienceRoutes.js` | public, always 200 (`{available:false}` on failure) | [ARCHITECTURE §4](ARCHITECTURE.md#4-themes-scenes-ambience) · [HISTORY](HISTORY.md#scene-engine) |
 | `/api/v1/news` | `newsRoutes.js` | public reads (hidden surface) | — |
 | `/api/v1/party` | `partyRoutes.js` | party module (hidden) | — |
-| `/api/v1/shop` | `shopRoutes.js` | public storefront (hidden surface) | — |
+| `/api/v1/shop` | `shopRoutes.js` | public storefront (hidden surface); `GET /products/:slug` of a merged product → 301 `no-store` to the survivor's slug (the SSR `/shop/:slug` page too); checkout naming a merged product → 409 `PRODUCT_MERGED` | [HISTORY](history.d/2026-09-26-harvest2-lane6b-merge-ai.md#harvest2-lane6b-2026-09-26) |
 
 Root-level operational routes: `GET /health` (liveness, no DB), `GET /ready`
 (DB + breaker + memory, `503` when not ready — anyone gets `status`, `uptime`

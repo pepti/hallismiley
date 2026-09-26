@@ -23,6 +23,7 @@ import { t, href } from '../i18n/i18n.js';
 import { navigateReplace } from '../navigate.js';
 import { renderAdminShell } from '../components/AdminSidebar.js';
 import { showToast } from '../components/Toast.js';
+import { attachCombobox } from '../components/Combobox.js';
 import { isk, errorBanner } from './booksShared.js';
 
 const PAGE_SIZE = 50;
@@ -36,6 +37,7 @@ export class AdminExpensesView {
     this._vatTimer = null;
     this._accounts = [];
     this._suppliers = [];
+    this._detachSupplier = null;
     this._pendingDocumentId = null;
     this._busy = false;
     this._state = { q: '', missingDocument: false, offset: 0, total: 0 };
@@ -100,8 +102,7 @@ export class AdminExpensesView {
           <div id="exp-accepting"></div>
           <div class="books-form__grid">
             <label>${escHtml(t('adminBooks.expenses.supplier'))}
-              <input type="text" name="supplier_name" list="exp-suppliers" maxlength="200" required />
-              <datalist id="exp-suppliers"></datalist>
+              <input type="text" name="supplier_name" maxlength="200" required />
             </label>
             <label>${escHtml(t('adminBooks.expenses.supplierKennitala'))}
               <input type="text" name="supplier_kennitala" maxlength="20" />
@@ -173,10 +174,32 @@ export class AdminExpensesView {
         `<option value="${escHtml(a.code)}"${a.input_vat_blocked ? ' data-blocked="1"' : ''}>${
           escHtml(`${a.code} — ${a.name}`)}${a.input_vat_blocked ? ' ⚠' : ''}</option>`).join('');
     }
-    const datalist = this._el.querySelector('#exp-suppliers');
-    if (datalist) {
-      datalist.innerHTML = this._suppliers.map(s =>
-        `<option value="${escHtml(s.supplier_name)}"></option>`).join('');
+    // A searchable dropdown instead of the native <datalist>, which showed no
+    // affordance and filtered itself empty once the field held a value.
+    // Ported from icelandicstore #194 (Combobox). The kennitala is a quiet note
+    // on the row and a hidden match key, so two suppliers of one name are told
+    // apart and typing a kennitala finds the name. Still free text: a new
+    // supplier stays typeable.
+    const supplierInput = this._el.querySelector('input[name="supplier_name"]');
+    if (supplierInput) {
+      if (this._detachSupplier) this._detachSupplier();
+      const entries = this._suppliers.map(s => ({
+        value: s.supplier_name,
+        label: s.supplier_name,
+        meta: s.supplier_kennitala || '',
+        keywords: s.supplier_kennitala || '',
+      }));
+      // Picking a known supplier fills its kennitala when that field is still
+      // empty, so two suppliers of one name are told apart in the entry too.
+      this._detachSupplier = attachCombobox(supplierInput, () => entries, {
+        onPick: (entry) => {
+          const kt = this._el.querySelector('input[name="supplier_kennitala"]');
+          if (kt && !kt.value.trim() && entry.meta) {
+            kt.value = entry.meta;
+            kt.dispatchEvent(new Event('input', { bubbles: true }));
+          }
+        },
+      });
     }
     this._wireForm();
     this._refreshVerdict();
@@ -639,5 +662,6 @@ export class AdminExpensesView {
     this._generation += 1;
     clearTimeout(this._searchTimer);
     clearTimeout(this._vatTimer);
+    if (this._detachSupplier) { this._detachSupplier(); this._detachSupplier = null; }
   }
 }

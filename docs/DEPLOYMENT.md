@@ -158,7 +158,7 @@ nothing reads them (the mail transport is Resend, or Graph by `EMAIL_TRANSPORT`)
 
 ### Anthropic authentication (workload identity, no stored secret)
 
-Every Claude call (today: auto-translate, `TRANSLATE_ENABLED`) authenticates
+Every Claude call (today: auto-translate, `TRANSLATE_ENABLED`, and the products import's dark "Read with AI", below) authenticates
 through `server/services/anthropicAuth.js` (harvested from icelandicstore #326,
 2026-09-24). It ships **dark**: with nothing set, Claude features stay off.
 When **all** of `ANTHROPIC_FEDERATION_RULE_ID`, `ANTHROPIC_ORGANIZATION_ID` and
@@ -188,6 +188,36 @@ call, or `authenticating with the static API key`.
   Authentication events tab. The per-tenant ids (issuer, rules, service
   account) are Orange Smiley's own and are set up when Halli turns Claude on for
   an instance.
+
+### Products import: "Read with AI" (OFF — costs money per page)
+
+The products import can read a free-form supplier PDF with Claude
+(harvest 2 lane 6b, [history](history.d/2026-09-26-harvest2-lane6b-merge-ai.md#harvest2-lane6b-2026-09-26)).
+It ships **dark** and stays off until Halli decides otherwise for an instance:
+it needs `PRODUCT_IMPORT_AI_ENABLED=true` **and** the Claude credentials above
+(`TRANSLATE_ENABLED` does not switch it on). **Every page read is billed by
+Anthropic** (the whole PDF chunk goes to the model as a document, plus the
+JSON reply); the admin sees how many pages are left today before reading.
+
+| Variable | Default | What it bounds |
+|---|---|---|
+| `PRODUCT_IMPORT_AI_ENABLED` | unset (off) | the feature itself |
+| `PRODUCT_IMPORT_AI_MODEL` | the engine's model (`TRANSLATE_MODEL`, else its default) | which Claude model reads |
+| `PRODUCT_IMPORT_AI_TIMEOUT_MS` | 90000 | one read |
+| `PRODUCT_IMPORT_AI_MAX_PAGES` | 10 | pages in one request |
+| `PRODUCT_IMPORT_AI_CHUNK_PAGES` | 3 | pages the browser sends per request |
+| `PRODUCT_IMPORT_AI_MAX_FILE_PAGES` | 40 | pages of one file |
+| `PRODUCT_IMPORT_AI_USER_DAY_PAGES` | 60 | pages per user per UTC day |
+| `PRODUCT_IMPORT_AI_DAY_PAGES` | 200 | pages per instance per UTC day — **the spend cap** |
+| `PRODUCT_IMPORT_AI_MAX_CONCURRENT` | 2 | of the `AI_MAX_CONCURRENT` slots |
+
+**Cost note.** The day caps are the bill's ceiling per container: at most
+`PRODUCT_IMPORT_AI_DAY_PAGES` pages a day are ever sent. They are counted in
+memory, so a restart (or a second container) starts its own count — size the
+cap with that in mind, and watch the log line `product import ai: extracted`
+(pages, input/output tokens, model) and the Anthropic console for the real
+figure. A failed read gives its pages back; a read the admin stopped keeps
+them charged (the model may have processed them).
 
 **Canonical host = `APP_URL`'s host** (since 2026-09-12): in production
 `server/app.js` 301-redirects every request whose `Host` differs from the host

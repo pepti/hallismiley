@@ -3,6 +3,7 @@
 const logger = require('../logger');
 const Product = require('../models/Product');
 const ProductVariant = require('../models/ProductVariant');
+const ProductMerge = require('../models/ProductMerge');
 const Collection = require('../models/Collection');
 const Order   = require('../models/Order');
 const Inventory = require('../models/Inventory');
@@ -167,7 +168,16 @@ const shopController = {
   async getProduct(req, res, next) {
     try {
       const product = await Product.findBySlug(req.params.slug, { activeOnly: true, locale: req.locale });
-      if (!product) return res.status(404).json({ error: t(req.locale, 'errors.shop.productNotFound'), code: 404 });
+      if (!product) {
+        // A product merged into another (migration 120) answers 301 to its
+        // survivor, never cached: the survivor may be re-merged or switched off.
+        const moved = await ProductMerge.movedTo(req.params.slug);
+        if (moved) {
+          res.set('Cache-Control', 'no-store');
+          return res.redirect(301, `/api/v1/shop/products/${encodeURIComponent(moved.slug)}`);
+        }
+        return res.status(404).json({ error: t(req.locale, 'errors.shop.productNotFound'), code: 404 });
+      }
       const [images, variants] = await Promise.all([
         Product.listImages(product.id),
         ProductVariant.listForProduct(product.id, { activeOnly: true }),
@@ -353,6 +363,9 @@ const shopController = {
         items: resolvedItems,
         shipping: shippingAmount,
         appliedDiscount,
+        // The buyer's order note (ice #213, migration 115); Order.normaliseNote
+        // trims and caps it. Staff-only: never echoed in a public payload.
+        notes: req.body?.note,
       });
 
       // Consume one use of the discount (atomic, guarded by usage_limit).

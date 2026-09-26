@@ -29,6 +29,10 @@
 const { fetchNamed } = require('../observability/trackedFetch');
 const logger = require('../logger');
 const anthropicAuth = require('./anthropicAuth');
+// Process-wide cap on concurrent paid AI calls (harvest2, ported from
+// icelandicstore #218). The translator fans a big tree out into parallel
+// batches, so every model call takes a slot — queued, never refused outright.
+const aiGate = require('./aiGate');
 
 // Keys that must NEVER be translated when walking a site_content jsonb.
 // Extend as new structural keys are introduced.
@@ -94,6 +98,22 @@ function getTimeout() {
   return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_TIMEOUT_MS;
 }
 
+// How long a call may wait for a free aiGate slot before giving up (the
+// caller then leaves the target locale empty, as for any other failure).
+//
+// translate() runs ON the request path — autoTranslateFields awaits it before
+// a product/news/project save is written — so it waits only briefly: under
+// load a save goes through with the IS field empty rather than stalling, and
+// wait + call stay inside server.js's 10 s shutdown grace (a self-update
+// SIGTERM must not drop a save mid-flight). The tree batches run in the
+// background (siteContentTranslate), so they may queue for two per-call
+// timeouts: every call ahead finishes or aborts within one timeout of taking
+// its slot, so a queued batch is not starved by a race with the release.
+const REQUEST_QUEUE_WAIT_MS = 1000;
+function getBatchQueueWaitMs() {
+  return getTimeout() * 2;
+}
+
 function systemPrompt(format, from = 'en', to = 'is') {
   const fromName = LOCALE_NAMES[from] || 'English';
   const toName   = LOCALE_NAMES[to]   || 'Icelandic';
@@ -141,9 +161,13 @@ function systemPromptForTree(from = 'en', to = 'is') {
   ].join('\n');
 }
 
+// One model call. Returns { text, stopReason } (text null when there is no
+// client or no text block), so a caller that cannot use the reply can log WHY:
+// a `max_tokens` stop is a truncated JSON array, not a model that ignored the
+// prompt.
 async function callModel({ systemText, userText, maxTokens, signal }) {
   const client = getClient();
-  if (!client) return null;
+  if (!client) return { text: null, stopReason: null };
   const model = getModel();
   const res = await client.messages.create({
     model,
@@ -155,9 +179,13 @@ async function callModel({ systemText, userText, maxTokens, signal }) {
 
   // @anthropic-ai/sdk returns content as an array of typed blocks. For
   // non-tool responses we expect a single text block.
-  if (!res || !Array.isArray(res.content)) return null;
+  const stopReason = (res && res.stop_reason) || null;
+  if (!res || !Array.isArray(res.content)) return { text: null, stopReason };
   const textBlock = res.content.find(b => b && b.type === 'text');
-  return textBlock && typeof textBlock.text === 'string' ? textBlock.text.trim() : null;
+  return {
+    text: textBlock && typeof textBlock.text === 'string' ? textBlock.text.trim() : null,
+    stopReason,
+  };
 }
 
 function withTimeout(promiseFactory, timeoutMs) {
@@ -165,6 +193,66 @@ function withTimeout(promiseFactory, timeoutMs) {
   const timer = setTimeout(() => ac.abort(), timeoutMs);
   return promiseFactory(ac.signal)
     .finally(() => clearTimeout(timer));
+}
+
+// A model call inside an aiGate slot. The slot is taken FIRST and the call's
+// own timeout starts once it is held, so time spent queued behind other calls
+// never eats into the model's budget.
+function gatedCall(args, waitMs) {
+  return aiGate.withQueuedSlot(
+    () => withTimeout((signal) => callModel({ ...args, signal }), getTimeout()),
+    { waitMs },
+  );
+}
+
+// Every slot was taken for the whole wait: back-pressure, not a fault.
+const BUSY = Symbol('translator.busy');
+function logFailure(err, fields, msg) {
+  if (err instanceof aiGate.AiBusyError) logger.warn(fields, `${msg} (aiGate busy)`);
+  else logger.error({ err, ...fields }, msg);
+}
+
+function tryJsonParse(s) {
+  try {
+    return JSON.parse(s);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The model's reply to a batch as an array, or null. Tolerant of a ```json
+ * fence and of prose around the JSON, which the model occasionally adds
+ * despite the prompt (ported from icelandicstore #216, visionCore.parseItems):
+ * the whole reply first, then its outermost [...] span, then its outermost
+ * {...} span when that object holds exactly one array (a reply shaped
+ * {"translations": [...]}). The caller still checks the length.
+ */
+function parseJsonArray(raw) {
+  if (typeof raw !== 'string') return null;
+  const cleaned = raw
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/, '')
+    .trim();
+  const span = (open, close) => {
+    const i = cleaned.indexOf(open);
+    const j = cleaned.lastIndexOf(close);
+    return i !== -1 && j > i ? cleaned.slice(i, j + 1) : '';
+  };
+  const arrayOf = (v) => {
+    if (Array.isArray(v)) return v;
+    if (v && typeof v === 'object') {
+      const arrays = Object.values(v).filter(Array.isArray);
+      if (arrays.length === 1) return arrays[0];
+    }
+    return null;
+  };
+  for (const candidate of [cleaned, span('[', ']'), span('{', '}')]) {
+    if (!candidate) continue;
+    const arr = arrayOf(tryJsonParse(candidate));
+    if (arr) return arr;
+  }
+  return null;
 }
 
 /**
@@ -179,25 +267,21 @@ async function translate({ text, sourceLocale = 'en', targetLocale = 'is', forma
   const maxTokens = Math.max(256, Math.min(8000, Math.ceil(text.length * 0.7) + 64));
   const started = Date.now();
   try {
-    const out = await withTimeout(
-      (signal) => callModel({
-        systemText: systemPrompt(format, sourceLocale, targetLocale),
-        userText: text,
-        maxTokens,
-        signal,
-      }),
-      getTimeout(),
-    );
+    const { text: out, stopReason } = await gatedCall({
+      systemText: systemPrompt(format, sourceLocale, targetLocale),
+      userText: text,
+      maxTokens,
+    }, REQUEST_QUEUE_WAIT_MS);
     const ms = Date.now() - started;
     if (typeof out === 'string' && out.length > 0) {
       logger.info({ chars: text.length, ms, ok: true }, 'translator.translate');
       return out;
     }
-    logger.warn({ chars: text.length, ms, ok: false }, 'translator.translate empty response');
+    logger.warn({ chars: text.length, ms, ok: false, stopReason }, 'translator.translate empty response');
     return null;
   } catch (err) {
     const ms = Date.now() - started;
-    logger.error({ err, chars: text.length, ms, ok: false }, 'translator.translate failed');
+    logFailure(err, { chars: text.length, ms, ok: false }, 'translator.translate failed');
     return null;
   }
 }
@@ -259,28 +343,22 @@ async function translateBatch(strings, { sourceLocale = 'en', targetLocale = 'is
 
   const started = Date.now();
   try {
-    const out = await withTimeout(
-      (signal) => callModel({
-        systemText: systemPromptForTree(sourceLocale, targetLocale),
-        userText: payload,
-        maxTokens,
-        signal,
-      }),
-      getTimeout(),
-    );
-    if (typeof out !== 'string') return null;
+    const { text: out, stopReason } = await gatedCall({
+      systemText: systemPromptForTree(sourceLocale, targetLocale),
+      userText: payload,
+      maxTokens,
+    }, getBatchQueueWaitMs());
+    if (typeof out !== 'string') {
+      logger.warn({ count: strings.length, stopReason }, 'translator.batch no text in the response');
+      return null;
+    }
 
-    // Model occasionally wraps in ```json … ``` despite instructions.
-    const cleaned = out
-      .replace(/^```(?:json)?\s*/i, '')
-      .replace(/\s*```$/, '')
-      .trim();
-
-    let parsed;
-    try {
-      parsed = JSON.parse(cleaned);
-    } catch (_err) {
-      logger.warn({ preview: cleaned.slice(0, 200) }, 'translator.batch JSON parse failed');
+    const parsed = parseJsonArray(out);
+    if (!parsed) {
+      // stop_reason tells a truncated reply (max_tokens) from one that ignored
+      // the format (end_turn). The preview is admin-authored site copy.
+      logger.warn({ stopReason, rawLength: out.length, preview: out.slice(0, 200) },
+        'translator.batch JSON parse failed');
       return null;
     }
 
@@ -295,8 +373,11 @@ async function translateBatch(strings, { sourceLocale = 'en', targetLocale = 'is
     return parsed.map((v, i) => (typeof v === 'string' ? v : strings[i]));
   } catch (err) {
     const ms = Date.now() - started;
-    logger.error({ err, count: strings.length, ms, ok: false }, 'translator.translateTree batch failed');
-    return null;
+    logFailure(err, { count: strings.length, ms, ok: false }, 'translator.translateTree batch failed');
+    // Busy is reported apart from a failure: the tree must not answer it
+    // with a per-leaf fallback, which would multiply the calls the gate is
+    // there to hold back.
+    return err instanceof aiGate.AiBusyError ? BUSY : null;
   }
 }
 
@@ -305,9 +386,9 @@ async function translateBatch(strings, { sourceLocale = 'en', targetLocale = 'is
 // N > ~30 the output token budget for a single call regularly exceeds
 // the per-call timeout (TRANSLATE_TIMEOUT_MS=8000ms) on big jsonb keys
 // like halli_bio (~200 leaves total). At CHUNK_SIZE=25 each batched
-// call comfortably fits within the timeout; chunks run in parallel via
-// Promise.all so the wall-clock cost is roughly the slowest single
-// chunk (~3-6s) regardless of total leaf count.
+// call comfortably fits within the timeout; chunks run in parallel waves of
+// aiGate.maxConcurrent() (default 4), so the wall-clock cost is roughly the
+// slowest chunk per wave (~3-6s each).
 const TRANSLATE_TREE_CHUNK_SIZE = 25;
 
 /**
@@ -316,7 +397,7 @@ const TRANSLATE_TREE_CHUNK_SIZE = 25;
  *
  * Strategy (in order):
  *   1. Single batched call if leaves <= CHUNK_SIZE — same as before.
- *   2. Chunked batched calls in parallel, each batch sized to fit
+ *   2. Chunked batched calls in parallel waves, each batch sized to fit
  *      within TRANSLATE_TIMEOUT_MS. Successful chunks contribute their
  *      translations; failed chunks fall through to per-leaf for those
  *      specific leaves only, NOT the whole tree.
@@ -340,41 +421,55 @@ async function translateTree(tree, { format = 'plain', sourceLocale = 'en', targ
   // round-trip and no overhead from chunk coordination.
   if (leaves.length <= TRANSLATE_TREE_CHUNK_SIZE) {
     const batched = await translateBatch(leaves.map(l => l.value), dir);
+    if (batched === BUSY) return null; // the gate was full: skip, never fan out
     if (batched) {
       leaves.forEach((leaf, i) => setPath(clone, leaf.path, batched[i]));
       return clone;
     }
     // Single batch failed — fall through to per-leaf below.
   } else {
-    // Chunk the leaves and translate chunks in parallel. Each chunk
-    // returns an array (success) or null (failure for that chunk).
+    // Chunk the leaves and translate them in WAVES of at most
+    // aiGate.maxConcurrent() chunks (harvest2 lane 1b review): a big tree
+    // never queues more calls than there are slots, so its own chunks cannot
+    // time out waiting on each other. Each chunk returns an array (success),
+    // BUSY (the gate stayed full) or null (failure for that chunk).
     const chunks = [];
     for (let i = 0; i < leaves.length; i += TRANSLATE_TREE_CHUNK_SIZE) {
       chunks.push(leaves.slice(i, i + TRANSLATE_TREE_CHUNK_SIZE));
     }
-    const chunkResults = await Promise.all(
-      chunks.map(chunk => translateBatch(chunk.map(l => l.value), dir))
-    );
+    const chunkResults = [];
+    const wave = aiGate.maxConcurrent();
+    for (let i = 0; i < chunks.length; i += wave) {
+      chunkResults.push(...await Promise.all(
+        chunks.slice(i, i + wave).map(chunk => translateBatch(chunk.map(l => l.value), dir))
+      ));
+    }
 
     // Apply translations from successful chunks. Track which leaves
-    // still need per-leaf translation (chunks that failed).
+    // still need per-leaf translation (chunks that failed). A BUSY chunk
+    // gets no per-leaf retry — that would multiply the calls the gate holds
+    // back; its leaves keep the source text, as a failed leaf always has.
     const needsPerLeaf = [];
+    let anyChunkOk = false;
     chunks.forEach((chunkLeaves, ci) => {
       const result = chunkResults[ci];
       if (result && Array.isArray(result) && result.length === chunkLeaves.length) {
         chunkLeaves.forEach((leaf, li) => setPath(clone, leaf.path, result[li]));
-      } else {
+        anyChunkOk = true;
+      } else if (result !== BUSY) {
         needsPerLeaf.push(...chunkLeaves);
       }
     });
 
-    if (needsPerLeaf.length === 0) return clone;
+    if (needsPerLeaf.length === 0) return anyChunkOk ? clone : null;
     logger.warn(
       { failed: needsPerLeaf.length, total: leaves.length },
       'translator.translateTree falling back to per-leaf for failed chunks'
     );
-    // Fall through to per-leaf only for the leaves whose chunk failed.
-    return await fillPerLeaf(clone, needsPerLeaf, dir);
+    // Fall through to per-leaf only for the leaves whose chunk failed; the
+    // chunks that DID translate count even if every leaf retry fails.
+    const filled = await fillPerLeaf(clone, needsPerLeaf, dir);
+    return filled || (anyChunkOk ? clone : null);
   }
 
   // Per-leaf fallback for the small-tree path (single batch failed).
@@ -400,6 +495,10 @@ module.exports = {
   translate,
   translateTree,
   isEnabled,
+  // The engine's configured Claude model (TRANSLATE_MODEL, else the default):
+  // other Claude features fall back to it instead of hard-coding their own
+  // (productImport/aiExtract.js).
+  getModel,
   // exported for tests
-  _internal: { BLOCK_KEYS, MAX_TREE_DEPTH, collectLeaves, setPath },
+  _internal: { BLOCK_KEYS, MAX_TREE_DEPTH, collectLeaves, setPath, parseJsonArray },
 };

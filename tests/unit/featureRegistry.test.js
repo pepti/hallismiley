@@ -237,6 +237,9 @@ describe('another product\'s folder is inert in a downstream', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'features-foreign-'));
   fs.cpSync(path.join(ROOT, 'features'), path.join(tmp, 'features'), { recursive: true });
   fs.writeFileSync(path.join(tmp, 'engine.json'), JSON.stringify({ product: 'zz', role: 'product' }));
+  // One copy of the registry per run: remove it, or os.tmpdir() collects a
+  // features-foreign-* directory every time the unit tier runs.
+  afterAll(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
   test('every other product’s folder loads as foreign and claims no product-owned path', () => {
     const loaded = idx.loadFeatures(tmp);

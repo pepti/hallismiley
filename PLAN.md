@@ -51,7 +51,7 @@ Acceptance (2026-08-09 counts): 2012 Jest + 109 Playwright green · lint clean �
 
 ## Open questions for Halli
 
-1. Confirm tier pricing (D-001: build fee 390/580/690 þ.kr. + service contract 19/29/39 þ.kr./mán with 5/10/20 verkeiningar — DRAFT; the old flat 39–79 þ.kr./mán is retired).
+1. Tier pricing: D-022 approved 2026-09-26 (build fee 390/580/690 þ.kr. + service contract 29/59/89 þ.kr./mán with 2/3/5 verkeiningar, einingaverð 6.000 kr.; fourth tier Samstarf, price after a free assessment) — prices carry DRÖG until D-008's rule fires; D-001's 19/29/39 with 5/10/20 and the old flat 39–79 þ.kr./mán are retired.
 2. Sign-off on all IS/EN copy (marked DRAFT in locale files).
 3. ENHANCEMENTS.md decisions after Job 3.
 
@@ -136,6 +136,25 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
   the guides as "DRÖG — Halli staðfestir": the einingaverð amount, whether unused
   verkeiningar carry over, the cost of moving up a tier, how sellers demo before
   the demo instance exists.
+- **Halli approves the Samstarf copy + publishes the guides** (2026-09-26): the
+  handbook moved to D-022 (29/59/89 þ.kr./mán with 2/3/5 verkeiningar,
+  einingaverð 6.000 kr. — which closes that open item) and gained the fourth
+  tier Samstarf, the free assessment and when a seller offers it, all DRÖG
+  (migration os_003; [handbook-d022-2026-09-26](docs/history.d/2026-09-26-feat-handbook-d022.md#handbook-d022-2026-09-26)).
+  Still open in the guides: whether unused verkeiningar carry over, the cost of
+  moving up a tier, how a Samstarf contract is shaped (left to the offer).
+  Owed elsewhere by D-022: D-003's commission examples and D-012's margin
+  column re-run against the new fees.
+- Demo decisions 2026-09-26 (D-023, [demo-decisions-os-2026-09-26](docs/history.d/2026-09-26-docs-demo-decisions-2026-09-26.md)):
+  `demo.rekstrarkerfi.is` is one demo with every module, and "Fáðu demo" on each
+  /verdskra tier card opens it self-serve (a throwaway session per visitor). Open:
+  (a) the handbook guide "Að sýna kerfið" (`seed-sales-guides.js` + os_001) still
+  tells sellers a prospect gets time-limited access only after a guided demo; it
+  needs a new os product migration + the seed change, copy DRÖG for Halli
+  (Söluþjálfari); (b) the demo-instance chunk (`feat/demo-mode`, not yet
+  committed) plans a `kynning` prospect role with expiring logins, which the
+  throwaway visitor session replaces or complements, and how visitors are kept
+  from seeing each other's changes is not designed yet.
 - Decisions that are his, not code's: the lawyer on netting-only set-off
   (contract 5.4 DRÖG), Bókari on written-off balances and verktakamiði, the
   accountant on `docs/ACCOUNTANT-QUESTIONS.md` §2, §6, §7, §11; the VSK
@@ -148,10 +167,30 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
   PRs (both deploy on merge); arm `RELEASE_*` per product — orangesmiley's own
   channel first, rekstrarkerfid's next (the hallismiley arming packet of
   2026-09-13 is parked).
+- "Í dag", the admin home (D-020 step 4, branch `feat/admin-home-idag`, not
+  merged — [admin-home-idag-2026-09-26](docs/history.d/2026-09-26-feat-admin-home-idag.md#admin-home-idag-2026-09-26)).
+  Open for Halli: (a) every `adminHome.*` string and `admin.nav.projects`
+  are DRÖG, including the ones written in the build (listed in the entry);
+  (b) the sidebar label — keep "Stjórnborð" or rename `admin.nav.dashboard`
+  to "Í dag"; (c) the sales-channel rule (web / wholesale = an invoice not born
+  from an order / till) with Bókari; (d) "waiting on you" for change requests
+  needs a status that means the customer must act (an expand migration); (e)
+  whether an admin may hide Fyrstu skrefin early (then per user, like
+  `page_widths`); (f) "Verkefni" or "Verkefnasafn" for the board's line.
 - Next programme: R2, the product-site build in the sibling `rekstrarkerfid`
   repo per `company/REKSTRARKERFI-BUILD-INSTRUCTIONS.md`.
 
 **Open technical items**
+
+- Test-database hygiene landed 2026-09-26 on `feat/test-db-hygiene`
+  ([test-db-hygiene-2026-09-26](docs/history.d/2026-09-26-feat-test-db-hygiene.md#test-db-hygiene-2026-09-26)):
+  throwaway test server `TEST_PG_URL` (`:5433`), product-scoped names,
+  labels + a sweep on every run, loud pattern teardown, DELETE-based
+  `cleanTables()` (a full run 389 s → 49 s). Owed: each downstream picks it up
+  by engine-sync, then `npm run test:db:clean -- --legacy --sweep` (dry run,
+  then `--yes`) on `:5432` clears the old `orangesmiley_*` leftovers; the
+  branch whose test creates `demo_reset_${pid}_test` switches to
+  `createExtraTestDb('demoreset')`.
 
 - Harvest 2 started 2026-09-26 (Halli approved the scope that day): generic
   icelandicstore work up to `ice@941cf51d` ported into the engine in lanes 0–9,
@@ -180,6 +219,93 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
     PROD App Services BEFORE it takes this sync — its `M365_*` settings are
     read as they are, but without the switch a production boot refuses to
     start (also in `engine.json`). No new DRAFT strings.
+- Harvest 2 lane 1b (branch `harvest2/lane1b-defects`; from ice `941cf51d`;
+  [harvest2-lane1b-2026-09-26](docs/history.d/2026-09-26-harvest2-lane1b-defects.md#harvest2-lane1b-2026-09-26)):
+  one nav menu closer (#379), `auth_login_attempts_total` wired (#55), signup
+  no longer waits on email + cancelled confirms say so (#199), translator JSON
+  salvage + `stop_reason` (#216), `aiGate` concurrency cap with the 429
+  contract (#218), and the staff-audit gaps (Users-page role dropdown, role
+  create/delete, user delete; `user.totp_reset` / `user.password_replaced`
+  were refused by the vocabulary). Open: (a) **Halli** approves the new DRAFT
+  strings `admin.actionCancelled` and `errors.ai.busy` (EN + IS); (b)
+  **decision for Halli — the `staff_audit_log` FK vs its immutability**:
+  deleting a user who ever acted in the log fails 500, because the
+  `actor_id` FK's `ON DELETE SET NULL` is an UPDATE the append-only trigger
+  refuses (pre-existing). Either drop the FK (keep `actor_id` as plain text,
+  like `entity_id`), or let the trigger allow an update that only nulls
+  `actor_id`, or refuse the delete up front with a 409 ("disable instead") —
+  each is a migration or a contract change; (c) no engine route raises the
+  429 yet (the translator queues) — ice's shutdown handshake comes with the
+  first request-path AI call that can outlive the 10 s grace.
+- 2026-09-26: Harvest 2 lane 4a, the admin UI kit, is on branch
+  `harvest2/lane4a-uikit` (not merged):
+  [harvest2-lane4a-2026-09-26](docs/history.d/2026-09-26-harvest2-lane4a-uikit.md#harvest2-lane4a-2026-09-26).
+  It adds the Combobox, `downloadBlob`, read-only inputs, keyboard-reachable
+  wide tables, drag-time file checks, detail-view tab titles, the date sweep and
+  the theme contrast test. Open:
+  - (a) Two new strings are **DRAFT** (Halli): `adminKit.scrollRegion` and
+    `adminOrders.documentTitle`.
+  - (b) **The resting input border (`--border-dim`) is under WCAG 1.4.11's
+    3:1** on all three themes. It is a design decision for Halli, and it is a
+    `test.todo` in `themeTokenContrast.test.js`.
+  - (c) The `--gold-light` hover fills under a `--bg-nav` label in
+    `contact.css` and `shop.css` need moving to `--accent-hover` and
+    `--on-accent` by lane 4b or a follow-up.
+  - (d) Settled in the master merge: `AdminUsersView.js`'s raw date call is
+    on `formatDate`, and the date guard has no pending exceptions left.
+- Harvest 2 lane 3 (2026-09-26, branch `harvest2/lane3-users`,
+  [harvest2-lane3-2026-09-26](docs/history.d/2026-09-26-harvest2-lane3-users.md#harvest2-lane3-2026-09-26)):
+  roles created by display name (`116_role_label`), one roles × screens grid,
+  role labels everywhere, the Profile badge, 409-with-count on a role in use,
+  and editing one customer (`117_user_address`, per-customer invite). Open:
+  (a) **every new `adminRoles.*`, `adminCustomers.*`, `profile.roles`,
+  `errors.admin.*` and `validation.*` string is DRAFT** (Halli; listed in the
+  fragment); (b) changing a customer's email is **done, admin-only; Halli may loosen**
+  (the `customers` view edits name, phone and address; a changed email from
+  a non-admin is 403 `email_admin_only`); (c) migration numbers 116/117
+  are provisional; icelandicstore aliases `117_user_address` →
+  `114_user_address` in its next sync; (d) the `user` role can no longer gain
+  a view (a downstream that granted one keeps it until removed).
+- Harvest 2 lane 4b (2026-09-26, branch `harvest2/lane4b-shop-i18n`,
+  [harvest2-lane4b-2026-09-26](docs/history.d/2026-09-26-harvest2-lane4b-shop-i18n.md#harvest2-lane4b-2026-09-26)):
+  shop VAT per rate, re-priced basket, postcode/phone rules, colour names, no
+  English on Icelandic shop pages. Open: (a) **the new shop/checkout/contact
+  strings are DRAFT** (Halli; listed in the fragment); (b) the checkout order
+  note (ice #213) landed with engine migration `115_order_notes` (expand-only;
+  a no-op on icelandicstore, which has the column); (c) `CheckoutSuccessView` still prints the fixed "24% VSK" note and the
+  product page's editable `vat_note` chrome still says 24 %; (d) the contact
+  form now refuses a malformed phone (ice's shared rule) — Halli may prefer it
+  looser there.
+- 2026-09-26: Harvest 2 lane 6a, stock, is on branch `harvest2/lane6a-stock`
+  (not merged): [harvest2-lane6a-2026-09-26](docs/history.d/2026-09-26-harvest2-lane6a-stock.md#harvest2-lane6a-2026-09-26).
+  Inventory Watch + "Fix stock" (ice #13/#15), the stock count as one audited
+  batch (`Inventory.applyBatch`, ice #18) and goods receiving (ice #23,
+  migration `118_goods_receipts`). Open:
+  - (a) **DRAFT strings** (Halli): `admin.nav.inventory`/`receiving`,
+    `adminInventory.*`, `adminStockCount.*`, `adminReceiving.*`, the new
+    `errors.inventory.*` and `errors.receiving.*`, and the receipt PDF labels.
+  - (b) The migration number 118 is provisional; renumber at the Harvest 2
+    merge if the order changes (115–117 are other lanes').
+  - (c) At ice's next graft, engine 118 runs on ice and adds only
+    `goods_receipt_lines.sku` + `inventory_adjustments.batch_id`/`goods_receipt_id`
+    (its CREATEs are no-ops against ice 080) — no alias.
+- Harvest 2 lane 6b (2026-09-26, branch `harvest2/lane6b-merge-ai`, not merged,
+  [harvest2-lane6b-2026-09-26](docs/history.d/2026-09-26-harvest2-lane6b-merge-ai.md#harvest2-lane6b-2026-09-26)):
+  Products → Duplicates + a one-transaction product merge (engine migration
+  `120_product_merge`, provisional number — renumber at merge; ice aliases it
+  to its `112_product_merges`), and the AI PDF reader in the product import,
+  **dark**. Open: (a) **for Halli: turning "Read with AI" on
+  (`PRODUCT_IMPORT_AI_ENABLED=true` + Claude credentials) costs money per page
+  read** — the day caps in `docs/DEPLOYMENT.md` bound it, per container; (b) the
+  new Duplicates / AI strings are DRAFT (listed in the fragment); (c) AI lines
+  without sizes/colours stay unmatched — the engine import has no single-row
+  create path (ice's is not ported); (d) master (lane 6a's `118_goods_receipts`)
+  is merged into the branch and its four product/variant foreign keys are in
+  `repointSpec.js` (draft receipts locked like orders); lane 6c must add its own,
+  or merging switches itself off (`schema_drift`) and `productMerge.test.js` fails;
+  (e) the merge itself is **admin-only** (default taken: tighten, never loosen —
+  Halli may loosen it to the `products` view); the suggestions and the preview
+  stay on the `products` view.
 - Upward harvest from icelandicstore `4694289`, lane 1 (chunks A then B, branch
   `harvest/ice-2026-09-24-ab`, not merged). Chunk A landed on the branch
   ([harvest-ice-a-2026-09-24](docs/HISTORY.md#harvest-ice-a-2026-09-24)): admin
@@ -383,12 +509,21 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
   (`connect.*`) was approved by Halli 2026-09-25; `mcp.oauth*` too (the same day); (e) no CORS on the OAuth endpoints —
   claude.ai calls them server-side; a browser-based client (MCP Inspector)
   would need it.
+- Demo instance landed 2026-09-26 ([demo-instance-2026-09-26](docs/history.d/2026-09-26-feat-demo-mode.md#demo-instance-2026-09-26)): the engine half of R2b step 3. Open: rekstrarkerfid's Glóð seed as its `server/demo/seed.js` (+ the `kynning` prospect role), its `client.demo.json` (`CLIENT_CONFIG_FILE`) so the demo shows the shop, orders and till, `deploy.yml` with a `demo` environment (the lookup gate becomes "not test"), Ský's provisioning plan with `APP_ENV=demo`, `DEMO_INSTANCE=true`, `DEMO_DATABASE_NAME`, `DEMO_KEEP_ROLES=admin,kynning`, one instance, health check `/health`; verify on TEST that the reset's exit-and-restart is not counted as a crash loop; the `demo.*` / `errors.demo.*` copy is DRAFT.
 - Signup switch landed 2026-09-24 ([signup-switch-2026-09-24](docs/HISTORY.md#signup-switch-2026-09-24)):
   the engine half of rekstrarkerfid's R2b step 1. Open: rekstrarkerfid's next
   engine sync, then its own PR (config: signup off + `navSignIn` false; the
   footer line) — merged 2026-09-24 (orange-smiley/rekstrarkerfid#53); the
   deploy is Halli's go; `auth.errors.signupClosed` copy was approved by Halli
   2026-09-25.
+- Time-limited logins landed 2026-09-26 on `feat/login-expiry`, not merged
+  ([login-expiry-2026-09-26](docs/history.d/2026-09-26-feat-login-expiry.md#login-expiry-2026-09-26)):
+  engine migration `114_user_expires_at`; every sign-in path and session
+  reader refuse an expired login; "Gildir til" in Admin → Users and the
+  Customers "add" form. Open: Halli approves the DRÖG copy (the refusal and the
+  admin strings); rekstrarkerfid's next engine sync brings it to the demo
+  instance; nothing sweeps expired rows yet (they stay, refused — a cleanup
+  job or "delete after N days expired" is a later decision).
 - Books: a button to issue a statutory invoice from an order
   (`issueInvoiceForOrder` has no caller — hard blocker for 2026-P5, due 7.12);
   Peppol inbound; the 6-month commission tail (contract 4.3) has no code —

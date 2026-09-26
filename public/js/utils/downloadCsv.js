@@ -24,13 +24,24 @@ export function toCsvString(header, rows) {
   return [header, ...rows].map(r => r.map(esc).join(',')).join('\r\n');
 }
 
-export function downloadCsv(filename, header, rows) {
-  const blob = new Blob([String.fromCharCode(0xFEFF) + toCsvString(header, rows)], { type: 'text/csv;charset=utf-8' });
+// Save a Blob the page already holds (a built CSV, a fetched .xlsx) as a file.
+// The object URL is revoked after a delay, not straight after click(): the
+// download starts asynchronously, and Safari (and older Firefox) cancel it when
+// the URL is already gone. Ported from icelandicstore #325 (38aa1ca).
+export const REVOKE_AFTER_MS = 30_000;
+
+export function downloadBlob(filename, blob) {
+  const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
+  a.href = url;
   a.download = filename;
   document.body.appendChild(a);
   a.click();
   a.remove();
-  URL.revokeObjectURL(a.href);
+  setTimeout(() => URL.revokeObjectURL(url), REVOKE_AFTER_MS);
+}
+
+export function downloadCsv(filename, header, rows) {
+  const blob = new Blob([String.fromCharCode(0xFEFF) + toCsvString(header, rows)], { type: 'text/csv;charset=utf-8' });
+  downloadBlob(filename, blob);
 }
