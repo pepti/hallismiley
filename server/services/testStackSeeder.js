@@ -26,20 +26,30 @@ const defaultDb = require('../config/database');
 const defaultLogger = require('../logger');
 const { isDemoInstance } = require('../config/demoInstance');
 
-// A `prod`/`production`/`live` word, delimited by start/end or - _ . — so
-// `icelandicstore-prod-pg.postgres.database.azure.com` and `shop_prod` match,
-// `productcatalog` and `delivery` do not.
-const PRODUCTION_WORD = /(^|[-_.])(prod|production|live)([-_.]|$)/i;
+// A word that marks a database holding real records, delimited by start/end
+// or - _ . — so `icelandicstore-prod-pg.postgres.database.azure.com` and
+// `shop_prod` match, `productcatalog` and `delivery` do not. Besides
+// prod/production/live it carries targetGuard.js's reserved names — the
+// private books (`*_books`, `*_books_restore`) and ops instance (`*_ops`,
+// `<x>-ops-pg`) hold the company's real ledger (invariant-reviewer, lane 9).
+const PRODUCTION_WORD = /(^|[-_.])(prod|production|live|books|ops)([-_.]|$)/i;
 
-/** host + database name of a connection string; empty strings when unparseable. */
+/**
+ * Every host and database name a connection string can name — the URL's own
+ * plus libpq's `?host=` / `?dbname=` / `?database=` overrides, which
+ * node-postgres honours (targetGuard.js judges the same set). Empty lists when
+ * unparseable.
+ */
 function targetOf(databaseUrl) {
   try {
     const u = new URL(String(databaseUrl || ''));
     let name = '';
     try { name = decodeURIComponent(u.pathname.replace(/^\//, '')); } catch { name = ''; }
-    return { host: u.hostname.replace(/^\[|\]$/g, ''), name };
+    const hosts = [u.hostname.replace(/^\[|\]$/g, ''), ...u.searchParams.getAll('host')].filter(Boolean);
+    const names = [name, ...u.searchParams.getAll('dbname'), ...u.searchParams.getAll('database')].filter(Boolean);
+    return { host: hosts[0] || '', name: names[0] || '', hosts, names };
   } catch {
-    return { host: '', name: '' };
+    return { host: '', name: '', hosts: [], names: [] };
   }
 }
 
@@ -50,10 +60,10 @@ function targetOf(databaseUrl) {
 function testStackGate({ env = process.env, demoInstance = isDemoInstance() } = {}) {
   if (env.APP_ENV !== 'test') return { ok: false, reason: `APP_ENV is ${env.APP_ENV ? `"${env.APP_ENV}"` : 'unset'}, not "test"` };
   if (demoInstance) return { ok: false, reason: 'this is a demo instance — its data comes from server/demo/seed.js' };
-  const { host, name } = targetOf(env.DATABASE_URL);
+  const { host, name, hosts, names } = targetOf(env.DATABASE_URL);
   if (!host || !name) return { ok: false, reason: 'DATABASE_URL names no host and database' };
-  for (const part of [...host.split('.'), name]) {
-    if (PRODUCTION_WORD.test(part)) return { ok: false, reason: `the database "${name}" on "${host}" is a production one` };
+  for (const part of [...hosts.flatMap((h) => h.split('.')), ...names]) {
+    if (PRODUCTION_WORD.test(part)) return { ok: false, reason: `the database "${name}" on "${host}" is a production one ("${part}")` };
   }
   return { ok: true };
 }
@@ -68,12 +78,15 @@ function testStackGate({ env = process.env, demoInstance = isDemoInstance() } = 
 async function applyTestStackData({
   db = defaultDb,
   logger = defaultLogger,
-  datasets = require('../demo/testStackData').datasets,
+  datasets,
   env = process.env,
   demoInstance,
   force = false,
 } = {}) {
   try {
+    // Loaded here, inside the try: a product's data file that throws on load
+    // must not stop the boot (a default parameter would run outside it).
+    if (datasets === undefined) datasets = require('../demo/testStackData').datasets;
     if (!force) {
       const gate = testStackGate({ env, demoInstance: demoInstance === undefined ? isDemoInstance() : demoInstance });
       if (!gate.ok) {

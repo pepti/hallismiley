@@ -89,15 +89,15 @@ carry them — promotion ships the whole image — and the demo instance's gate 
 - `server/services/testStackSeeder.js` — `applyTestStackData()` after `migrate()` on every boot
   (which also restores the rows after a PROD→TEST clone). Gate: `APP_ENV` exactly `test` (never
   NODE_ENV, which is `production` on TEST and PROD alike; not `development`, a laptop goes through
-  the script), not a demo instance, and no `prod`/`production`/`live` word in the database host or
-  name — the fleet's servers are `<x>-prod-pg` / `<x>-test-pg`, so a PROD app given `APP_ENV=test`
+  the script), not a demo instance, and no `prod`/`production`/`live` word — nor targetGuard's `books`/`ops`,
+  added after review — in the database host or name (libpq `?host=`/`?dbname=` included) — the fleet's servers are `<x>-prod-pg` / `<x>-test-pg`, so a PROD app given `APP_ENV=test`
   by mistake is still refused. One transaction per dataset (ice ran statements bare, so a half-
   applied dataset stayed half-applied); never throws.
 - `npm run seed:test-stack` (`server/scripts/seed-test-stack.js`) forces past the gate for a LOCAL
   database only, after `targetGuard.js` (ice's `seed:demo` only printed a warning). `targetGuard` is
   not the boot gate: it refuses any Azure host and any App Service process, i.e. every real TEST
   stack.
-- Tests: `tests/unit/testStackSeeder.test.js` (18: both directions of the gate, production hosts
+- Tests: `tests/unit/testStackSeeder.test.js` (24: both directions of the gate, production hosts
   and names, NODE_ENV ignored, the engine list empty, the boot order) and
   `tests/integration/testStackSeeder.test.js` (6: nothing written off TEST, idempotent across two
   boots, a failing dataset rolled back alone, a demo instance left alone, the script refusing an
@@ -105,10 +105,24 @@ carry them — promotion ships the whole image — and the demo instance's gate 
 - Not ported: ice's DEMO-RVK tee grid and its migration 097 (customer data), the Jest heap bump
   (ice CI). ice can move its datasets into `testStackData.js` at its next graft and drop its seeder.
 
-**Tests.** Unit 2837 passed (1 skipped, 1 todo) after merging master `912d221`; the new unit suites
-are `expiryWatch` (26), `testStackSeeder` (18), `roleRoutes` (4) and the sha-pin cases in
+**Tests.** Unit 2843 passed (1 skipped, 1 todo) after merging master `912d221` and the review fixes; full Jest 5422 passed before them; the new unit suites
+are `expiryWatch` (26), `testStackSeeder` (24), `roleRoutes` (4) and the sha-pin cases in
 `workflowsParse`; integration `testStackSeeder` (6). Full Playwright suite on `E2E_PORT=3029` after the
 merge: 522 passed, 6 skipped (lane 3's review screenshots, skipped by design), 0 failed — the
 harness's 228 among them.
 
-**Review.** See the end of this fragment.
+**Review.** `invariant-reviewer` on `git diff origin/master...HEAD`: no FAIL; one WARN and six NOTEs.
+- WARN, fixed: the seeder's production-word check lacked targetGuard's real-records names, so an
+  ops or books database given `APP_ENV=test` by mistake would have passed. It now refuses `books`
+  and `ops` too (this engine is about to run the company's own books, D-017/D-020).
+- Fixed: libpq `?host=` / `?dbname=` / `?database=` overrides are judged like targetGuard does;
+  the product's data file is required INSIDE the never-throw (a default parameter ran outside it —
+  now pinned by a unit test with a throwing module); checkout drops its credentials
+  (`persist-credentials: false`); a whitespace-only `WATCH_HOSTS` / `WATCH_KEY_VAULTS` counts as
+  unset; `docs/ENGINE-SYNC.md` §7 says a downstream that fills `server/demo/testStackData.js` (or
+  `seed.js`) lists it in `productPaths` in the same change.
+- Won't fix: echoing a bad `WATCH_KEY_VAULTS` entry in an `::error::` line. Only maintainers set the
+  variable, and the name in the message is what makes the error useful.
+- Not taken: making the sync tooling protect the two stubs by default (`FIXED_PRODUCT_PATHS` →
+  `.gitattributes merge=ours`). In the engine itself that would also apply to master → branch
+  merges and could silently keep a branch's stale stub; the productPaths rule is enough.

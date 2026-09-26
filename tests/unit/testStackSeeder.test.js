@@ -46,6 +46,13 @@ describe('testStackGate', () => {
     'postgres://postgres:postgres@localhost:5432/shop_prod',
     'postgres://postgres:postgres@localhost:5432/production',
     'postgres://postgres:postgres@db.live.example.is:5432/shop',
+    // the private books / ops instance (targetGuard.js's reserved names)
+    'postgres://postgres:postgres@localhost:5432/orangesmiley_books',
+    'postgres://postgres:postgres@localhost:5432/orangesmiley_books_restore',
+    'postgresql://app:pw@orangesmiley-ops-pg.postgres.database.azure.com/orangesmiley',
+    // libpq overrides node-postgres honours
+    'postgres://u:p@shop-test-pg/shop?host=shop-prod-pg.postgres.database.azure.com',
+    'postgres://u:p@shop-test-pg/shop?dbname=shop_production',
   ])('a production database is refused even with APP_ENV=test: %s', (url) => {
     const r = gate({ APP_ENV: 'test', DATABASE_URL: url });
     expect(r.ok).toBe(false);
@@ -60,7 +67,23 @@ describe('testStackGate', () => {
   test('no parseable DATABASE_URL is refused', () => {
     expect(gate({ APP_ENV: 'test' }).ok).toBe(false);
     expect(gate({ APP_ENV: 'test', DATABASE_URL: 'not a url' }).ok).toBe(false);
-    expect(targetOf('postgres://u:p@h:1/d%20b')).toEqual({ host: 'h', name: 'd b' });
+    expect(targetOf('postgres://u:p@h:1/d%20b')).toMatchObject({ host: 'h', name: 'd b' });
+  });
+});
+
+describe('the data file is loaded inside the never-throw', () => {
+  test('a product data file that throws on load does not stop the boot', async () => {
+    await jest.isolateModulesAsync(async () => {
+      jest.doMock('../../server/demo/testStackData', () => { throw new Error('bad product file'); });
+      const { applyTestStackData } = require('../../server/services/testStackSeeder');
+      const errors = [];
+      const res = await applyTestStackData({
+        env: { APP_ENV: 'test', DATABASE_URL: TEST_URL }, demoInstance: false,
+        logger: { debug() {}, info() {}, error: (o, m) => errors.push(m) },
+      });
+      expect(res).toEqual({ skipped: false, applied: [], failed: ['*'] });
+      expect(errors).toHaveLength(1);
+    });
   });
 });
 
