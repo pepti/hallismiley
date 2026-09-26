@@ -9,6 +9,7 @@ import { navigateReplace } from '../navigate.js';
 import { renderAdminShell } from '../components/AdminSidebar.js';
 import { showToast } from '../components/Toast.js';
 import { downloadCsv } from '../utils/downloadCsv.js';
+import { formatDate, formatMoney } from '../utils/format.js';
 import {
   adminListCustomers, adminCreateCustomer,
   adminPreviewCustomerImport, adminApplyCustomerImport, adminDeleteCustomers,
@@ -17,6 +18,7 @@ import {
 import { parseCsvRecords } from '../utils/csv.js';
 import { CustomerNotes } from '../components/CustomerNotes.js';
 import { credentialsPanelHtml, wireCredentialsPanel } from '../components/OneTimeCredentials.js';
+import { expiryFieldHtml, wireExpiryField, readExpiryField } from '../components/ExpiryPicker.js';
 
 // Parse an Email/Name/Phone CSV → [{ email, display_name, phone }]. Tolerant of
 // either English or Icelandic header names; rows without an email are dropped.
@@ -109,8 +111,10 @@ export class AdminCustomersView {
     }
   }
 
+  // The kit formatter, which follows the app locale (was toLocaleDateString
+  // ('en-GB') — English in the Icelandic admin). Ported from icelandicstore #324.
   _date(iso) {
-    return iso ? new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+    return iso ? formatDate(iso, { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
   }
 
   // invited_at is stamped only on a confirmed send (ice #258), so "Invited
@@ -146,7 +150,7 @@ export class AdminCustomersView {
               <td>${escHtml(c.display_name || '—')}</td>
               <td>${escHtml(c.phone || '—')}</td>
               <td>${Number(c.order_count) || 0}</td>
-              <td>${Number(c.total_spent) ? Number(c.total_spent).toLocaleString('is-IS') + ' kr' : '—'}</td>
+              <td>${Number(c.total_spent) ? formatMoney(c.total_spent, 'ISK') : '—'}</td>
               <td>${this._date(c.created_at)}</td>
               <td>${escHtml(this._statusLabel(c))}</td>
               <td>${c.role === 'user'
@@ -581,6 +585,7 @@ export class AdminCustomersView {
           <label>${t('adminCustomers.phone')}
             <input type="text" name="phone" maxlength="40"/>
           </label>
+          ${expiryFieldHtml({ idPrefix: 'cust-add-expiry' })}
           <p class="admin-shop__hint">${t('adminCustomers.addHint')}</p>
           <p class="admin-shop__error" id="cust-add-error" role="alert"></p>
           <div class="admin-shop__form-actions">
@@ -607,16 +612,23 @@ export class AdminCustomersView {
       if (noEmailBox.checked) emailInput.value = '';
     });
 
+    // "Gildir til" (migration 114): a demo login for a prospect stops working
+    // after the chosen days or date; none = never.
+    wireExpiryField(form, 'cust-add-expiry');
+
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       errorEl.textContent = '';
       const fd = new FormData(e.target);
       const noEmail = noEmailBox.checked;
+      const expiry = readExpiryField(form, 'cust-add-expiry');
+      if (!expiry.ok) { errorEl.textContent = expiry.message; return; }
       try {
         const res = await adminCreateCustomer({
           ...(noEmail ? { no_email: true } : { email: String(fd.get('email') || '').trim() }),
           display_name: String(fd.get('display_name') || '').trim() || null,
           phone:        String(fd.get('phone') || '').trim() || null,
+          ...(expiry.value ? { expires_at: expiry.value } : {}),
         });
         await this._load();
         if (res.noEmail) {

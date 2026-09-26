@@ -5,6 +5,8 @@ const router  = express.Router();
 const shopController  = require('../controllers/shopController');
 const { csrfProtect } = require('../middleware/csrf');
 const { lucia }       = require('../auth/lucia');
+// An expired time-limited login reads as no session (auth/accountExpiry.js).
+const { validateSession } = require('../auth/accountExpiry');
 const { applyMfaPolicy } = require('../auth/mfaPolicy');
 
 // Soft auth for guest checkout is the shared middleware: it attaches the role
@@ -23,7 +25,7 @@ const { validateCheckoutContact } = require('../middleware/validate');
 async function requireAuth(req, res, next) {
   const sessionId = lucia.readSessionCookie(req.headers.cookie ?? '');
   if (!sessionId) return res.status(401).json({ error: 'Unauthorized', code: 401 });
-  const { session, user } = await lucia.validateSession(sessionId);
+  const { session, user } = await validateSession(sessionId);
   if (!session || !user || user.disabled) {
     return res.status(401).json({ error: 'Unauthorized', code: 401 });
   }

@@ -113,7 +113,10 @@ const Customer = {
   // Scrypt as the rest of auth, approval at once, and NO reset token: there is
   // nowhere to mail one. Returns { user, resetToken: null, password } — the
   // caller hands `password` to the admin ONCE and must never log or store it.
-  async create({ email, display_name = null, phone = null, nameOnly = false }) {
+  //
+  // expiresAt (migration 114): a time-limited login — a Date the caller has
+  // validated (auth/accountExpiry.js parseExpiresAt), or null for never.
+  async create({ email, display_name = null, phone = null, nameOnly = false, expiresAt = null }) {
     if (nameOnly) {
       const password = generatePassword();
       const hash     = await new Scrypt().hash(password);
@@ -123,10 +126,10 @@ const Customer = {
           const { rows } = await dbQuery(
             `INSERT INTO users
                (username, email, password_hash, role, display_name, phone,
-                approval_status, email_verified)
-             VALUES ($1, $2, $3, 'user', $4, $5, 'approved', FALSE)
-             RETURNING id, username, email, role, display_name, phone, email_verified, created_at`,
-            [username, noEmailEmail(username), hash, display_name, phone]
+                approval_status, email_verified, expires_at)
+             VALUES ($1, $2, $3, 'user', $4, $5, 'approved', FALSE, $6)
+             RETURNING id, username, email, role, display_name, phone, email_verified, created_at, expires_at`,
+            [username, noEmailEmail(username), hash, display_name, phone, expiresAt]
           );
           return { user: rows[0], resetToken: null, password };
         } catch (err) {
@@ -145,10 +148,10 @@ const Customer = {
         const { rows } = await dbQuery(
           `INSERT INTO users
              (username, email, password_hash, role, display_name, phone,
-              email_verified, password_reset_token, password_reset_expires)
-           VALUES ($1, $2, NULL, 'user', $3, $4, FALSE, $5, $6)
-           RETURNING id, username, email, role, display_name, phone, email_verified, created_at`,
-          [username, lowered, display_name, phone, resetToken, expires]
+              email_verified, password_reset_token, password_reset_expires, expires_at)
+           VALUES ($1, $2, NULL, 'user', $3, $4, FALSE, $5, $6, $7)
+           RETURNING id, username, email, role, display_name, phone, email_verified, created_at, expires_at`,
+          [username, lowered, display_name, phone, resetToken, expires, expiresAt]
         );
         return { user: rows[0], resetToken };
       } catch (err) {

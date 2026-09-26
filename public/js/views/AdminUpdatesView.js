@@ -13,6 +13,7 @@
 import { isAuthenticated, canSeeView, isAdmin, getCSRFToken } from '../services/auth.js';
 import { escHtml } from '../utils/escHtml.js';
 import { t, href } from '../i18n/i18n.js';
+import { formatDate, formatDateTime } from '../utils/format.js';
 import { navigateReplace } from '../navigate.js';
 import { renderAdminShell } from '../components/AdminSidebar.js';
 import { showToast } from '../components/Toast.js';
@@ -20,13 +21,15 @@ import { resetBuildInfo } from '../services/buildInfo.js';
 
 const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 
+// App-locale dates through the kit formatters (were the browser's own
+// toLocale*; ice #324).
 function fmtDate(value) {
   if (!value) return '—';
-  try { return new Date(value).toLocaleString(); } catch { return String(value); }
+  try { return formatDateTime(value); } catch { return String(value); }
 }
 function fmtDay(value) {
   if (!value) return '—';
-  try { return new Date(value).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' }); }
+  try { return formatDate(value, { weekday: 'long', day: 'numeric', month: 'short' }); }
   catch { return String(value); }
 }
 const shortDigest = d => (d ? String(d).replace(/^sha256:/, '').slice(0, 12) : '—');

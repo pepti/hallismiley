@@ -299,6 +299,17 @@
   outline: none; border-color: var(--gold);
   box-shadow: 0 0 0 1px rgba(200,170,110,0.2);
 }
+/* A read-only field (a value only staff may change, a computed figure) should
+   not look editable, but its text stays selectable for copying. Tokens only:
+   --bg-hover is opaque on all three themes and --text-secondary keeps ≥ 4.5:1
+   on it (tests/unit/themeTokenContrast.test.js). Ported from icelandicstore
+   #416 (c05ce2b, the CSS half). */
+.form-input[readonly] {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+  cursor: default;
+  user-select: text;
+}
 .form-textarea { resize: vertical; min-height: 96px; }
 .form-select { cursor: pointer; }
 .form-select option { background: var(--bg-elevated); }

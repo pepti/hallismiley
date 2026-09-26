@@ -10,7 +10,8 @@ import {
 } from '../services/accounts.js';
 import { escHtml } from '../utils/escHtml.js';
 import { formatDateTime } from '../utils/format.js';
-import { t, href } from '../i18n/i18n.js';
+import { t, href, getLocale } from '../i18n/i18n.js';
+import { adminPageTitle } from '../utils/pageTitle.js';
 import { navigate, navigateReplace } from '../navigate.js';
 import { renderAdminShell } from '../components/AdminSidebar.js';
 import { showToast } from '../components/Toast.js';
@@ -145,6 +146,11 @@ export class AdminAccountDetailView {
   _paint() {
     const a = this._account;
     const admin = isAdmin();
+    // The tab names the account (Ported from icelandicstore #324). The router
+    // reads documentTitle once render() resolves; after a save that renames the
+    // account the view is already on screen, so the tab is updated here.
+    this.documentTitle = adminPageTitle(a.name, getLocale());
+    if (this._el.isConnected && !this._destroyed) document.title = this.documentTitle;
     const transitionBtns = this._transitions.map(s =>
       `<button type="button" class="btn btn--sm ${s === 'churned' ? 'btn--danger' : 'btn--outline'}" data-status="${s}">${escHtml(t(STATUS_KEY[s]))}</button>`).join('');
     const provisionBtn = (a.status === 'signed' || a.status === 'provisioning')

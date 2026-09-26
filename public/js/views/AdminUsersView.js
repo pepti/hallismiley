@@ -11,16 +11,29 @@ import { sortableTh, cycleSort, bindSortable } from '../components/adminTable.js
 import { pagerHtml, bindPager } from '../components/adminPager.js';
 import { readListState, syncListState, readPageSize, writePageSize } from '../utils/listState.js';
 import { debounce } from '../utils/debounce.js';
+import { expiryBadgeHtml, expiryFieldHtml, wireExpiryField, readExpiryField } from '../components/ExpiryPicker.js';
+import { moduleEnabled } from '../utils/modules.js';
+import { formatDate } from '../utils/format.js';
 
 // Was a fixed 20 — a size the picker does not offer. The list remembers the
 // admin's own choice now, defaulting to the nearest offered value.
 const DEFAULT_SIZE = 25;
 const VIEW_ID = 'users';
 
-function formatDate(str) {
-  if (!str) return '—';
-  return new Date(str).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+// A cancelled confirm() SAYS so. A bare `return` is indistinguishable from a
+// dead button — and confirm() returns false with no dialog at all once the
+// browser has been told to block further dialogs for the page. Ported from
+// icelandicstore #199, where an approval that silently did nothing on PROD
+// read as a broken save.
+function cancelled() {
+  showToast(t('admin.actionCancelled'), 'info');
 }
+
+// The "joined" date comes from the kit formatter (utils/format.js): it follows
+// the app locale and builds Icelandic by hand. It replaced a local
+// toLocaleDateString(undefined, …) that answered in the browser's language
+// (ice #324 sweep, harvest 2 lane 4a). Its default shape and its '—' for an
+// empty value are what the local helper had.
 
 export class AdminUsersView {
   constructor() {
@@ -142,6 +155,12 @@ export class AdminUsersView {
       return;
     }
 
+    // The Party column belongs to the party module (moduleCatalog: party). An
+    // instance without it has no party guests, so the toggle would offer a
+    // switch that leads nowhere: header and cells are left out. Server-side
+    // the route still answers (party_access is a plain user column).
+    const partyOn = moduleEnabled('party');
+
     wrap.innerHTML = `
       <table class="admin-table admin-users-table">
         <thead>
@@ -151,7 +170,8 @@ export class AdminUsersView {
             ${sortableTh(t('adminUsers.role'), 'role', this._sort)}
             ${sortableTh(t('adminUsers.verified'), 'verified', this._sort)}
             ${sortableTh(t('adminUsers.status'), 'status', this._sort)}
-            ${sortableTh(t('adminUsers.party'), 'party', this._sort)}
+            <th>${t('adminUsers.validUntil')}</th>
+            ${partyOn ? sortableTh(t('adminUsers.party'), 'party', this._sort) : ''}
             ${sortableTh(t('orders.date'), 'created_at', this._sort)}
             <th class="admin-table__actions-col">${t('adminUsers.actions')}</th>
           </tr>
@@ -190,14 +210,26 @@ export class AdminUsersView {
                   <span class="toggle-text">${u.disabled ? t('adminUsers.disabled') : t('adminUsers.active')}</span>
                 </label>
               </td>
-              <td>
+              <td class="users-expiry-cell">
+                <div class="users-expiry">
+                  ${u.expires_at ? expiryBadgeHtml(u.expires_at) : '<span class="users-expiry__none">—</span>'}
+                  ${String(u.id) !== String(getUser()?.id) && !u.admin_powers ? `
+                  <button type="button" class="btn btn--sm btn--ghost expiry-user-btn"
+                          data-user-id="${escHtml(String(u.id))}"
+                          data-username="${escHtml(u.username)}"
+                          data-expires-at="${escHtml(u.expires_at || '')}"
+                          aria-label="${escHtml(t('adminUsers.expiryEdit', { name: u.username }))}"
+                          title="${escHtml(t('adminUsers.expiryEdit', { name: u.username }))}">${t('admin.edit')}</button>` : ''}
+                </div>
+              </td>
+              ${partyOn ? `<td>
                 <label class="toggle-label" title="${u.party_access ? t('adminUsers.revokePartyAccess') : t('adminUsers.grantPartyAccess')}">
                   <input type="checkbox" class="toggle-input" data-action="toggle-party"
                          data-user-id="${escHtml(String(u.id))}" ${u.party_access ? 'checked' : ''}/>
                   <span class="toggle-track"></span>
                   <span class="toggle-text">${u.party_access ? '🎂 On' : 'Off'}</span>
                 </label>
-              </td>
+              </td>` : ''}
               <td class="user-joined">${formatDate(u.created_at)}</td>
               <td class="admin-table__actions">
                 <span class="user-id-badge">#${escHtml(String(u.id))}</span>
@@ -256,6 +288,10 @@ export class AdminUsersView {
 
     wrap.querySelectorAll('.reset-totp-btn').forEach(btn => {
       btn.addEventListener('click', () => this._onResetTotp(btn));
+    });
+
+    wrap.querySelectorAll('.expiry-user-btn').forEach(btn => {
+      btn.addEventListener('click', () => this._onEditExpiry(btn));
     });
 
   }
@@ -329,7 +365,7 @@ export class AdminUsersView {
   async _onDeleteUser(btn) {
     const userId   = btn.dataset.userId;
     const username = btn.dataset.username;
-    if (!confirm(`${t('admin.confirmDelete')} "${escHtml(username)}"?`)) return;
+    if (!confirm(`${t('admin.confirmDelete')} "${escHtml(username)}"?`)) return cancelled();
     try {
       await adminDeleteUser(userId);
       showToast(t('form.success'), 'success');
@@ -346,7 +382,7 @@ export class AdminUsersView {
   async _onResetTotp(btn) {
     const userId   = btn.dataset.userId;
     const username = btn.dataset.username;
-    if (!confirm(t('adminUsers.twoStepResetConfirm', { name: username }))) return;
+    if (!confirm(t('adminUsers.twoStepResetConfirm', { name: username }))) return cancelled();
     btn.disabled = true;
     try {
       try {
@@ -370,7 +406,7 @@ export class AdminUsersView {
   // ONCE (ice #382/#397). The old one stops working and its sessions end.
   async _onNewPassword(btn) {
     const username = btn.dataset.username;
-    if (!confirm(t('adminUsers.newPasswordConfirm', { name: username }))) return;
+    if (!confirm(t('adminUsers.newPasswordConfirm', { name: username }))) return cancelled();
     btn.disabled = true;
     try {
       const res = await adminNewPassword(btn.dataset.userId);
@@ -424,6 +460,57 @@ export class AdminUsersView {
       document.body.appendChild(overlay);
       overlay.querySelector('#users-totp-pw').focus();
     });
+  }
+
+  // "Gildir til" for another account (migration 114): 7 / 14 / 30 days, a
+  // date, or none. The server refuses your own account and a past date; the
+  // modal shows its message and stays open.
+  _onEditExpiry(btn) {
+    const userId   = btn.dataset.userId;
+    const username = btn.dataset.username;
+    const prefix   = 'users-expiry';
+    const overlay  = document.createElement('div');
+    overlay.className = 'modal-overlay open';
+    overlay.innerHTML = `
+      <form class="modal users-expiry-modal" role="dialog" aria-modal="true" aria-labelledby="users-expiry-title">
+        <h2 class="modal__title" id="users-expiry-title">${t('adminUsers.expiryTitle')}</h2>
+        <p class="modal__desc"><strong>${escHtml(username)}</strong> — ${escHtml(t('adminUsers.expiryHint'))}</p>
+        ${expiryFieldHtml({ idPrefix: prefix, current: btn.dataset.expiresAt || null })}
+        <p class="users-expiry-modal__error" role="alert" data-expiry-error></p>
+        <div class="users-expiry-modal__actions">
+          <button type="button" class="btn btn--ghost" data-cancel>${t('form.cancel')}</button>
+          <button type="submit" class="btn btn--primary">${t('form.save')}</button>
+        </div>
+      </form>`;
+    const close = () => {
+      document.removeEventListener('keydown', onKey);
+      overlay.remove();
+    };
+    const onKey = (e) => { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', onKey);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+    overlay.querySelector('[data-cancel]').addEventListener('click', close);
+    wireExpiryField(overlay, prefix);
+    const errorEl = overlay.querySelector('[data-expiry-error]');
+    overlay.querySelector('form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errorEl.textContent = '';
+      const picked = readExpiryField(overlay, prefix);
+      if (!picked.ok) { errorEl.textContent = picked.message; return; }
+      const submit = overlay.querySelector('button[type=submit]');
+      submit.disabled = true;
+      try {
+        await adminUpdateUser(userId, { expires_at: picked.value });
+        close();
+        showToast(t('form.success'), 'success');
+        await this._load();
+      } catch (err) {
+        errorEl.textContent = err.message;
+        submit.disabled = false;
+      }
+    });
+    document.body.appendChild(overlay);
+    overlay.querySelector(`input[name="${prefix}-choice"]:checked`)?.focus();
   }
 
   async _onToggleDisabled(checkbox) {

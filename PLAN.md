@@ -136,6 +136,16 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
   the guides as "DRÖG — Halli staðfestir": the einingaverð amount, whether unused
   verkeiningar carry over, the cost of moving up a tier, how sellers demo before
   the demo instance exists.
+- Demo decisions 2026-09-26 (D-023, [demo-decisions-os-2026-09-26](docs/history.d/2026-09-26-docs-demo-decisions-2026-09-26.md)):
+  `demo.rekstrarkerfi.is` is one demo with every module, and "Fáðu demo" on each
+  /verdskra tier card opens it self-serve (a throwaway session per visitor). Open:
+  (a) the handbook guide "Að sýna kerfið" (`seed-sales-guides.js` + os_001) still
+  tells sellers a prospect gets time-limited access only after a guided demo; it
+  needs a new os product migration + the seed change, copy DRÖG for Halli
+  (Söluþjálfari); (b) the demo-instance chunk (`feat/demo-mode`, not yet
+  committed) plans a `kynning` prospect role with expiring logins, which the
+  throwaway visitor session replaces or complements, and how visitors are kept
+  from seeing each other's changes is not designed yet.
 - Decisions that are his, not code's: the lawyer on netting-only set-off
   (contract 5.4 DRÖG), Bókari on written-off balances and verktakamiði, the
   accountant on `docs/ACCOUNTANT-QUESTIONS.md` §2, §6, §7, §11; the VSK
@@ -161,6 +171,40 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
   `docs/HISTORY.md` is the frozen archive; every chunk gets a review pass
   before it merges; `docs/TESTING.md` gained the deployed-environment
   walkthrough. This settles chunk F's open item (d) below.
+- Harvest 2 lane 1b (branch `harvest2/lane1b-defects`; from ice `941cf51d`;
+  [harvest2-lane1b-2026-09-26](docs/history.d/2026-09-26-harvest2-lane1b-defects.md#harvest2-lane1b-2026-09-26)):
+  one nav menu closer (#379), `auth_login_attempts_total` wired (#55), signup
+  no longer waits on email + cancelled confirms say so (#199), translator JSON
+  salvage + `stop_reason` (#216), `aiGate` concurrency cap with the 429
+  contract (#218), and the staff-audit gaps (Users-page role dropdown, role
+  create/delete, user delete; `user.totp_reset` / `user.password_replaced`
+  were refused by the vocabulary). Open: (a) **Halli** approves the new DRAFT
+  strings `admin.actionCancelled` and `errors.ai.busy` (EN + IS); (b)
+  **decision for Halli — the `staff_audit_log` FK vs its immutability**:
+  deleting a user who ever acted in the log fails 500, because the
+  `actor_id` FK's `ON DELETE SET NULL` is an UPDATE the append-only trigger
+  refuses (pre-existing). Either drop the FK (keep `actor_id` as plain text,
+  like `entity_id`), or let the trigger allow an update that only nulls
+  `actor_id`, or refuse the delete up front with a 409 ("disable instead") —
+  each is a migration or a contract change; (c) no engine route raises the
+  429 yet (the translator queues) — ice's shutdown handshake comes with the
+  first request-path AI call that can outlive the 10 s grace.
+- 2026-09-26: Harvest 2 lane 4a, the admin UI kit, is on branch
+  `harvest2/lane4a-uikit` (not merged):
+  [harvest2-lane4a-2026-09-26](docs/history.d/2026-09-26-harvest2-lane4a-uikit.md#harvest2-lane4a-2026-09-26).
+  It adds the Combobox, `downloadBlob`, read-only inputs, keyboard-reachable
+  wide tables, drag-time file checks, detail-view tab titles, the date sweep and
+  the theme contrast test. Open:
+  - (a) Two new strings are **DRAFT** (Halli): `adminKit.scrollRegion` and
+    `adminOrders.documentTitle`.
+  - (b) **The resting input border (`--border-dim`) is under WCAG 1.4.11's
+    3:1** on all three themes. It is a design decision for Halli, and it is a
+    `test.todo` in `themeTokenContrast.test.js`.
+  - (c) The `--gold-light` hover fills under a `--bg-nav` label in
+    `contact.css` and `shop.css` need moving to `--accent-hover` and
+    `--on-accent` by lane 4b or a follow-up.
+  - (d) Settled in the master merge: `AdminUsersView.js`'s raw date call is
+    on `formatDate`, and the date guard has no pending exceptions left.
 - Harvest 2 lane 4b (2026-09-26, branch `harvest2/lane4b-shop-i18n`,
   [harvest2-lane4b-2026-09-26](docs/history.d/2026-09-26-harvest2-lane4b-shop-i18n.md#harvest2-lane4b-2026-09-26)):
   shop VAT per rate, re-priced basket, postcode/phone rules, colour names, no
@@ -380,6 +424,14 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
   footer line) — merged 2026-09-24 (orange-smiley/rekstrarkerfid#53); the
   deploy is Halli's go; `auth.errors.signupClosed` copy was approved by Halli
   2026-09-25.
+- Time-limited logins landed 2026-09-26 on `feat/login-expiry`, not merged
+  ([login-expiry-2026-09-26](docs/history.d/2026-09-26-feat-login-expiry.md#login-expiry-2026-09-26)):
+  engine migration `114_user_expires_at`; every sign-in path and session
+  reader refuse an expired login; "Gildir til" in Admin → Users and the
+  Customers "add" form. Open: Halli approves the DRÖG copy (the refusal and the
+  admin strings); rekstrarkerfid's next engine sync brings it to the demo
+  instance; nothing sweeps expired rows yet (they stay, refused — a cleanup
+  job or "delete after N days expired" is a later decision).
 - Books: a button to issue a statutory invoice from an order
   (`issueInvoiceForOrder` has no caller — hard blocker for 2026-P5, due 7.12);
   Peppol inbound; the 6-month commission tail (contract 4.3) has no code —

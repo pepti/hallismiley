@@ -4,7 +4,9 @@
 import { isAuthenticated, isAdmin } from '../services/auth.js';
 import { fetchOrder, setOrderStatuses, setOrderTags, paymentBadge, fulfillmentBadge } from '../services/adminOrders.js';
 import { escHtml } from '../utils/escHtml.js';
-import { t, href } from '../i18n/i18n.js';
+import { t, href, getLocale } from '../i18n/i18n.js';
+import { adminPageTitle } from '../utils/pageTitle.js';
+import { formatDateTime } from '../utils/format.js';
 import { navigateReplace } from '../navigate.js';
 import { renderAdminShell } from '../components/AdminSidebar.js';
 import { showToast } from '../components/Toast.js';
@@ -13,9 +15,12 @@ import { vatBreakdown, isExport } from '../utils/vat.js';
 import { CustomerNotes } from '../components/CustomerNotes.js';
 import { mountAsideWidthControl } from '../components/AsideWidthControl.js';
 
+// Was toLocaleString('en-GB') — English in the Icelandic admin. The kit's
+// formatter follows the app locale and builds Icelandic by hand (Chrome has no
+// is ICU data); Ported from icelandicstore #324.
 function fmtDate(iso) {
   if (!iso) return '';
-  return new Date(iso).toLocaleString('en-GB', {
+  return formatDateTime(iso, {
     day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
   });
 }
@@ -39,6 +44,9 @@ export class AdminOrderDetailView {
     try {
       const data = await fetchOrder(this._id);
       this._order = data.order;
+      // The router titles the tab from this once render() resolves (Ported
+      // from icelandicstore #324): the order number, then the admin title.
+      this.documentTitle = adminPageTitle(t('adminOrders.documentTitle', { number: data.order.order_number }), getLocale());
       this._items = data.items || [];
       this._paint();
     } catch (err) {

@@ -326,6 +326,77 @@
       "conflicts": 0,
       "note": "harvest",
       "harvestedFrom": "ice@941cf51d",
+      "chunk": "harvest2 lane 4a (UI kit)",
+      "commits": [
+        "3ccf8a00 (#194 Combobox)",
+        "5ac14020 (#264 Combobox)",
+        "78ff16ac (#269 Combobox object entries)",
+        "383ed78c (#351 Combobox async source, debounceMs/minQuery, meta)",
+        "447347a5 (#398 Combobox hidden keywords)",
+        "38aa1ca (#325 downloadBlob)",
+        "c05ce2b (#416 .form-input[readonly], CSS half only)",
+        "39fe3d5 (#279 focusable overflow, pattern only)",
+        "d4fb5cca (#193 drag-time file-type check)",
+        "8e977ae (#324 adminPageTitle, date sweep, contrast pairs)",
+        "219d33e (#313 themeTokens.js + token contrast test)"
+      ],
+      "branch": "harvest2/lane4a-uikit",
+      "features": [
+        "admin-ui-kit",
+        "themes"
+      ],
+      "migrations": {},
+      "trimmed": [
+        "ice Combobox users the engine does not have (ProductFormView, CustomerPrices, AdminInvoiceMergerView); shop.css Combobox rules re-pointed at tokens in admin-kit.css",
+        "ice #416 server half (company access hardening, ice customer model)",
+        "ice #279 variants-grid view code (the pattern lives in utils/stickyHScroll.js)",
+        "ice #193 order-builder panels and toast (the engine user is the product-image drop zone; the product import has no drop zone)",
+        "ice #324 AdminProductDuplicatesView/AdminProductMergeView titles, Invoice Merger CSS, order line-discount lock, OrderHistoryView/AdminCompanyView/AdminCustomerView/AdminUserDetailView date edits (no engine twin, or lane 4b/1b files)",
+        "ice #313 six-theme list and the .imp-tab/.mg-tab/.un-secret/.store-dup-warn pairs (ice-only surfaces)"
+      ]
+    },
+    {
+      "rev": null,
+      "date": "2026-09-26",
+      "upstreamCommits": 0,
+      "conflicts": 0,
+      "note": "harvest",
+      "harvestedFrom": "ice@941cf51d",
+      "chunk": "harvest2 lane 1b (defects, audit)",
+      "commits": [
+        "3be7b57 (#379 one document menu closer — the generic closer only)",
+        "3cd1cf1 (#55 auth_login_attempts_total wired; #199 signup email detached)",
+        "d36b024 (#199 cancelled confirm toast; Party column follows the party module)",
+        "1a95798 (#218 aiGate from visionGate; #216 prose-wrapped JSON salvage + stop_reason)",
+        "abb3f2a (engine audit gaps found reviewing #416/#421)"
+      ],
+      "branch": "harvest2/lane1b-defects",
+      "features": [
+        "public-site",
+        "monitoring",
+        "signup",
+        "users-admin",
+        "platform-core",
+        "i18n",
+        "staff-audit",
+        "rbac-roles"
+      ],
+      "migrations": {},
+      "trimmed": [
+        "#379 /workshop kiosk header, data-kiosk route flag, navChrome account-menu extraction (ice-only)",
+        "#55 App Insights dependency, SLO.md, azure-monitoring runbook, DB breaker change (engine already has them)",
+        "#199 emailService Graph fetch timeout (engine uses Resend with its own bounded wait); kennitala approve gate (engine has none); sendNewAccountRequestNotification (ice-only)",
+        "#216 90 s vision timeout, visionCore extraction (no vision in the engine)",
+        "#218 shutdown handshake (engine AI calls end inside the 10 s grace), per-controller vision wiring, req.body blob nulling"
+      ]
+    },
+    {
+      "rev": null,
+      "date": "2026-09-26",
+      "upstreamCommits": 0,
+      "conflicts": 0,
+      "note": "harvest",
+      "harvestedFrom": "ice@941cf51d",
       "chunk": "harvest2 lane 4b (shop polish, i18n)",
       "commits": [
         "6f5b37e (#399 English leaks, contactFormat, amber pills, duplicate-name chip)",
