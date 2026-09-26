@@ -26,7 +26,7 @@ paths:
 migrations: [003_user_system, 065_user_invited_at]
 since: 2026-08-09
 origin: null
-history: [review-099, ui-kit, harvest-ice-a-2026-09-24, login-expiry-2026-09-26, harvest2-lane1b-2026-09-26]
+history: [review-099, ui-kit, harvest-ice-a-2026-09-24, login-expiry-2026-09-26, harvest2-lane1b-2026-09-26, harvest2-lane3-2026-09-26]
 ---
 
 The `/api/v1/users` self-service endpoints and the admin user list at `/admin/users`: approve, decline, disable, invite, delete, set role. `adminRoutes.js` is also the generic `/api/v1/admin` catch-all router (mount-order hazard in `docs/API.md`) and carries `email-health`. `AdminUsersView` is the converted reference for the admin UI kit.

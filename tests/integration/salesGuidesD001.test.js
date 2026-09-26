@@ -3,9 +3,9 @@
 // verkeiningar) and point sellers at the demo instance, not at this site
 // (D-020 step 5, 2026-09-22). The seed script and the migration must agree:
 // the text the seed inserts on a fresh database is the text os_001 leaves on
-// a database seeded before the change — once os_003 (D-022, 2026-09-26) is
-// undone from the seed, since the seed now carries os_003's text too
-// (salesGuidesD022.test.js covers that step).
+// a database seeded before the change — once os_004 and os_003 (2026-09-26)
+// are undone from the seed, since the seed now carries their text too
+// (salesGuidesQueueSpread.test.js and salesGuidesD022.test.js cover those steps).
 const crypto = require('crypto');
 const db = require('../../server/config/database');
 const { migrations } = require('../../server/config/migrationSet');
@@ -14,10 +14,11 @@ const { createTestAdminUser } = require('../helpers');
 
 const m = migrations.find(x => x.name === 'os_001_sales_guides_d001_pricing');
 const m3 = migrations.find(x => x.name === 'os_003_sales_guides_d022_pricing');
+const m4 = migrations.find(x => x.name === 'os_004_sales_guides_queue_spread');
 const run = async () => { for (const sql of m.statements) await db.query(sql); };
 const SLUGS = GUIDES.map(g => g.slug);
 
-// The seed is the newest text. Undo os_003 to get the D-001 text os_001 wrote,
+// The seed is the newest text. Undo os_004, then os_003, to get the D-001 text os_001 wrote,
 // then os_001 to get the text as first seeded; each migration's edits newest
 // first. Each new passage must occur exactly once for that to be well defined.
 const count = (s, sub) => s.split(sub).length - 1;
@@ -30,7 +31,8 @@ function undo(row, edits) {
   return row;
 }
 const seedRow = (g) => ({ slug: g.slug, section: g.section, sort_order: g.sort_order, title: g.title, summary: g.summary, body: g.body.trim() });
-const d001Guide = (g) => (m3 ? undo(seedRow(g), m3.edits) : seedRow(g));
+const s3Guide = (g) => (m4 ? undo(seedRow(g), m4.edits) : seedRow(g));
+const d001Guide = (g) => (m3 ? undo(s3Guide(g), m3.edits) : s3Guide(g));
 const oldGuide = (g) => undo(d001Guide(g), m.edits);
 // Filled inside the gated describe (beforeAll), not at module load: on a
 // product where os_001 is not in the migration set, `m` is undefined and

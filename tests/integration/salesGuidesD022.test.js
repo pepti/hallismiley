@@ -6,7 +6,9 @@
 // after a free assessment, and when a seller offers it. Build fees stay
 // 390/580/690 þ.kr. The seed script and the migration must agree: the text the
 // seed inserts on a fresh database is the text os_003 leaves on a database that
-// os_001 already moved to D-001.
+// os_001 already moved to D-001 — once os_004 (the queue note, 2026-09-26) is
+// undone from the seed, since the seed carries os_004's text too
+// (salesGuidesQueueSpread.test.js covers that step).
 const db = require('../../server/config/database');
 const { migrations } = require('../../server/config/migrationSet');
 const { GUIDES } = require('../../server/scripts/seed-sales-guides');
@@ -14,11 +16,13 @@ const { createTestAdminUser } = require('../helpers');
 
 const m1 = migrations.find(x => x.name === 'os_001_sales_guides_d001_pricing');
 const m3 = migrations.find(x => x.name === 'os_003_sales_guides_d022_pricing');
+const m4 = migrations.find(x => x.name === 'os_004_sales_guides_queue_spread');
 const runAll = async (mig) => { for (const sql of mig.statements) await db.query(sql); };
 const SLUGS = GUIDES.map(g => g.slug);
 
-// The seed is D-022 text. Undo os_003 (newest edit first) = the D-001 text
-// os_001 wrote; undo os_001 too = the text as first seeded (2026-08-27).
+// The seed is the newest text. Undo os_004 = the text os_003 left; undo os_003
+// too (newest edit first) = the D-001 text os_001 wrote; undo os_001 too = the
+// text as first seeded (2026-08-27).
 const count = (s, sub) => s.split(sub).length - 1;
 function undo(row, edits) {
   for (const e of [...edits].reverse()) {
@@ -31,9 +35,11 @@ function undo(row, edits) {
 const seedRow = (g) => ({ slug: g.slug, section: g.section, sort_order: g.sort_order, title: g.title, summary: g.summary, body: g.body.trim() });
 // Filled in beforeAll inside the gated describe (a product without os_003
 // skips the suite before anything here would throw).
+const S3 = [];
 const D001 = [];
 const ORIG = [];
 const seedOf = (slug) => seedRow(GUIDES.find(g => g.slug === slug));
+const s3Of = (slug) => S3.find(g => g.slug === slug);
 const text = (g) => [g.title, g.summary, g.body].join('\n');
 const pick = ({ title, summary, body }) => ({ title, summary, body });
 
@@ -67,7 +73,8 @@ const describe = describeForSpec(__filename);
 
 describe('os_003 — sales guides on the D-022 price model, with Samstarf', () => {
   beforeAll(() => {
-    D001.push(...GUIDES.map(g => undo(seedRow(g), m3.edits)));
+    S3.push(...GUIDES.map(g => (m4 ? undo(seedRow(g), m4.edits) : seedRow(g))));
+    D001.push(...S3.map(g => undo({ ...g }, m3.edits)));
     ORIG.push(...D001.map(g => undo({ ...g }, m1.edits)));
   });
   beforeEach(async () => { await db.query('DELETE FROM sales_guides WHERE slug = ANY($1)', [SLUGS]); });
@@ -84,10 +91,10 @@ describe('os_003 — sales guides on the D-022 price model, with Samstarf', () =
     }
   });
 
-  test('every old passage occurs exactly once in the D-001 text, every new one once in the seed', () => {
+  test('every old passage occurs exactly once in the D-001 text, every new one once in the os_003 text', () => {
     for (const e of m3.edits) {
       const before = D001.find(g => g.slug === e.slug);
-      const after = seedOf(e.slug);
+      const after = s3Of(e.slug);
       expect({ e: `${e.slug}.${e.field}`, n: count(before[e.field], e.from) }).toEqual({ e: `${e.slug}.${e.field}`, n: 1 });
       expect({ e: `${e.slug}.${e.field}`, n: count(after[e.field], e.to) }).toEqual({ e: `${e.slug}.${e.field}`, n: 1 });
     }
@@ -130,23 +137,23 @@ describe('os_003 — sales guides on the D-022 price model, with Samstarf', () =
     expect(seedOf('ordalisti').body).toContain('<li><strong>Ókeypis úttekt</strong>');
   });
 
-  test('turns every untouched D-001 guide into exactly the seed text', async () => {
+  test('turns every untouched D-001 guide into exactly the os_003 text', async () => {
     for (const g of D001) await insertGuide(g);
     await runAll(m3);
     for (const slug of SLUGS) {
-      expect({ slug, ...(await row(slug)) }).toEqual({ slug, ...pick(seedOf(slug)) });
+      expect({ slug, ...(await row(slug)) }).toEqual({ slug, ...pick(s3Of(slug)) });
     }
     const tiers = await row('threpin-thrju');
     for (const re of D001_CONTRACT) expect(text(tiers)).not.toMatch(re);
     expect(tiers.body).toContain('Samstarf — fjórða leiðin');
   });
 
-  test('os_001 then os_003 turn the first-seeded guides into the seed text', async () => {
+  test('os_001 then os_003 turn the first-seeded guides into the os_003 text', async () => {
     for (const g of ORIG) await insertGuide(g);
     await runAll(m1);
     await runAll(m3);
     for (const slug of SLUGS) {
-      expect({ slug, ...(await row(slug)) }).toEqual({ slug, ...pick(seedOf(slug)) });
+      expect({ slug, ...(await row(slug)) }).toEqual({ slug, ...pick(s3Of(slug)) });
     }
   });
 
@@ -158,7 +165,7 @@ describe('os_003 — sales guides on the D-022 price model, with Samstarf', () =
     await insertGuide(untouched, { published: true });
     await runAll(m3);
     expect(await row('threpin-thrju')).toEqual(pick(saved));
-    expect(await row('hvad-er-i-hverju-threpi')).toEqual(pick(seedOf('hvad-er-i-hverju-threpi')));
+    expect(await row('hvad-er-i-hverju-threpi')).toEqual(pick(s3Of('hvad-er-i-hverju-threpi')));
     const flags = (await db.query(
       'SELECT slug, published, updated_by FROM sales_guides WHERE slug = ANY($1) ORDER BY slug',
       [['threpin-thrju', 'hvad-er-i-hverju-threpi']])).rows;

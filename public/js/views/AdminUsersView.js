@@ -7,6 +7,8 @@ import { t, href }       from '../i18n/i18n.js';
 import { navigateReplace } from '../navigate.js';
 import { renderAdminShell } from '../components/AdminSidebar.js';
 import { listRoles } from '../services/adminRoles.js';
+// The role's display name (migration 116_role_label; harvest 2 G1), never the slug.
+import { roleLabel } from '../utils/roleLabel.js';
 import { sortableTh, cycleSort, bindSortable } from '../components/adminTable.js';
 import { pagerHtml, bindPager } from '../components/adminPager.js';
 import { readListState, syncListState, readPageSize, writePageSize } from '../utils/listState.js';
@@ -139,7 +141,7 @@ export class AdminUsersView {
     const known = roles.some(r => r.name === current);
     const list  = known ? roles : [...roles, { name: current }];
     return list.map(r =>
-      `<option value="${escHtml(r.name)}" ${current === r.name ? 'selected' : ''}>${escHtml(r.name)}</option>`
+      `<option value="${escHtml(r.name)}" ${current === r.name ? 'selected' : ''}>${escHtml(roleLabel(r))}</option>`
     ).join('');
   }
 

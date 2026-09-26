@@ -362,17 +362,20 @@
   align-self: flex-start;
 }
 
-/* Badges */
+/* Badges — the roles the session holds (Profile; harvest 2 G3 names them by
+   label, several at once). Tokens only (invariant 15): accent TEXT is
+   --accent-ink, never a ramp value. */
+.profile-roles { display: inline-flex; flex-wrap: wrap; gap: 4px; }
 .badge--admin {
-  background: rgba(200,170,110,0.15);
-  color: var(--gold);
-  border: 1px solid rgba(200,170,110,0.4);
+  background: transparent;
+  color: var(--accent-ink);
+  border: 1px solid var(--gold);
   font-size: 0.62rem; font-weight: 700;
   letter-spacing: 0.14em; text-transform: uppercase;
   padding: 3px 8px; font-family: var(--font-sans);
 }
 .badge--user {
-  background: rgba(169,180,192,0.1);
+  background: transparent;
   color: var(--text-secondary);
   border: 1px solid var(--border-dim);
   font-size: 0.62rem; font-weight: 700;

@@ -356,6 +356,16 @@ app.use('/api/v1/admin/bins', (req, res, next) => {
   }
   next();
 });
+// Inventory Watch / stock count and goods receiving (harvest2-lane6a). A
+// receiving SCAN is exempt here: it has its own per-user limiter in
+// adminReceivingRoutes.js, because a pallet is hundreds of one-unit POSTs.
+app.use(['/api/v1/admin/inventory', '/api/v1/admin/receiving'], (req, res, next) => {
+  if (req.method === 'POST' && req.baseUrl === '/api/v1/admin/receiving' && /^\/[^/]+\/scan$/.test(req.path)) return next();
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+    return writeLimiter(req, res, next);
+  }
+  next();
+});
 app.use('/api/v1/admin/handbok', (req, res, next) => {
   if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
     return writeLimiter(req, res, next);
@@ -676,6 +686,8 @@ app.use('/api/v1/admin/change-requests', adminChangeRequestRoutes); // must come
 app.use('/api/v1/admin/nav-config', adminNavRoutes); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin/roles', adminRolesRoutes); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin/bins', adminBinsRoutes); // must come before /api/v1/admin catch-all
+app.use('/api/v1/admin/inventory', require('./routes/adminInventoryRoutes')); // harvest2-lane6a; before the catch-all
+app.use('/api/v1/admin/receiving', require('./routes/adminReceivingRoutes')); // harvest2-lane6a; before the catch-all
 app.use('/api/v1/admin/customers', adminCustomerRoutes); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin/customer-notes', adminCustomerNotesRoutes); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin/bookkeeping', adminBookkeepingRoutes); // must come before /api/v1/admin catch-all
