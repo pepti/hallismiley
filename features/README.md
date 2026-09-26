@@ -18,7 +18,7 @@ Downstream overrides go in `features/local.json`.
 |---|---|---|---|---|---|---|---|
 | `admin-2fa` | Tvíþætt auðkenning / Admin 2FA (TOTP) | 1 | engine | live | `security.mfa.enrolment` | `082_admin_totp`, `107_totp_secret_enc`, `109_user_mfa_reminder` | [admin-2fa.md](admin-2fa.md) |
 | `auth-sessions` | Innskráning og lotur / Auth and sessions | 1 | engine | live | — | `002_auth_users`, `012_backfill_auth_columns`, `041_users_username_lower_unique`, `114_user_expires_at` | [auth-sessions.md](auth-sessions.md) |
-| `rbac-roles` | Hlutverk og aðgangsstýring / Roles and RBAC | 1 | engine | live | — | `056_dynamic_roles`, `061_user_roles` | [rbac-roles.md](rbac-roles.md) |
+| `rbac-roles` | Hlutverk og aðgangsstýring / Roles and RBAC | 1 | engine | live | — | `056_dynamic_roles`, `061_user_roles`, `116_role_label` | [rbac-roles.md](rbac-roles.md) |
 | `signup` | Nýskráning / Public sign-up | 1 | engine | live | `modules.signup.enabled` | — | [signup.md](signup.md) |
 | `social-login` | Innskráning með Google/Facebook / Social login | 1 | engine | dormant | — | `020_oauth_google`, `021_oauth_facebook` | [social-login.md](social-login.md) |
 | `users-admin` | Notendaumsjón / User administration | 1 | engine | live | — | `003_user_system`, `065_user_invited_at` | [users-admin.md](users-admin.md) |
@@ -34,7 +34,7 @@ Downstream overrides go in `features/local.json`.
 | `market-import` | Innlestur markaðsgagna / Market data importer | 7 | engine | live | `modules.salesOps.enabled` | — | [market-import.md](market-import.md) |
 | `commission` | Söluþóknun / Commission | 8 | engine | live | `modules.salesOps.enabled` | `102_commission_settlement` | [commission.md](commission.md) |
 | `customer-accounts` | Viðskiptareikningar / Customer accounts | 8 | engine | live | `modules.salesOps.enabled` | `098_customer_accounts`, `100_customer_account_party` | [customer-accounts.md](customer-accounts.md) |
-| `customers-crm` | Viðskiptavinir og minnispunktar / Customers and notes | 8 | engine | live | `modules.shop.enabled` | `064_customer_notes` | [customers-crm.md](customers-crm.md) |
+| `customers-crm` | Viðskiptavinir og minnispunktar / Customers and notes | 8 | engine | live | `modules.shop.enabled` | `064_customer_notes`, `117_user_address` | [customers-crm.md](customers-crm.md) |
 | `staff-audit` | Aðgerðaskrá starfsfólks / Staff audit log | 8 | engine | live | — | — | [staff-audit.md](staff-audit.md) |
 | `bookkeeping-core` | Bókhaldskjarni / Bookkeeping core | 9 | engine | live | `modules.books.enabled` | `072_bookkeeping`, `073_books_expenses`, `075_books_reconciliation`, `101_books_deferred_revenue`, `103_books_vehicle_accounts` | [bookkeeping-core.md](bookkeeping-core.md) |
 | `books-intake` | Innhólf fylgiskjala / Books intake queue | 9 | engine | live | `modules.books.enabled` | `096_books_capture_spine` | [books-intake.md](books-intake.md) |
