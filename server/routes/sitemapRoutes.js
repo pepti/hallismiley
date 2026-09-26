@@ -34,6 +34,7 @@ const { forcedLocaleFor, SUPPORTED_LOCALES, PUBLIC_DEFAULT_LOCALE } = require('.
 const { publicNav, legalRoutes, NOINDEX_ROUTES } = require('../config/publicSurface');
 const { identity, organizationDescription } = require('../config/identity');
 const { t, has } = require('../i18n');
+const { isIndexableRequest } = require('../utils/indexability');
 
 const APP_URL = (process.env.APP_URL || 'https://www.orangesmiley.is').replace(/\/$/, '');
 
@@ -262,9 +263,22 @@ router.get('/llms.txt', (req, res, next) => {
   }
 });
 
+// What a non-indexable instance serves at /sitemap.xml: a valid, EMPTY urlset.
+// Same host gate as robots.txt and the robots meta tag (utils/indexability.js,
+// ported from icelandicstore #123). robots.txt is advisory; this is the one
+// endpoint that enumerates the whole public surface in a single request, so a
+// TEST stack, an Azure default hostname or a laptop instance hands out nothing.
+const EMPTY_SITEMAP = [
+  '<?xml version="1.0" encoding="UTF-8"?>',
+  '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>',
+  '',
+].join('\n');
+
 router.get('/sitemap.xml', async (req, res, next) => {
   try {
-    const xml = await buildSitemap();
+    // The body depends on the Host, so a shared cache must key on it.
+    res.set('Vary', 'Host');
+    const xml = isIndexableRequest(req) ? await buildSitemap() : EMPTY_SITEMAP;
     res.set('Content-Type', 'application/xml; charset=utf-8');
     res.set('Cache-Control', 'public, max-age=600, stale-while-revalidate=300');
     res.status(200).send(xml);
@@ -273,4 +287,4 @@ router.get('/sitemap.xml', async (req, res, next) => {
   }
 });
 
-module.exports = { router, buildSitemap, buildLlmsTxt, lastmodKeys, invalidateLastmodCache };
+module.exports = { router, buildSitemap, buildLlmsTxt, lastmodKeys, invalidateLastmodCache, EMPTY_SITEMAP };

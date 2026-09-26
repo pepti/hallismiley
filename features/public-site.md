@@ -46,6 +46,9 @@ paths:
   - tests/integration/llms.test.js
   - tests/integration/ssrMeta.test.js
   - tests/integration/spaStatus.test.js
+  - server/utils/indexability.js
+  - tests/unit/indexability.test.js
+  - tests/integration/indexability.test.js
   - tests/unit/routePatterns.test.js
   - tests/unit/routerLazyViews.test.js
   - e2e/lazy-views.spec.js
@@ -73,5 +76,6 @@ The SPA shell and the visitor pages: home (video hero), `/thjonusta`, `/um-okkur
 - No product tiers or prices on the company site; `SERVICE_OFFERINGS` mirrors the locale service names; `productSite.js` builds the one product-site URL.
 - A new hero clip gets a NEW filename (`identity.hero`); under reduced motion / Save-Data the hero shows the poster with no autoplay; `e2e/navigation.spec.js` pins the served clip to the config's.
 - The canonical origin is `APP_URL`; `public/index.html` is baked with it and `ssrMeta.js` swaps it on load (and drops the baked Organization, re-emitting it from the identity on every page) — change the two together.
+- Only the production tier on a public host may be indexed (`utils/indexability.js` `isIndexableRequest`, ported from icelandicstore #123): with `APP_ENV` set to anything but `production`, or on an infrastructure host (`*.azurewebsites.net`, localhost, a bare IP), robots.txt is `Disallow: /`, every page's robots meta is `noindex, nofollow` and `/sitemap.xml` is an empty urlset. All three read the same helper and send `Vary: Host`; suites that assert indexability send the public Host (APP_URL's) (harvest 2, lane 1a).
 - The sitemap's `<lastmod>` is the newest `site_content` row a page renders (engine routes via `ssrMeta.contentKeysForRoute`, product routes via `identity.routes[*].contentKeys`) or absent — never a deploy timestamp; `/llms.txt` is every product's, built from the seam and `ssrMeta.metaForRoute` only. Legal titles never break inside a word down to 320px.
 - Full rules: [../docs/ARCHITECTURE.md#3-public-site--home-thjonusta-um-okkur-hafa-samband-ssr-meta-sitemap-seo](../docs/ARCHITECTURE.md#3-public-site--home-thjonusta-um-okkur-hafa-samband-ssr-meta-sitemap-seo).
