@@ -1223,9 +1223,9 @@ company/                  gitignored: plans, decisions, logs, market-research st
 
 | | |
 |---|---|
-| Services | `server/services/emailService.js` (`emailShell`), `outboundAllowlist.js`; `server/utils/inviteSend.js` (the invite reporting contract); templates use `server/i18n/` |
+| Services | `server/services/emailService.js` (`emailShell`, `deliver`), `outboundAllowlist.js`; `server/utils/emailPalette.js` (the light palette, derived from the theme tokens); `server/utils/inviteSend.js` (the invite reporting contract); templates use `server/i18n/`; header logo in `public/assets/brand/` (`identity.email`) |
 | Routes | `GET /api/v1/admin/email-health` in `server/routes/adminRoutes.js` |
-| Jest | `tests/unit/outboundAllowlist.test.js`, `emailReplyTo.test.js`, `emailNameOnlyRecipient.test.js`; `tests/integration/inviteFeedback.test.js`; exercised by `tests/integration/auth.test.js`, `party.test.js`, `contact.test.js` |
+| Jest | `tests/unit/outboundAllowlist.test.js`, `emailReplyTo.test.js`, `emailNameOnlyRecipient.test.js`, `emailPalette.test.js`, `emailShell.test.js`; `tests/integration/inviteFeedback.test.js`, `emailLogoAsset.test.js`; exercised by `tests/integration/auth.test.js`, `party.test.js`, `contact.test.js`; `tests/lib/renderAllEmails.js` drives every sender |
 | Migrations | 062 |
 | Features | [email](../features/email.md) |
 | Feature doc | `RUNBOOK.md`, `docs/DEPLOYMENT.md` (env) |

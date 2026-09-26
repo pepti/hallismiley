@@ -13,6 +13,10 @@ paths:
   - server/utils/inviteSend.js
   - tests/integration/inviteFeedback.test.js
   - tests/unit/emailNameOnlyRecipient.test.js
+  - server/utils/emailPalette.js
+  - tests/unit/emailPalette.test.js
+  - tests/unit/emailShell.test.js
+  - tests/integration/emailLogoAsset.test.js
 migrations: []
 since: 2026-08-09
 origin: null
