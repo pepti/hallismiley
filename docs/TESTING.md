@@ -280,7 +280,7 @@ another repo's live run.
 | Jest base (never created) | `os_feat_harvest_h2_test` |
 | Template | `os_feat_harvest_h2_tmpl_test` |
 | Worker N | `os_feat_harvest_h2_w<N>_test` |
-| A test's extra DB (`createExtraTestDb('demoreset')`) | `os_feat_harvest_h2_w2_demoreset_test` |
+| A test's extra DB (`createExtraTestDb('demo')`, the demo-reset test) | `os_feat_harvest_h2_w2_demo_test` |
 | Playwright | `os_e2e_feat_harvest_h2_test` |
 
 The slug is trimmed so the longest name — a worker extra, `_w99_` + 12
@@ -290,6 +290,18 @@ characters — fits Postgres's 63 bytes. A slug that ends like a run infix
 `createExtraTestDb(suffix)` / `extraTestDbUrl(suffix)` from `tests/workerDb.js`
 (suffix: 1–12 of `[a-z0-9]`): the run's teardown and the sweep own the name,
 so a test that dies before its `afterAll` does not leak it.
+
+Who creates a database, and who owns it (swept 2026-09-26,
+[test-db-followups-2026-09-26](history.d/2026-09-26-chore-test-db-hygiene-followups.md#test-db-followups-2026-09-26)):
+
+| Creator | Names | Owned by |
+|---|---|---|
+| `tests/globalSetup.js` | template + workers | the run's teardown, the sweep, Ctrl-C cleaner |
+| `createExtraTestDb` — today only `tests/integration/demoReset.test.js` | `…_w<N>_demo_test` | the same (a derived name). The suffix is exactly `demo`: the reset's guard wants "demo" as a WORD in the database name, so `demoreset` would be refused |
+| `e2e/global-setup.js` | `<p>_e2e_<branch>_test` | the sweep's e2e rules, `test:db:clean -- --gone` |
+| `tests/integration/testDbSweep.test.js` | `zzsw<pid>_…_test` | the suite itself: outside every product prefix on purpose (it runs the real sweep), so its `beforeAll` drops any `zzsw<pid>_…` set whose pid is dead and that has no session |
+| `server/scripts/books-replay.js` (`createdb orangesmiley_replay`, by hand) | not a test database | the operator — a deliberate replay target for real books, never swept |
+| `README.md` / `setup.ps1` (`createdb orangesmiley`) | the dev database | the operator |
 
 ### Labels
 

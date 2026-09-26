@@ -110,3 +110,26 @@ td.acct-amount--pos, span.acct-amount--pos { color: var(--success); font-variant
   gap: 1rem; margin-top: 2rem;
 }
 .acct-h2-row .acct-h2 { margin: 0; }
+
+/* Pass-through invoice rows + live preview (D-022; AdminAccountDetailView).
+   Tokens only (invariant 15): the fields reuse .acct-field, the preview the
+   .admin-table + .acct-table figures and .acct-notice. The block takes the full
+   row of the .acct-inline form so its rows line up under the kind select. */
+.acct-pt { flex-basis: 100%; display: flex; flex-direction: column; gap: var(--sp-3); }
+.acct-pt[hidden] { display: none; }
+.acct-pt .acct-group__help { margin: 0; }
+.acct-pt__lines { display: flex; flex-direction: column; gap: var(--sp-2); }
+.acct-pt__row {
+  display: grid; grid-template-columns: minmax(9rem, 12rem) minmax(12rem, 1fr) minmax(9rem, 12rem) auto;
+  align-items: end; gap: var(--sp-2);
+}
+.acct-pt__remove { align-self: end; }
+.acct-pt__table caption {
+  text-align: left; padding: 0 0 var(--sp-2);
+  font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--text-secondary);
+}
+@media (max-width: 720px) {
+  .acct-pt__row { grid-template-columns: 1fr 1fr; }
+  .acct-pt__desc { grid-column: 1 / -1; }
+}

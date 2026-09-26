@@ -69,6 +69,8 @@ router.post('/checkout',
   checkoutLimiter,
   softAuth,
   csrfProtect,
+  // The ordering pause answers before the body validators (harvest2-lane7a).
+  require('../services/checkoutRules').orderingPauseGate,
   validateCheckoutContact,
   shopController.createCheckoutSession);
 

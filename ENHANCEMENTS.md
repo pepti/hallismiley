@@ -298,6 +298,22 @@ The survey's headline is that **the harvest is not one-directional**. This repo'
 **Why.** The engine's variant table could not add a row, "delete" kept the SKU taken for ever, and the delivery note was a list of identical names.
 **Effort.** L (done). **Risk.** Medium — a unique rule became partial (expand-safe; see the migration's comment).
 
+### 31. ✅ Approved 2026-09-26 (harvest 2) — Sales report periods, net sales, insights, marketing; "Í dag" attention cards; MCP sales tools
+
+**Status.** Approved by Halli 2026-09-26 (harvest 2) as lane 5 and built on branch `harvest2/lane5-reports` ([harvest2-lane5](docs/history.d/2026-09-26-harvest2-lane5-reports.md#harvest2-lane5-2026-09-26)). Engine migration `121_order_vat_snapshot`. All new strings DRAFT.
+
+**What.** From icelandicstore #414/#417/#419: eleven period presets with a comparison window and +/- % on every KPI; net sales ("Sala án VSK") as the headline from a VAT snapshot the checkout now writes with the invoice's own rule; fulfilment time, new and dormant customers; a marketing section (visits by channel, discounted sales, campaigns); "Í dag" cards for sold-out goods and sign-ups awaiting approval, every card linking to its list filtered to the rows it counts; read-only MCP `sales_report` / `recent_orders`, gated by the token owner's admin views.
+**Why.** The report showed gross revenue over 7/30/90 rolling days only; the business counts net, by calendar period, against the last one.
+**Effort.** M. **Risk.** Money path: the checkout writes the snapshot inside the order transaction (a refused rate leaves NULL, never a lost sale), and `buildLines` is pinned byte-for-byte to its pre-extraction output.
+
+### 32. ✅ Approved 2026-09-26 (harvest 2) — Checkout settings enforced on the order path; a time-limited site announcement
+
+**Status.** Approved by Halli 2026-09-26 as Harvest 2 lane 7a and built on branch `harvest2/lane7a-checkout-settings` from icelandicstore `941cf51d` (#151, #200): [harvest2-lane7a](docs/history.d/2026-09-26-harvest2-lane7a-checkout-settings.md#harvest2-lane7a-2026-09-26). No migration (`app_settings`). All new strings DRAFT. Both are OFF / unchanged until an admin saves: the defaults reproduce today's checkout and show no announcement.
+
+**What.** (a) Admin → Greiðsla (view `checkout`, shop module, hidden here): an ordering pause with a per-language message, a minimum order value, the delivery price as settings (flat rate + free-over threshold; `SHIPPING_FLAT_RATE_ISK` the fallback), optional / required / hidden rules for phone, company, kennitala and the note, and who gets a "new paid order" email. All enforced on the server; the cart and checkout show them. (b) Admin → Tilkynning (view `announcement`, core): on/off, a start and end date-time, IS + EN heading and message, an optional link; signed-out visitors get a dialog once, then a slim banner.
+**Why.** A shop needs a kill switch, a minimum and a delivery price it can change without a redeploy; a cutover (a new site, a move) needs one message every visitor sees for a while.
+**Effort.** M. **Risk.** Money path: the pause, the minimum and the price are server-side with tests on each; the owner alert can never fail or hold up the Stripe webhook. **For Halli:** the pause answers 503 (the brief) where ice answers 403 so an intentional pause does not count against the 5xx error budget — one constant to flip; company and kennitala are checked but not stored on the order yet (needs a migration).
+
 ### Reverse queue — this repo → icelandicstore and the base
 
 Where the core is ahead. Queue for icelandicstore's next window; fold into the base PR where it fits.

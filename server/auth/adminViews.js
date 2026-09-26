@@ -22,6 +22,15 @@ const ADMIN_VIEW_IDS = [
   // here by identity.surface.hiddenAdminViews. Both MOVE stock (through
   // models/Inventory.js, audited), so granting one is granting that.
   'inventory', 'receiving',
+  // Afgreiðsla (harvest2-lane7a): the checkout settings — the ordering pause,
+  // the minimum order, the field rules, the delivery price, the owner alert
+  // list. Owned by the shop module. Granting it is granting the power to
+  // stop the shop taking orders.
+  'checkout',
+  // Tilkynning (harvest2-lane7a): the time-limited site announcement every
+  // signed-out visitor sees. Core, no module. Granting it is granting a
+  // voice on the public site.
+  'announcement',
   // Software updates. Granting this is granting SIGHT of the release channel and
   // the update history — the apply/rollback/settings routes are hard admin-only
   // on top (server/routes/systemRoutes.js), so an ops role can watch a fleet

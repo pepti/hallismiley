@@ -1,0 +1,66 @@
+/* The site announcement (components/CutoverNotice.js; harvest2-lane7a, ported
+   from icelandicstore #200). The dialog borrows .modal-overlay/.modal (layout
+   .css, components.css); the extras live here. Tokens only (invariant 15):
+   the banner is the elevated surface with an --accent-ink rule and body ink,
+   which reads on Bjart, Glóð and Miðnætti alike.
+
+   The banner has a FIXED height and one line of text (ellipsis): its slot is
+   reserved at boot on a return visit, so filling it moves nothing. */
+
+.announce-modal { max-width: 520px; }
+.announce-modal__title { padding-right: var(--sp-6); }
+.announce-modal__message {
+  margin: var(--sp-3) 0 var(--sp-5);
+  color: var(--text-secondary);
+  line-height: 1.6;
+  white-space: pre-line; /* the admin's line breaks, as plain text */
+}
+.announce-modal__actions {
+  display: flex; gap: var(--sp-3); flex-wrap: wrap; justify-content: flex-end;
+}
+
+.announce-banner {
+  box-sizing: border-box;
+  height: 40px;
+  display: flex; align-items: center; gap: var(--sp-3);
+  padding: 0 var(--sp-4);
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
+  box-shadow: inset 3px 0 0 var(--accent-ink);
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  overflow: hidden;
+}
+/* The reserved slot on a return visit, before the fetch answers: its height
+   is held (no shift when it fills), its content not yet shown. */
+.announce-banner--pending > * { visibility: hidden; }
+.announce-banner__text {
+  margin: 0; flex: 1 1 auto; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.announce-banner__more {
+  flex: 0 0 auto;
+  padding: 0.2rem 0.7rem;
+  border: 1px solid var(--accent-ink);
+  border-radius: var(--radius-sm);
+  background: transparent; color: var(--accent-ink);
+  font: inherit; font-weight: 600; cursor: pointer;
+}
+/* Filled on hover: --accent-ink is the dark ink on the light themes and the
+   light ink on the dark ones, and --bg-base is always its opposite, so the
+   pair holds its contrast either way round (a literal #fff would not). */
+.announce-banner__more:hover { background: var(--accent-ink); color: var(--bg-base); }
+.announce-banner__close {
+  flex: 0 0 auto;
+  width: 28px; height: 28px; padding: 0; line-height: 1;
+  border: 0; background: transparent; color: var(--text-muted);
+  font-size: 0.9rem; cursor: pointer;
+}
+.announce-banner__close:hover { color: var(--text-primary); }
+.announce-banner__more:focus-visible,
+.announce-banner__close:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 2px; }
+
+@media (max-width: 480px) {
+  .announce-banner { padding: 0 var(--sp-3); gap: var(--sp-2); font-size: 0.8rem; }
+  .announce-banner__more { padding: 0.15rem 0.5rem; }
+}

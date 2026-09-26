@@ -127,6 +127,18 @@ describe('POST /invoices/service', () => {
     expect(Number(over.body.invoice.subtotal_net)).toBe(45000);
     expect(over.body.commission).toBeNull();
 
+    // D-022's pass-through costs (migration 122) carry none either — the case
+    // tests/integration/passthroughInvoice.test.js covers in full.
+    const pass = await issue({
+      account_id: account.id, kind: 'passthrough', period: '2026-09',
+      lines: [{ type: 'hosting', description: 'TEST-umhverfi', cost_isk: 10000 }],
+    });
+    expect(pass.status).toBe(201);
+    // Derived from the product's terms (billing.passthrough), never a literal.
+    const { markupBp } = require('../../server/services/bookkeeping/invoiceService').passthroughTerms();
+    expect(Number(pass.body.invoice.subtotal_net)).toBe(Math.round(10000 * (10000 + markupBp) / 10000));
+    expect(pass.body.commission).toBeNull();
+
     expect(await commissionRows(account.id)).toHaveLength(3);
   });
 

@@ -9,6 +9,7 @@ import { initCookieConsent } from './services/cookieConsent.js';
 import { installBuildGuard } from './services/buildGuard.js';
 import { ThemeSwitcher } from './components/ThemeSwitcher.js';
 import { mountDemoBanner } from './components/DemoBanner.js';
+import { mountCutoverNotice } from './components/CutoverNotice.js';
 import { initTheme, getEffectiveEnv, getDemoMode } from './services/themePrefs.js';
 import { syncBodyClass as syncAmbienceClass } from './services/ambiencePrefs.js';
 import {
@@ -62,6 +63,12 @@ document.body.insertBefore(navEl, document.getElementById('app'));
 // data-demo-instance>. Above the nav, in the flow; re-worded on a locale switch.
 mountDemoBanner();
 window.addEventListener('localechange', () => mountDemoBanner());
+
+// The time-limited site announcement (Admin → Tilkynning; harvest2-lane7a,
+// ported from icelandicstore #200): signed-out visitors only. The banner's
+// slot is reserved NOW, in the same frame as the nav, when this browser last
+// showed it — the fetch then fills it without moving the page.
+mountCutoverNotice({ anchor: navEl });
 
 // ── Floating theme switcher — mounted outside #app so it survives SPA nav ──
 // theme-boot.js already applied the saved theme pre-paint; initTheme() re-syncs

@@ -47,9 +47,34 @@ async function dropAll() {
   for (const { datname } of rows) await sweep.forceDropDatabase(admin, datname);
 }
 
+// The `zzsw<pid>_` names are deliberately outside every product's prefix (the
+// suite runs the real sweep and must not meet a real run's databases), so no
+// teardown or sweep owns them: a run killed before afterAll would leak its
+// set. This suite owns them instead — on the way in it drops every
+// `zzsw<pid>_…_test` whose pid is dead and that no session holds (a live pid
+// is another run of this suite, in another worktree, on the same server). The
+// pid is only meaningful on this host, so a set labelled by another host is
+// left alone (its own next run cleans it).
+async function dropOrphans() {
+  const { rows } = await admin.query(
+    `SELECT d.datname,
+            (SELECT count(*)::int FROM pg_stat_activity a WHERE a.datname = d.datname) AS sessions
+       FROM pg_database d
+      WHERE d.datname ~ '^zzsw[0-9]+_.*_test$'`
+  );
+  for (const { datname, sessions } of rows) {
+    const pid = Number(/^zzsw(\d+)_/.exec(datname)[1]);
+    if (pid === process.pid || sessions > 0 || sweep.isPidAlive(pid)) continue;
+    const label = await sweep.readLabel(admin, datname);
+    if (label && label.host && label.host !== os.hostname()) continue;
+    await sweep.forceDropDatabase(admin, datname);
+  }
+}
+
 beforeAll(async () => {
   admin = new Client({ connectionString: adminDbUrl(process.env.DATABASE_URL) });
   await admin.connect();
+  await dropOrphans();
   await dropAll();
   // A pid that certainly belonged to a process that has exited.
   deadPid = spawnSync(process.execPath, ['-e', '0']).pid;
@@ -157,5 +182,26 @@ describe('runSweep base', () => {
     expect(await exists(n('run_w1_extra_test'))).toBe(false);
     expect(await exists(n('run_w2_test'))).toBe(true);
     expect(await exists(n('runx_w1_test'))).toBe(true);
+  });
+});
+
+describe('this suite\'s own leftovers', () => {
+  test('a killed run\'s zzsw set is dropped on the way in; a live pid\'s set is kept', async () => {
+    const dead = `zzsw${deadPid}_orphan_w1_test`;
+    const live = `zzsw${process.ppid}_live_w1_test`;
+    const elsewhere = `zzsw${deadPid}_elsewhere_w1_test`;
+    try {
+      await admin.query(`CREATE DATABASE "${dead}"`);
+      await admin.query(`CREATE DATABASE "${live}"`);
+      await create(elsewhere, jestLabel({ pid: deadPid, host: 'another-host' }));
+      await dropOrphans();
+      expect(await exists(dead)).toBe(false);
+      expect(await exists(live)).toBe(true);
+      expect(await exists(elsewhere)).toBe(true); // a pid from another host proves nothing
+    } finally {
+      await sweep.forceDropDatabase(admin, dead);
+      await sweep.forceDropDatabase(admin, live);
+      await sweep.forceDropDatabase(admin, elsewhere);
+    }
   });
 });
