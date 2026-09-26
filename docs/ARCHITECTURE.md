@@ -805,9 +805,9 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Client | `public/js/services/salesGuides.js` |
 | Scripts | `server/scripts/seed-sales-guides.js` |
 | CSS | `public/css/admin-handbok.css` |
-| Jest | `tests/integration/salesGuides.test.js`, `salesGuidesServicesPage.test.js`, `salesGuidesD001.test.js` |
+| Jest | `tests/integration/salesGuides.test.js`, `salesGuidesServicesPage.test.js`, `salesGuidesD001.test.js`, `salesGuidesD022.test.js` |
 | e2e | `e2e/sales-handbook.spec.js` (+ `e2e/lib/salesUser.js`) |
-| Migrations | 090, 104, os_001 |
+| Migrations | 090, 104, os_001, os_003 |
 | Features | [sales-handbook](../features/sales-handbook.md) |
 | Feature doc | `docs/SALES-STAFF.md` |
 
@@ -820,15 +820,25 @@ company/                  gitignored: plans, decisions, logs, market-research st
   `updated_by IS NULL` ([services-page](HISTORY.md#services-page)).
 - A text change in `seed-sales-guides.js` ships with a product migration that
   makes the same change to seeded rows (the seed is `ON CONFLICT DO NOTHING`);
-  os_001 moved the guides to D-001 pricing and the demo instance, and
-  `salesGuidesD001.test.js` checks seed and migration agree
-  ([handbook-d001-2026-09-22](HISTORY.md#handbook-d001-2026-09-22)).
-- Guide prices follow D-001 (build fee + service contract + verkeiningar) and
-  carry DRÖG; demos go to `demo.rekstrarkerfi.is`, never this site
-  ([handbook-d001-2026-09-22](HISTORY.md#handbook-d001-2026-09-22)).
+  os_001 moved the guides to D-001 pricing and the demo instance, os_003 to
+  D-022; `salesGuidesD001.test.js` and `salesGuidesD022.test.js` check seed
+  and migrations agree step by step, the first seed → os_001 → os_003 → today's
+  seed ([handbook-d001-2026-09-22](HISTORY.md#handbook-d001-2026-09-22),
+  [handbook-d022-2026-09-26](HISTORY.md#handbook-d022-2026-09-26)).
+- Guide prices follow D-022 (amends D-001): build fee 390/580/690 þ.kr. +
+  service contract 29/59/89 þ.kr./mán with 2/3/5 verkeiningar, einingaverð
+  6.000 kr., hosting and in-system AI beyond the included amount at cost +
+  15 %; all carry DRÖG. No D-001 contract figure (19/29/39, 5/10/20) may
+  reappear in a guide. Demos go to `demo.rekstrarkerfi.is`, never this site
+  ([handbook-d001-2026-09-22](HISTORY.md#handbook-d001-2026-09-22),
+  [handbook-d022-2026-09-26](HISTORY.md#handbook-d022-2026-09-26)).
+- Samstarf, the fourth tier, has no listed price anywhere in the handbook:
+  the guides tell a seller to offer the free assessment instead of quoting a
+  tier, and the Samstarf copy carries no figure. It is DRAFT until Halli
+  approves it ([handbook-d022-2026-09-26](HISTORY.md#handbook-d022-2026-09-26)).
 - Onboarding a hire is no code: `/admin/customers` → `solufolk` in `/admin/roles`.
 
-**History**: [sales-staff](HISTORY.md#sales-staff) · [services-page](HISTORY.md#services-page) · [handbook-d001-2026-09-22](HISTORY.md#handbook-d001-2026-09-22)
+**History**: [sales-staff](HISTORY.md#sales-staff) · [services-page](HISTORY.md#services-page) · [handbook-d001-2026-09-22](HISTORY.md#handbook-d001-2026-09-22) · [handbook-d022-2026-09-26](HISTORY.md#handbook-d022-2026-09-26)
 
 ## 11. Shop — cart, checkout, orders, products, collections, bins, discounts (hidden surface)
 

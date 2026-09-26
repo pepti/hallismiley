@@ -51,7 +51,7 @@ Acceptance (2026-08-09 counts): 2012 Jest + 109 Playwright green · lint clean �
 
 ## Open questions for Halli
 
-1. Confirm tier pricing (D-001: build fee 390/580/690 þ.kr. + service contract 19/29/39 þ.kr./mán with 5/10/20 verkeiningar — DRAFT; the old flat 39–79 þ.kr./mán is retired).
+1. Tier pricing: D-022 approved 2026-09-26 (build fee 390/580/690 þ.kr. + service contract 29/59/89 þ.kr./mán with 2/3/5 verkeiningar, einingaverð 6.000 kr.; fourth tier Samstarf, price after a free assessment) — prices carry DRÖG until D-008's rule fires; D-001's 19/29/39 with 5/10/20 and the old flat 39–79 þ.kr./mán are retired.
 2. Sign-off on all IS/EN copy (marked DRAFT in locale files).
 3. ENHANCEMENTS.md decisions after Job 3.
 
@@ -135,6 +135,15 @@ chunk lands; add a HISTORY entry for the story.
   the guides as "DRÖG — Halli staðfestir": the einingaverð amount, whether unused
   verkeiningar carry over, the cost of moving up a tier, how sellers demo before
   the demo instance exists.
+- **Halli approves the Samstarf copy + publishes the guides** (2026-09-26): the
+  handbook moved to D-022 (29/59/89 þ.kr./mán with 2/3/5 verkeiningar,
+  einingaverð 6.000 kr. — which closes that open item) and gained the fourth
+  tier Samstarf, the free assessment and when a seller offers it, all DRÖG
+  (migration os_003; [handbook-d022-2026-09-26](docs/HISTORY.md#handbook-d022-2026-09-26)).
+  Still open in the guides: whether unused verkeiningar carry over, the cost of
+  moving up a tier, how a Samstarf contract is shaped (left to the offer).
+  Owed elsewhere by D-022: D-003's commission examples and D-012's margin
+  column re-run against the new fees.
 - Decisions that are his, not code's: the lawyer on netting-only set-off
   (contract 5.4 DRÖG), Bókari on written-off balances and verktakamiði, the
   accountant on `docs/ACCOUNTANT-QUESTIONS.md` §2, §6, §7, §11; the VSK
