@@ -78,6 +78,7 @@ const Customer = {
       `SELECT u.id, ${U_EMAIL} AS email, u.username, u.display_name, u.phone, u.role,
               u.email_verified, u.disabled, u.created_at, u.invited_at,
               ${isPartyGuest('u')} AS is_party_guest,
+              (${EDITABLE('u')}) AS editable,
               COALESCE(o.cnt, 0)::int    AS order_count,
               COALESCE(o.spent, 0)::bigint AS total_spent
          FROM users u
@@ -234,6 +235,19 @@ const Customer = {
     const keys = ALLOWED.filter(k => k in fields);
     if (!keys.length) return Customer.findEditable(id);
     const set = keys.map((k, i) => `${k} = $${i + 2}`);
+    // A NEW address inherits nothing from the old mailbox, in the same
+    // statement (so it can never be half-applied): not its verification, not
+    // a set-password/reset link still in flight, and not `invited_at` — the
+    // seller area (auth/publishedSeller.js) reads invited_at as proof the
+    // address is real, so keeping it would vouch for an address nobody
+    // checked (lane 3 review, H1). The right-hand `email` is the OLD value.
+    if (keys.includes('email')) {
+      const p = `$${keys.indexOf('email') + 2}`;
+      for (const col of ['password_reset_token', 'password_reset_expires', 'invited_at']) {
+        set.push(`${col} = CASE WHEN email IS DISTINCT FROM ${p} THEN NULL ELSE ${col} END`);
+      }
+      set.push(`email_verified = CASE WHEN email IS DISTINCT FROM ${p} THEN FALSE ELSE email_verified END`);
+    }
     const { rows } = await dbQuery(
       `UPDATE users u SET ${set.join(', ')}
         WHERE u.id = $1 AND ${EDITABLE('u')}

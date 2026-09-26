@@ -135,6 +135,31 @@ Server (`server/i18n/*.json`), IS / EN:
 - Numbers are provisional (master ended at 114; 115 is reserved by lane 4b) and may be renumbered
   at merge.
 
+### Review pass (invariant-reviewer on `git diff master...HEAD`)
+
+Verdict FAIL on one finding, fixed on the branch:
+
+- **H1 (fixed).** An email change kept `invited_at`, which `auth/publishedSeller.js` reads as
+  proof that an address is real — so re-pointing an invited customer's email at a published
+  seller's address could open that seller's area on the public instance. `Customer.updateContact`
+  now clears `invited_at`, `password_reset_token`/`_expires` and `email_verified` in the SAME
+  UPDATE whenever the address really changes (`CASE WHEN email IS DISTINCT FROM …`), which also
+  fixes **L4** (the reset used to be a second statement). Test extended.
+- **M1 (open, Halli).** The `customers` view now writes user rows (the email). Recorded below; the
+  route file's header comment no longer says customer writes are admin-only.
+- **L1 (fixed).** Reference copies `server/migrations/116_role_label.sql`, `117_user_address.sql`.
+- **L2 (won't fix).** 116's backfill writes data in an engine migration; it derives each label from
+  that database's own row (no product copy), so it stays within invariant 4.
+- **L3 (fixed).** `docs/API.md` rows for `/admin/roles` and `/admin/customers`.
+- **L5 (fixed).** The list returns `editable` (the same `EDITABLE` guard), and Edit shows only there.
+
+Other checks in the review passed: SQL built from fixed column lists only, every new route CSRF +
+`requireView('customers')`, `escHtml` on every interpolated value, no colour literal added (the old
+`#5cb5e0` and the badges' `rgba()` are gone), every audit action in `ACTIONS`.
+
+Also seen in passing: the Customers LIST table is wider than a 375px phone (about 500px of
+sideways page scroll) — pre-existing, not this lane's dialog.
+
 ### Still owed / for Halli
 
 - **The `customers` view now grants an EDIT of a customer's email**, and a new email plus the public

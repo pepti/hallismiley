@@ -290,14 +290,8 @@ const adminCustomerController = {
       }
       if (!customer) return res.status(404).json({ error: t(req.locale, 'errors.admin.customerNotFound'), code: 404 });
       if (changed.length) {
-        // A changed address is no longer verified by anyone: the verification
-        // flag belonged to the old mailbox — and so did any set-password or
-        // reset link still in flight, which must not keep working from there.
-        if (changed.includes('email')) {
-          await dbQuery(
-            `UPDATE users SET email_verified = FALSE, password_reset_token = NULL, password_reset_expires = NULL
-              WHERE id = $1`, [existing.id]);
-        }
+        // An email change un-verifies the address and drops any link in flight
+        // and invited_at in the SAME UPDATE (Customer.updateContact).
         await staffAudit.recordSafe({
           ...staffAudit.actorOf(req), action: 'user.updated', entityType: 'user', entityId: existing.id,
           summary: { fields: changed },

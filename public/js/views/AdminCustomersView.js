@@ -155,7 +155,7 @@ export class AdminCustomersView {
               <td>${this._date(c.created_at)}</td>
               <td>${escHtml(this._statusLabel(c))}</td>
               <td class="cust-actions">${c.role === 'user'
-                ? `${c.is_party_guest ? '' : `<button type="button" class="cust-notes-btn cust-edit-btn" data-edit-id="${escHtml(String(c.id))}"
+                ? `${!c.editable ? '' : `<button type="button" class="cust-notes-btn cust-edit-btn" data-edit-id="${escHtml(String(c.id))}"
                      aria-label="${escHtml(t('adminCustomers.editRow', { name: c.display_name || c.email || c.username || '' }))}">${t('adminCustomers.edit')}</button>`}
                    <button type="button" class="cust-notes-btn" data-id="${escHtml(String(c.id))}" data-email="${escHtml(c.email || c.display_name || c.username || '')}">${t('customerNotes.title')}</button>`
                 : ''}</td>

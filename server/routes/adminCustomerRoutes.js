@@ -1,6 +1,9 @@
 // Admin Customers routes. Listing + import preview are read-only and gated by the
-// grantable 'customers' view; creating/importing customers writes user rows, so
-// those are hard admin-only (+ CSRF). All require auth.
+// grantable 'customers' view; creating, importing, deleting and bulk-inviting
+// customers are hard admin-only (+ CSRF). Since harvest 2 lane 3 (2026-09-26)
+// the `customers` view ALSO grants editing ONE plain customer's contact details
+// and sending them the invite (bottom of this file) — held to a plain customer
+// in the model, never a staff account. All require auth.
 const express = require('express');
 const router  = express.Router();
 

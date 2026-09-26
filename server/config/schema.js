@@ -5635,6 +5635,7 @@ END; $$ LANGUAGE plpgsql`,
     // is metadata-only, no table rewrite. Rollback: DROP INDEX
     // roles_label_lower_uniq; ALTER TABLE roles DROP COLUMN label — once no
     // release reads it.
+    // Reference copy: server/migrations/116_role_label.sql
     name: '116_role_label',
     statements: [
       `ALTER TABLE roles ADD COLUMN IF NOT EXISTS label TEXT NOT NULL DEFAULT ''`,
@@ -5670,6 +5671,7 @@ END; $$ LANGUAGE plpgsql`,
     // All nullable, IF NOT EXISTS; nothing on the previous release reads them.
     // Expand-only (invariant 14). Rollback: DROP the five columns once no
     // release reads them.
+    // Reference copy: server/migrations/117_user_address.sql
     name: '117_user_address',
     statements: [
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS address1 TEXT`,

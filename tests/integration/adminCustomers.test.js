@@ -480,7 +480,7 @@ describe('one customer: GET/PATCH /:id and POST /:id/invite', () => {
   });
 
   test('PATCH edits contact + address: trims, lowercases the email, upper-cases the country, blank clears', async () => {
-    await db.query(`UPDATE users SET email_verified = TRUE WHERE id = $1`, [custId]);
+    await db.query(`UPDATE users SET email_verified = TRUE, invited_at = NOW() WHERE id = $1`, [custId]);
     const res = await request(app).patch(`/api/v1/admin/customers/${custId}`).set('Cookie', adminCookie)
       .send({ email: '  New.Addr@Example.com ', display_name: ' Jón Jónsson ', phone: '+354 555 1234',
         address1: 'Laugavegur 1', address2: '', city: 'Reykjavík', zip: '101', country: 'is' });
@@ -489,11 +489,18 @@ describe('one customer: GET/PATCH /:id and POST /:id/invite', () => {
       email: 'new.addr@example.com', display_name: 'Jón Jónsson', phone: '+354 555 1234',
       address1: 'Laugavegur 1', address2: null, city: 'Reykjavík', zip: '101', country: 'IS',
     });
-    // A new address is unverified and any link sent to the old one is dead.
+    // A new address is unverified, any link sent to the old one is dead, and
+    // invited_at (the seller area's proof of a real address) is gone.
     const { rows: [u] } = await db.query(
-      'SELECT email_verified, password_reset_token FROM users WHERE id = $1', [custId]);
+      'SELECT email_verified, password_reset_token, invited_at FROM users WHERE id = $1', [custId]);
     expect(u.email_verified).toBe(false);
     expect(u.password_reset_token).toBeNull();
+    expect(u.invited_at).toBeNull();
+    // Re-sending the SAME address changes nothing about it.
+    await db.query(`UPDATE users SET email_verified = TRUE WHERE id = $1`, [custId]);
+    await request(app).patch(`/api/v1/admin/customers/${custId}`).set('Cookie', adminCookie).send({ email: 'new.addr@example.com' });
+    const { rows: [same] } = await db.query('SELECT email_verified FROM users WHERE id = $1', [custId]);
+    expect(same.email_verified).toBe(true);
     // Only the keys sent are touched.
     const again = await request(app).patch(`/api/v1/admin/customers/${custId}`).set('Cookie', adminCookie)
       .send({ phone: '' });
