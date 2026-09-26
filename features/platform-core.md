@@ -50,12 +50,15 @@ paths:
   - server/services/anthropicAuth.js
   - tests/unit/anthropicAuth.test.js
   - tests/unit/anthropicWifWiring.test.js
+  - server/services/aiGate.js
+  - tests/unit/aiGate.test.js
+  - tests/unit/errorHandlerAiBusy.test.js
   - server/scripts/targetGuard.js
   - tests/unit/targetGuard.test.js
 migrations: [001_initial_schema, 043_strip_stale_railway_references]
 since: 2026-08-09
 origin: null
-history: [build-status, base-sync, harvest-2, go-live, harvest-ice-f-2026-09-24, harvest-ice-e-2026-09-24, harvest-ice-a-2026-09-24, harvest-ice-c-2026-09-24]
+history: [build-status, base-sync, harvest-2, go-live, harvest-ice-f-2026-09-24, harvest-ice-e-2026-09-24, harvest-ice-a-2026-09-24, harvest-ice-c-2026-09-24, harvest2-lane1b-2026-09-26, harvest2-lane1a-2026-09-26]
 ---
 
 The Express 5 app and boot sequence, the pg pool, the migration runner and the engine migration list (`schema.js`; product migrations are composed in by `migrationSet.js` from `product-migrations/<product>.js`), the central error middleware, the bootstrap/seed scripts, and CI. Everything here is cross-cutting by definition — a file with an obvious owner belongs in that feature instead.
@@ -67,5 +70,7 @@ The Express 5 app and boot sequence, the pg pool, the migration runner and the e
 - Never edit an applied migration; append. Express 5 catch-alls keep the braces. Node major pinned in THREE places.
 - The migration runner is transactional and locked; a release's migrations are backward-compatible with the previous release (invariant 14).
 - A Claude client is built from `anthropicAuth.clientAuthOptions()`, never from `ANTHROPIC_API_KEY` directly; in workload-identity mode the key is never read.
-- Every script or harness step that deletes, truncates, drops or rewrites rows calls `server/scripts/targetGuard.js` before its first query: a LOCAL host (localhost / 127.0.0.1 / ::1), a name matching the caller's pattern (`_test`; `_replay` for books:replay) or the local dev database with an explicit `--allow-dev-db`, never a `*_books`/ops/prod name, never an Azure host, `NODE_ENV=production`, `APP_ENV=production|staging` or App Service. `NODE_ENV` alone is not a guard. The one exemption, `reset-admin-totp.js` (break-glass against the real instance), says so in its header (harvest 2, lane 1a).
+- Every PAID Claude call takes an `aiGate` slot (`services/aiGate.js`, harvest2 from icelandicstore #218; `AI_MAX_CONCURRENT`, default 4): fan-out/background callers `withQueuedSlot`, request-path callers `withSlot`, whose `AiBusyError` the central error middleware answers 429 + `Retry-After` (`reason: AI_BUSY`). Resource protection, not a usage budget.
+- The error middleware honours a typed error's `messageKey` / `retryAfterSeconds` / `reason` for a safe client status only; a 5xx never picks its message.
+- Every script or harness step that deletes, truncates, drops or rewrites rows calls `server/scripts/targetGuard.js` before its first query: a LOCAL host (localhost / 127.0.0.1 / ::1), a name matching the caller's pattern (`_test`; `_replay` for books:replay) or the local dev database with an explicit `--allow-dev-db`, never a `*_books`/ops/prod name, never an Azure host, `NODE_ENV=production`, `APP_ENV=production|staging` or App Service. `NODE_ENV` alone is not a guard. The one exemption, `reset-admin-totp.js` (break-glass against the real instance), says so in its header ([harvest2-lane1a](../docs/history.d/2026-09-26-harvest2-lane1a-security.md#harvest2-lane1a-2026-09-26)).
 - Full rules: [../docs/ARCHITECTURE.md#20-infrastructure-and-cross-cutting](../docs/ARCHITECTURE.md#20-infrastructure-and-cross-cutting).

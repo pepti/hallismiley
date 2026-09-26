@@ -285,6 +285,138 @@ describe('server/services/translator', () => {
     });
   });
 
+  // Replies the model has been seen to give instead of a bare array (ported
+  // from icelandicstore #216, where prose around the JSON failed live runs).
+  describe('_internal.parseJsonArray (prose-wrapped replies)', () => {
+    const FIXTURES = [
+      ['bare array', '["Halló","Heimur"]', ['Halló', 'Heimur']],
+      ['```json fence', '```json\n["Halló","Heimur"]\n```', ['Halló', 'Heimur']],
+      ['prose before and after', 'Here is the translation:\n["Halló","Heimur"]\nLet me know if you need more.', ['Halló', 'Heimur']],
+      ['prose + fence', 'Sure!\n```json\n["Halló", "Heimur"]\n```', ['Halló', 'Heimur']],
+      ['object with one array', '{"translations": ["Halló", "Heimur"]}', ['Halló', 'Heimur']],
+      ['prose around an object', 'Result: {"items": ["a", "b"]} — done.', ['a', 'b']],
+      ['brackets inside the strings', 'Output: ["[Nýtt] Vara", "Verð {price}"]', ['[Nýtt] Vara', 'Verð {price}']],
+    ];
+    test.each(FIXTURES)('%s', (_name, raw, want) => {
+      expect(translator._internal.parseJsonArray(raw)).toEqual(want);
+    });
+
+    test.each([
+      ['plain prose', 'I cannot translate this.'],
+      ['truncated array', '["Halló", "Heim'],
+      ['object with two arrays', '{"a": ["x"], "b": ["y"]}'],
+      ['not a string', null],
+    ])('%s → null', (_name, raw) => {
+      expect(translator._internal.parseJsonArray(raw)).toBeNull();
+    });
+  });
+
+  describe('batch replies in prose, and the stop_reason log', () => {
+    test('a prose-wrapped batch reply is salvaged — no per-leaf fallback', async () => {
+      process.env.TRANSLATE_ENABLED = 'true';
+      process.env.ANTHROPIC_API_KEY = 'sk-x';
+      mockCreate.mockImplementation(async ({ messages }) => {
+        const input = JSON.parse(messages[0].content);
+        return {
+          stop_reason: 'end_turn',
+          content: [{ type: 'text', text: `Here you go:\n${JSON.stringify(input.map(s => `IS:${s}`))}\nHope that helps!` }],
+        };
+      });
+      const out = await translator.translateTree({ a: 'one', b: 'two' });
+      expect(out).toEqual({ a: 'IS:one', b: 'IS:two' });
+      expect(mockCreate).toHaveBeenCalledTimes(1);
+    });
+
+    test('an unparseable batch reply logs stop_reason, then falls back per leaf', async () => {
+      process.env.TRANSLATE_ENABLED = 'true';
+      process.env.ANTHROPIC_API_KEY = 'sk-x';
+      const logger = require('../../server/logger');
+      const warn = jest.spyOn(logger, 'warn').mockImplementation(() => {});
+      let call = 0;
+      mockCreate.mockImplementation(async ({ messages }) => {
+        call++;
+        if (call === 1) return { stop_reason: 'max_tokens', content: [{ type: 'text', text: '["IS:one", "IS:tw' }] };
+        return { stop_reason: 'end_turn', content: [{ type: 'text', text: `IS:${messages[0].content}` }] };
+      });
+      try {
+        const out = await translator.translateTree({ a: 'one', b: 'two' });
+        expect(out).toEqual({ a: 'IS:one', b: 'IS:two' });
+        expect(warn).toHaveBeenCalledWith(
+          expect.objectContaining({ stopReason: 'max_tokens' }),
+          'translator.batch JSON parse failed',
+        );
+      } finally {
+        warn.mockRestore();
+      }
+    });
+  });
+
+  describe('aiGate: parallel batches never exceed AI_MAX_CONCURRENT', () => {
+    afterEach(() => { delete process.env.AI_MAX_CONCURRENT; });
+
+    // harvest2 lane 1b review (S1/S2): a request-path translate() waits only
+    // briefly for a slot, and a tree whose batch finds the gate full does NOT
+    // fall back to one call per leaf.
+    const hold = () => {
+      const aiGate = require('../../server/services/aiGate');
+      let release;
+      const held = aiGate.withSlot(() => new Promise((r) => { release = r; }));
+      return { done: async () => { release(); await held; } };
+    };
+
+    test('translate() under a full gate gives up after ~1 s with null, no model call', async () => {
+      process.env.TRANSLATE_ENABLED = 'true';
+      process.env.ANTHROPIC_API_KEY = 'sk-x';
+      process.env.AI_MAX_CONCURRENT = '1';
+      const h = hold();
+      const started = Date.now();
+      try {
+        expect(await translator.translate({ text: 'Hello' })).toBeNull();
+        const ms = Date.now() - started;
+        expect(ms).toBeGreaterThanOrEqual(900);
+        expect(ms).toBeLessThan(3000);
+        expect(mockCreate).not.toHaveBeenCalled();
+      } finally {
+        await h.done();
+      }
+    });
+
+    test('a tree whose batch finds the gate full returns null — no per-leaf fan-out', async () => {
+      process.env.TRANSLATE_ENABLED = 'true';
+      process.env.ANTHROPIC_API_KEY = 'sk-x';
+      process.env.AI_MAX_CONCURRENT = '1';
+      process.env.TRANSLATE_TIMEOUT_MS = '20'; // batch queue wait = 40 ms
+      const h = hold();
+      try {
+        expect(await translator.translateTree({ a: 'one', b: 'two', c: 'three' })).toBeNull();
+        expect(mockCreate).not.toHaveBeenCalled();
+      } finally {
+        await h.done();
+      }
+    });
+
+    test('a 110-leaf tree (5 chunks) under a cap of 2 runs at most 2 calls at once, and all land', async () => {
+      process.env.TRANSLATE_ENABLED = 'true';
+      process.env.ANTHROPIC_API_KEY = 'sk-x';
+      process.env.AI_MAX_CONCURRENT = '2';
+      const tree = {};
+      for (let i = 0; i < 110; i++) tree[`k${i}`] = `EN-${i}`;
+      let running = 0, peak = 0;
+      mockCreate.mockImplementation(async ({ messages }) => {
+        running++; peak = Math.max(peak, running);
+        await new Promise((r) => setTimeout(r, 15));
+        running--;
+        const input = JSON.parse(messages[0].content);
+        return { content: [{ type: 'text', text: JSON.stringify(input.map(s => `IS:${s}`)) }] };
+      });
+      const out = await translator.translateTree(tree);
+      expect(mockCreate).toHaveBeenCalledTimes(5);
+      expect(peak).toBe(2);
+      for (let i = 0; i < 110; i++) expect(out[`k${i}`]).toBe(`IS:EN-${i}`);
+      expect(require('../../server/services/aiGate').inFlight()).toBe(0);
+    });
+  });
+
   describe('_internal.collectLeaves', () => {
     test('caps recursion at MAX_TREE_DEPTH', () => {
       const { collectLeaves, MAX_TREE_DEPTH } = translator._internal;

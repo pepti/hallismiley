@@ -1,11 +1,13 @@
 // ContactView — dedicated /contact page
-// Sections: Hero → Contact card → Inquiry form → Availability → Built with → Footer
+// Sections: Hero → Contact card → Inquiry form → Availability → Footer
 //
-// All six sections are editable by admin/moderator via a single page-level
+// All five sections are editable by admin/moderator via a single page-level
 // Edit button. Content lives in `site_content` JSONB rows keyed by:
 //   contact_hero, contact_card, contact_form, contact_availability,
-//   contact_built_with, contact_footer
+//   contact_footer
 // When a row is absent, the matching DEFAULT_* constant is rendered.
+// The "Under the hood" tech-stack section (contact_built_with) left on
+// 2026-09-26 (Halli): it described the product, and this is the company site.
 
 import { isAdmin, hasRole, getCSRFToken } from '../services/auth.js';
 import { escHtml } from '../utils/escHtml.js';
@@ -27,22 +29,26 @@ function pick(defaultsBlob) {
 // DRAFT (2026-09-01): company voice — "we", not "I". This is Orange Smiley's
 // lead form, and the SSR description already promises a reply within one
 // business day, so the page says the same thing.
+// DRAFT (2026-09-26, Efnishöfundur) — awaiting Halli. The whole offering, not
+// Rekstrarkerfið alone, and no named products to replace (Halli: the page
+// names none). Mirrored into the seeded rows by os_002.
 const DEFAULT_HERO = {
   en: {
     eyebrow:     'Get in touch',
     title_line1: 'Tell us about your operation',
     title_accent: '— we take care of the systems.',
     subtitle:
-      'Moving off Shopify, Wix or WordPress, starting something new, or just ' +
-      'weighing it up — we read every message and reply within one business day.',
+      'A new website, a system built around the way you work, a move off an old system, ' +
+      'or just a question about what is possible. We read every message and reply within ' +
+      'one business day.',
   },
   is: {
     eyebrow:     'Hafa samband',
     title_line1: 'Segðu okkur frá rekstrinum',
     title_accent: '— við sjáum um kerfin.',
     subtitle:
-      'Á leið af Shopify, Wix eða WordPress, að byrja á einhverju nýju eða bara ' +
-      'að skoða málin — við lesum öll skilaboð og svörum innan eins virks dags.',
+      'Nýr vefur, kerfi smíðað utan um verklagið, flutningur af gömlu kerfi eða bara ' +
+      'spurning um hvað er hægt. Við lesum öll skilaboð og svörum innan eins virks dags.',
   },
 };
 
@@ -102,72 +108,27 @@ const DEFAULT_FORM = {
   },
 };
 
-// DRAFT (2026-09-01): what the company takes on, replacing the freelancer's
-// availability list (carpentry commissions and speaking gigs).
+// DRAFT (2026-09-26, Efnishöfundur) — awaiting Halli. What the company takes
+// on: the six services on /thjonusta in three cards. "Limited" sits on long
+// builds, because /thjonusta promises custom systems in weeks.
 const DEFAULT_AVAILABILITY = {
   en: {
     eyebrow: 'Right now',
     title: 'What we take on',
     cards: [
-      { status: 'open',    label: 'Moving off Shopify, Wix or WordPress', body: 'We migrate the store, the products and the customers onto Rekstrarkerfið, and keep it running afterwards.' },
-      { status: 'open',    label: 'A new site or online store',           body: 'From a company site to a full store with inventory and invoicing — one system, one monthly invoice.' },
-      { status: 'limited', label: 'Custom systems & partnerships',        body: 'Work that does not fit a subscription. We take it on when it fits what we are building.' },
+      { status: 'open',    label: 'Custom systems and integrations', body: 'Systems built around the way you work, links to accounting and payment gateways, and automation that takes repetitive manual work off the table.' },
+      { status: 'open',    label: 'Websites, stores and migrations', body: 'A new website or online store, or a move off an older system without the business stopping. We host it and keep it maintained.' },
+      { status: 'limited', label: 'Larger projects',                 body: 'Work that takes months to build. We take it on when it fits what we are building.' },
     ],
   },
   is: {
     eyebrow: 'Núna',
     title: 'Hvað við tökum að okkur',
     cards: [
-      { status: 'open',    label: 'Flutningur af Shopify, Wix eða WordPress', body: 'Við flytjum verslunina, vörurnar og viðskiptavinina yfir á Rekstrarkerfið og rekum það áfram.' },
-      { status: 'open',    label: 'Nýr vefur eða vefverslun',                 body: 'Allt frá fyrirtækjavef upp í verslun með lager og reikningagerð — eitt kerfi, einn mánaðarreikningur.' },
-      { status: 'limited', label: 'Sérlausnir og samstarf',                   body: 'Verkefni sem passa ekki í áskrift. Við tökum þau að okkur þegar þau falla að því sem við erum að byggja.' },
+      { status: 'open',    label: 'Sérsmíðuð kerfi og tengingar',   body: 'Kerfi utan um verklagið, tengingar við bókhald og greiðslugáttir og sjálfvirkni sem tekur endurtekna handavinnu af borðinu.' },
+      { status: 'open',    label: 'Vefir, verslanir og flutningur', body: 'Nýr vefur eða vefverslun, eða flutningur af eldra kerfi án þess að reksturinn stöðvist. Við hýsum og höldum því við.' },
+      { status: 'limited', label: 'Stærri verkefni',                body: 'Verkefni sem taka marga mánuði í smíði. Við tökum þau að okkur þegar þau falla að því sem við erum að byggja.' },
     ],
-  },
-};
-
-// DRAFT (2026-09-01): the same stack list, but it is evidence now rather than
-// an offer to fork. The page used to invite visitors to clone the portfolio
-// and link the founder's personal GitHub; a prospect reading a software
-// company's contact page wants to know the thing is soberly built.
-const DEFAULT_BUILT_WITH = {
-  en: {
-    eyebrow: 'Under the hood',
-    title:   'How Rekstrarkerfið is built',
-    body1:
-      'This site runs on the same platform our customers do: Node.js and Express with a ' +
-      'PostgreSQL database and a vanilla-JS single-page frontend — no framework, no build step. ' +
-      'Auth uses Lucia with CSRF and Helmet hardening, email goes through Resend, uploads ' +
-      'through Multer, observability through Pino and Sentry, deployed on Azure App Service.',
-    body2:
-      'One shared core carries every customer, and per-customer features ship as flagged ' +
-      'modules on top of it rather than forks — which is what lets AI agents build and ' +
-      'maintain the custom work, and what keeps every instance patchable on the same day.',
-    pills: [
-      'Node.js', 'Express', 'PostgreSQL', 'Lucia Auth',
-      'Helmet', 'CSRF', 'Resend', 'Multer',
-      'Pino', 'Sentry', 'Vanilla JS SPA', 'Azure',
-    ],
-    email_btn_label:  'Ask us about the platform',
-  },
-  is: {
-    eyebrow: 'Undir húddinu',
-    title:   'Hvernig Rekstrarkerfið er byggt',
-    body1:
-      'Þessi vefur keyrir á sama kerfi og viðskiptavinir okkar: Node.js og Express með ' +
-      'PostgreSQL gagnagrunni og hreinum JavaScript framenda sem eitt-síðu vefforrit — enginn ' +
-      'rammi, ekkert byggingarskref. Auðkenning notar Lucia með CSRF og Helmet hertingu, ' +
-      'tölvupóstur fer gegnum Resend, skráarupphleðsla gegnum Multer, vöktun gegnum Pino og ' +
-      'Sentry, allt keyrt á Azure App Service.',
-    body2:
-      'Einn sameiginlegur kjarni ber alla viðskiptavini og sérlausnir bætast ofan á hann sem ' +
-      'einingar með rofa — ekki afrit af kerfinu. Þess vegna getur gervigreindin smíðað og ' +
-      'viðhaldið sérsmíðinni, og þess vegna má uppfæra öll kerfin sama daginn.',
-    pills: [
-      'Node.js', 'Express', 'PostgreSQL', 'Lucia Auth',
-      'Helmet', 'CSRF', 'Resend', 'Multer',
-      'Pino', 'Sentry', 'Vanilla JS SPA', 'Azure',
-    ],
-    email_btn_label:  'Spurðu okkur um kerfið',
   },
 };
 
@@ -200,28 +161,29 @@ const DEFAULT_FOOTER = {
 // answer, so it replaces the portfolio-era "topic" selector. Values must
 // match KNOWN_PLATFORMS in server/controllers/contactController.js; anything
 // unrecognised is recorded as 'other' rather than rejected.
+// DRAFT (2026-09-26, Efnishöfundur) — awaiting Halli. Categories, not product
+// names (Halli: we don't name the software we replace). The old product values
+// stay in KNOWN_PLATFORMS so older leads and imports still validate.
 const PLATFORMS = {
   en: [
-    { value: '',            label: 'What are you using today?' },
-    { value: 'shopify',     label: 'Shopify' },
-    { value: 'wix',         label: 'Wix' },
-    { value: 'wordpress',   label: 'WordPress' },
-    { value: 'woocommerce', label: 'WooCommerce' },
-    { value: 'squarespace', label: 'Squarespace' },
-    { value: 'dk',          label: 'DK / Regla / Payday (accounting only)' },
-    { value: 'none',        label: 'Nothing yet' },
-    { value: 'other',       label: 'Something else' },
+    { value: '',             label: 'What are you using today?' },
+    { value: 'webstore',     label: 'Online store platform' },
+    { value: 'website',      label: 'Website platform' },
+    { value: 'accounting',   label: 'Accounting software only' },
+    { value: 'custom',       label: 'Custom-built system' },
+    { value: 'spreadsheets', label: 'Spreadsheets and manual work' },
+    { value: 'none',         label: 'Nothing yet' },
+    { value: 'other',        label: 'Something else' },
   ],
   is: [
-    { value: '',            label: 'Hvað notar þú í dag?' },
-    { value: 'shopify',     label: 'Shopify' },
-    { value: 'wix',         label: 'Wix' },
-    { value: 'wordpress',   label: 'WordPress' },
-    { value: 'woocommerce', label: 'WooCommerce' },
-    { value: 'squarespace', label: 'Squarespace' },
-    { value: 'dk',          label: 'DK / Regla / Payday (bara bókhald)' },
-    { value: 'none',        label: 'Ekkert ennþá' },
-    { value: 'other',       label: 'Eitthvað annað' },
+    { value: '',             label: 'Hvað notar þú í dag?' },
+    { value: 'webstore',     label: 'Vefverslunarkerfi' },
+    { value: 'website',      label: 'Vefumsjónarkerfi fyrir heimasíðu' },
+    { value: 'accounting',   label: 'Bókhaldskerfi eingöngu' },
+    { value: 'custom',       label: 'Sérsmíðað kerfi' },
+    { value: 'spreadsheets', label: 'Töflureiknar og handavinna' },
+    { value: 'none',         label: 'Ekkert ennþá' },
+    { value: 'other',        label: 'Eitthvað annað' },
   ],
 };
 
@@ -231,7 +193,6 @@ const SECTIONS = [
   { key: 'contact_card',        field: '_card',       defaults: DEFAULT_CARD },
   { key: 'contact_form',        field: '_form',       defaults: DEFAULT_FORM },
   { key: 'contact_availability',field: '_availability', defaults: DEFAULT_AVAILABILITY },
-  { key: 'contact_built_with',  field: '_builtWith',  defaults: DEFAULT_BUILT_WITH },
   { key: 'contact_footer',      field: '_footer',     defaults: DEFAULT_FOOTER },
 ];
 
@@ -241,7 +202,6 @@ export class ContactView {
     this._card         = null;
     this._form         = null;
     this._availability = null;
-    this._builtWith    = null;
     this._footer       = null;
     // Whether this user can see inline-edit-only DOM (mailto/href helper rows).
     // Captured at render time so anonymous viewers never see the raw email
@@ -261,7 +221,6 @@ export class ContactView {
       ${this._cardHtml()}
       ${this._formHtml()}
       ${this._availabilityHtml()}
-      ${this._builtWithHtml()}
       ${this._footerHtml()}
     `;
 
@@ -277,7 +236,6 @@ export class ContactView {
 
     this._initEmailLinks(view);
     this._initForm(view);
-    this._initBuiltWithButtons(view);
     this._initPageEdit(view);
     return view;
   }
@@ -473,7 +431,8 @@ export class ContactView {
     const c = this._availability;
     const cards = c.cards.map((card, i) => {
       const status = (card.status || 'open').toLowerCase();
-      const statusLabel = status === 'open' ? 'Open' : status === 'limited' ? 'Limited' : 'Closed';
+      // The chip was hard-coded English, "Open" even on /is/.
+      const statusLabel = t(`contact.status.${['open', 'limited'].includes(status) ? status : 'closed'}`);
       return `
         <div class="availability-card availability-card--${escHtml(status)}" data-card-index="${i}" role="listitem">
           <div class="availability-card__status">
@@ -492,37 +451,6 @@ export class ContactView {
         <h2 class="availability__title" data-field="title">${escHtml(c.title)}</h2>
         <div class="availability__grid" role="list">
           ${cards}
-        </div>
-      </div>
-    </section>`;
-  }
-
-  // ── SECTION 5: Built with ──────────────────────────────────────────────
-  _builtWithHtml() {
-    const b = this._builtWith;
-    const pills = b.pills.map((t, i) =>
-      `<span class="built-with__pill" data-pill-index="${i}" data-field="pill">${escHtml(t)}</span>`
-    ).join('');
-
-    return `
-    <section class="built-with" aria-label="How this site is built" data-section="built_with">
-      <div class="built-with__inner">
-        <p class="built-with__eyebrow" data-field="eyebrow">${escHtml(b.eyebrow)}</p>
-        <h2 class="built-with__title" data-field="title">${escHtml(b.title)}</h2>
-        <p class="built-with__body" data-field="body1">${escHtml(b.body1)}</p>
-        <p class="built-with__body" data-field="body2">${escHtml(b.body2)}</p>
-
-        <div class="built-with__stack" role="list" aria-label="Technology stack">
-          ${pills}
-        </div>
-
-        <!-- The "View on GitHub" button went with the clone-this-portfolio
-             framing: it pointed at the founder's personal repository, which
-             is not what this section is evidence of any more. -->
-        <div class="built-with__actions">
-          <button type="button" class="lol-btn--teal built-with__btn" id="built-with-email-btn">
-            <span data-field="email_btn_label">${escHtml(b.email_btn_label)}</span>
-          </button>
         </div>
       </div>
     </section>`;
@@ -596,20 +524,6 @@ export class ContactView {
           window.location.href = `mailto:${emailHref()}`;
         }
       });
-    });
-  }
-
-  // ── Init: "Email me for setup help" pre-fills the form + scrolls to it ──
-  _initBuiltWithButtons(view) {
-    const btn = view.querySelector('#built-with-email-btn');
-    if (!btn) return;
-    btn.addEventListener('click', () => {
-      const message = view.querySelector('#contact-page-message');
-      if (message && !message.value.trim()) {
-        message.value = t('contact.builtWithPrefill');
-      }
-      view.querySelector('#contact-form-section')?.scrollIntoView({ behavior: 'smooth' });
-      setTimeout(() => view.querySelector('#contact-page-name')?.focus(), 500);
     });
   }
 
@@ -749,7 +663,6 @@ export class ContactView {
       _card:         this._collectCard(view),
       _form:         this._collectForm(view),
       _availability: this._collectAvailability(view),
-      _builtWith:    this._collectBuiltWith(view),
       _footer:       this._collectFooter(view),
     };
 
@@ -847,9 +760,15 @@ export class ContactView {
     const eyebrow = this._readField(section, 'eyebrow', this._availability.eyebrow);
     const title   = this._readField(section, 'title',   this._availability.title);
     const cards = [];
+    const STATUSES = ['open', 'limited', 'closed'];
     section.querySelectorAll('[data-card-index]').forEach(el => {
-      const rawStatus = (el.querySelector('[data-field="status"]')?.innerText.trim() || 'open').toLowerCase();
-      const status = ['open', 'limited', 'closed'].includes(rawStatus) ? rawStatus : 'open';
+      // The chip shows a translated label, so map it back: the key itself
+      // (typed by an editor), or its label in the active locale; else keep
+      // the card's stored status.
+      const base = this._availability.cards[parseInt(el.dataset.cardIndex, 10)] || {};
+      const raw = (el.querySelector('[data-field="status"]')?.innerText.trim() || '').toLowerCase();
+      const status = STATUSES.find(s => s === raw || t(`contact.status.${s}`).toLowerCase() === raw)
+        || (STATUSES.includes(base.status) ? base.status : 'open');
       cards.push({
         status,
         label: this._readField(el, 'label', ''),
@@ -857,22 +776,6 @@ export class ContactView {
       });
     });
     return { eyebrow, title, cards };
-  }
-
-  _collectBuiltWith(view) {
-    const section = view.querySelector('[data-section="built_with"]');
-    const pills = [];
-    section.querySelectorAll('[data-pill-index]').forEach(el => {
-      pills.push(el.innerText.trim());
-    });
-    return {
-      eyebrow:          this._readField(section, 'eyebrow',          this._builtWith.eyebrow),
-      title:            this._readField(section, 'title',            this._builtWith.title),
-      body1:            this._readField(section, 'body1',            this._builtWith.body1),
-      body2:            this._readField(section, 'body2',            this._builtWith.body2),
-      pills,
-      email_btn_label:  this._readField(section, 'email_btn_label',  this._builtWith.email_btn_label),
-    };
   }
 
   _collectFooter(view) {
@@ -906,7 +809,6 @@ export class ContactView {
       card:         this._cardHtml(),
       form:         this._formHtml(),
       availability: this._availabilityHtml(),
-      built_with:   this._builtWithHtml(),
       footer:       this._footerHtml(),
     };
     for (const [name, html] of Object.entries(sections)) {
@@ -920,6 +822,5 @@ export class ContactView {
     // Re-wire handlers that targeted replaced subtrees
     this._initEmailLinks(parent);
     this._initForm(parent);
-    this._initBuiltWithButtons(parent);
   }
 }

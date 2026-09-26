@@ -47,7 +47,7 @@ paths:
 migrations: [022_ecommerce, 023_product_taxonomy, 024_product_variants, 025_shop_content, 045_shop_sections, 048_product_codes, 049_collections, 057_product_bin, 074_product_vat_rate, 112_inventory_adjustments, 113_variant_barcode]
 since: 2026-08-09
 origin: null
-history: [harvest-2, ui-kit, harvest-ice-c-2026-09-24, harvest-ice-d-2026-09-24]
+history: [harvest-2, ui-kit, harvest-ice-c-2026-09-24, harvest-ice-d-2026-09-24, harvest2-lane1a-2026-09-26]
 ---
 
 Products, variants, taxonomy, product codes, collections, stock bins and the barcode scanner: the admin side of the shop (`/api/v1/admin/shop`, `/api/v1/admin/bins`) with CSV import/export. Hidden here (every line in `HIDDEN_ADMIN_VIEWS`); fully live in a retail downstream.
@@ -56,7 +56,7 @@ Products, variants, taxonomy, product codes, collections, stock bins and the bar
 - Hidden, never deleted; routes live.
 - Three numbers: `stock` is On hand; Committed is derived from PAID orders not yet fulfilled (`orders.stock_deducted_at IS NULL`); Available = On hand − Committed. `stock >= 0` stays (no overselling). Every change of on hand goes through `models/Inventory.js` (`applyLines` / `setAbsolute`) and leaves an `inventory_adjustments` row with the actor and the reason; opening stock is an `opening` row ([history](../docs/HISTORY.md#harvest-ice-c-2026-09-24)).
 - Lock order: orders row → parent products (KEY SHARE) → variants → products, each sorted; a status-less 40P01 is a retryable 409 `BUSY`.
-- The public catalogue (`GET /api/v1/shop/products`, `/:slug`) carries no warehouse codes: `bin`, `sku` and `barcode` are stripped from every product and variant along with the raw stock figures (`shopController` `PRODUCT_INTERNALS`); staff read them through `/api/v1/admin/shop`. A customer's `GET /api/v1/shop/orders/mine` is the `CUSTOMER_ORDER_FIELDS` allow-list — no Stripe ids, stock stamp or tags (harvest 2, lane 1a; icelandicstore #62, #416).
+- The public catalogue (`GET /api/v1/shop/products`, `/:slug`) carries no warehouse codes: `bin`, `sku` and `barcode` are stripped from every product and variant along with the raw stock figures (`shopController` `PRODUCT_INTERNALS`); staff read them through `/api/v1/admin/shop`. A customer's `GET /api/v1/shop/orders/mine` is the `CUSTOMER_ORDER_FIELDS` allow-list — no Stripe ids, stock stamp or tags ([harvest2-lane1a](../docs/history.d/2026-09-26-harvest2-lane1a-security.md#harvest2-lane1a-2026-09-26); icelandicstore #62, #416).
 - Bulk edit (`POST /products/bulk`) sets type, subcategory, VAT rate, status and bin only — never name, price or stock.
 - The 4 MB import body is parsed only after the admin gate, limiters and CSRF, and sanitized there ([history](../docs/HISTORY.md#ready-and-import-order-2026-09-23)).
 - Every product file (CSV, .xlsx, PDF) is read on the SERVER by `services/productImport` (`POST /products/import/parse-file`, memory-only, 10 MB); SKU then Barcode is the match key, an ambiguous or duplicate code is refused, an order quantity is never stock; rows with a Variant cell create one Draft product with its variants, whole or not at all, only with `create: true` ([history](../docs/HISTORY.md#harvest-ice-d-2026-09-24)).

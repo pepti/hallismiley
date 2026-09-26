@@ -13,6 +13,8 @@ const mfaService         = require('../services/mfaService');
 const McpToken           = require('../models/McpToken');
 const { Scrypt }         = require('oslo/password');
 const { generatePassword } = require('../utils/generatePassword');
+const { parseExpiresAt, isExpired, ExpiryOnAdminError, clearExpiryOnPromotion } = require('../auth/accountExpiry');
+const { userHoldsAdminPowers, adminPowersSql } = require('../utils/adminRole');
 // A name-only login's reserved <username>@noemail.invalid is never shown or
 // searched as an address (ice #397): the list reads it as NULL + no_email.
 const { isPlaceholderEmail, realEmailSql, realEmailExpr } = require('../utils/placeholderEmail');
@@ -85,7 +87,10 @@ const adminController = {
                 role, avatar, display_name,
                 email_verified, disabled, disabled_at, disabled_reason,
                 party_access, approval_status, requested_at, created_at, last_login_at,
-                totp_enabled
+                totp_enabled, expires_at,
+                -- An account the expiry endpoint refuses (409 admin_account):
+                -- the list hides its "Gildir til" button.
+                ${adminPowersSql('users')} AS admin_powers
          FROM users
          ${whereSql}
          ORDER BY ${sortCol} ${dir}, id DESC
@@ -149,6 +154,14 @@ const adminController = {
           }
         }
 
+        // The role set BEFORE the swap, for the staff audit trail: the
+        // dropdown is a grant AND a revoke, and until 2026-09-26 it wrote
+        // neither (the Members tab's addMember/removeMember always did).
+        const { rows: heldRows } = await client.query(
+          'SELECT role_name FROM user_roles WHERE user_id = $1', [id]
+        );
+        const heldBefore = heldRows.map(r => r.role_name);
+
         const { rows } = await client.query(
           `UPDATE users SET role = $1 WHERE id = $2
            RETURNING id, username, email, role`,
@@ -161,7 +174,30 @@ const adminController = {
 
         // Trigger added the new role membership; drop the others so the dropdown
         // stays single-role (the Members tab manages multi-role).
-        await client.query('DELETE FROM user_roles WHERE user_id = $1 AND role_name <> $2', [id, role]);
+        const { rows: dropped } = await client.query(
+          'DELETE FROM user_roles WHERE user_id = $1 AND role_name <> $2 RETURNING role_name', [id, role]
+        );
+        // One audit row per role actually granted or revoked — the same
+        // actions the Members tab writes, `via` tells them apart. Written on
+        // THIS client, inside the transaction (staffAudit's rule for a
+        // transactional change): the trail commits or rolls back with the
+        // role swap, never one without the other.
+        if (!heldBefore.includes(role)) {
+          await staffAudit.record(client, {
+            ...staffAudit.actorOf(req), action: 'role.granted', entityType: 'user', entityId: id,
+            summary: { role, via: 'users_page' },
+          });
+        }
+        for (const { role_name: revoked } of dropped) {
+          await staffAudit.record(client, {
+            ...staffAudit.actorOf(req), action: 'role.revoked', entityType: 'user', entityId: id,
+            summary: { role: revoked, via: 'users_page' },
+          });
+        }
+        // Promoted into admin powers: a time-limited login must not become a
+        // time-limited ADMIN (a delayed lockout) — clear its expiry, audited,
+        // in this transaction (login-expiry review follow-up).
+        await clearExpiryOnPromotion(client, { userIds: [id] }, staffAudit.actorOf(req));
         await client.query('COMMIT');
         UserRole.invalidateUser(id); // clear the cached set after the commit
         if (role !== 'admin') await revokeMcpTokens(req, id, 'role_change');
@@ -384,6 +420,63 @@ const adminController = {
     } catch (err) { next(err); }
   },
 
+  // PATCH /api/v1/admin/users/:id/expiry  { expires_at }
+  //
+  // Time-limited logins (login-expiry-2026-09-26, migration 114): set when
+  // another account's login stops working — an ISO date-time, a bare
+  // YYYY-MM-DD (the end of that day, UTC), or null to clear it. A new value
+  // must lie in the future (auth/accountExpiry.js parseExpiresAt); ending a
+  // login NOW is what `disable` is for. Never your own account: an admin who
+  // time-limits themself locks the instance's door behind them. Never an
+  // account with admin powers either (409 `admin_account`); every other role,
+  // staff included, is time-limitable.
+  async setExpiry(req, res, next) {
+    try {
+      const { id } = req.params;
+      if (!req.body || !Object.prototype.hasOwnProperty.call(req.body, 'expires_at')) {
+        return res.status(400).json({ error: t(req.locale, 'errors.admin.expiresAtInvalid'), code: 400 });
+      }
+      if (id === req.user.id) {
+        return res.status(400).json({ error: t(req.locale, 'errors.admin.cannotExpireSelf'), code: 400 });
+      }
+      const parsed = parseExpiresAt(req.body.expires_at);
+      if (!parsed.ok) {
+        return res.status(400).json({ error: t(req.locale, parsed.messageKey), code: 400 });
+      }
+
+      const { rows: current } = await dbQuery('SELECT expires_at FROM users WHERE id = $1', [id]);
+      if (current.length === 0) {
+        return res.status(404).json({ error: t(req.locale, 'errors.admin.userNotFound'), code: 404 });
+      }
+      // Never on an account with admin powers (review Low-1): an expiry is a
+      // delayed lockout. Clearing one is always allowed — that only unlocks.
+      if (parsed.value && await userHoldsAdminPowers(dbQuery, id)) {
+        throw new ExpiryOnAdminError();
+      }
+      // Reviving an ALREADY-expired login (cleared, or moved into the future)
+      // must not silently revive its old MCP tokens (review Low-2): revoke
+      // them first, as disable does; a new connection is a fresh consent.
+      if (isExpired(current[0])) await revokeMcpTokens(req, id, 'expired');
+
+      const { rows } = await dbQuery(
+        `UPDATE users SET expires_at = $1 WHERE id = $2
+         RETURNING id, username, expires_at`,
+        [parsed.value, id]
+      );
+      if (rows.length === 0) {
+        return res.status(404).json({ error: t(req.locale, 'errors.admin.userNotFound'), code: 404 });
+      }
+
+      await staffAudit.recordSafe({
+        ...staffAudit.actorOf(req),
+        action: parsed.value ? 'user.expiry_set' : 'user.expiry_cleared',
+        entityType: 'user', entityId: id,
+        summary: { username: rows[0].username, expires_at: parsed.value ? parsed.value.toISOString() : null },
+      });
+      return res.json(rows[0]);
+    } catch (err) { next(err); }
+  },
+
   // GET /api/v1/admin/email-health
   // Reports whether outbound email notifications can be delivered. Fire-and-
   // forget RSVP emails fail silently; this endpoint surfaces the underlying
@@ -426,7 +519,7 @@ const adminController = {
       await lucia.invalidateUserSessions(id);
 
       const { rows } = await dbQuery(
-        'DELETE FROM users WHERE id = $1 RETURNING id',
+        'DELETE FROM users WHERE id = $1 RETURNING id, username, role',
         [id]
       );
 
@@ -437,6 +530,15 @@ const adminController = {
       // The row (and its user_roles via ON DELETE CASCADE) is gone — drop the
       // cached role set so a recreated id can't read a stale entry.
       UserRole.invalidateUser(id);
+
+      // A hard delete is the least reversible staff action there is; the
+      // trail keeps who and which account (the username, never contact
+      // details — staffAudit's rule). entity_id is not a foreign key, so the
+      // row outlives the user it names.
+      await staffAudit.recordSafe({
+        ...staffAudit.actorOf(req), action: 'user.deleted', entityType: 'user', entityId: id,
+        summary: { username: rows[0].username, role: rows[0].role },
+      });
 
       return res.status(204).send();
     } catch (err) { next(err); }

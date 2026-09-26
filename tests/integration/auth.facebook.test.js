@@ -271,6 +271,41 @@ describe('GET /auth/facebook/callback', () => {
     expect(cookies.some(c => c.startsWith('auth_session='))).toBe(false);
   });
 
+  // Time-limited logins (migration 114, login-expiry-2026-09-26).
+  test('an expired time-limited login redirects with account_expired, no session', async () => {
+    await db.query(
+      `INSERT INTO users (email, username, role, email_verified, facebook_id, oauth_provider, avatar, expires_at)
+       VALUES ('expired@example.com', 'expiredfbuser', 'user', TRUE,
+               'fb-id-1', 'facebook', 'avatar-01.svg', NOW() - INTERVAL '1 minute')`,
+    );
+
+    const res = await request(app)
+      .get('/auth/facebook/callback?code=abc&state=test-state-xyz')
+      .set('Cookie', cookieHeader);
+
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toBe(`${localePrefix()}/#/?error=account_expired`);
+    const cookies = res.headers['set-cookie'] ?? [];
+    expect(cookies.some(c => c.startsWith('auth_session='))).toBe(false);
+  });
+
+  test('a not-yet-expired time-limited login signs in normally', async () => {
+    await db.query(
+      `INSERT INTO users (email, username, role, email_verified, facebook_id, oauth_provider, avatar, expires_at)
+       VALUES ('live@example.com', 'livefbuser', 'user', TRUE,
+               'fb-id-1', 'facebook', 'avatar-01.svg', NOW() + INTERVAL '3 days')`,
+    );
+
+    const res = await request(app)
+      .get('/auth/facebook/callback?code=abc&state=test-state-xyz')
+      .set('Cookie', cookieHeader);
+
+    expect(res.status).toBe(302);
+    expect(res.headers.location).not.toMatch(/error=/);
+    const cookies = res.headers['set-cookie'] ?? [];
+    expect(cookies.some(c => c.startsWith('auth_session='))).toBe(true);
+  });
+
   test('token-exchange failure redirects with oauth_failed', async () => {
     mockState.validateAuthorizationCode = async () => { throw new Error('bad code'); };
 
