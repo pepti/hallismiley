@@ -27,12 +27,14 @@ function blocks(css) {
     const dre = /--([\w-]+)\s*:\s*([^;]+);/g;
     let d;
     while ((d = dre.exec(m[2]))) decls[d[1]] = d[2].trim().replace(/\s+/g, ' ');
-    out.push({ selector: m[1].trim(), decls });
+    // A comma-joined rule (`html[data-theme="a"], html[data-theme="b"] {…}`)
+    // applies to every selector it names — a downstream's shared dark block.
+    out.push({ selector: m[1].trim(), selectors: m[1].split(',').map((x) => x.trim()), decls });
   }
   return out;
 }
 
-const rootBlocks = blocks(fs.readFileSync(path.join(CSS, 'variables.css'), 'utf8')).filter(b => b.selector === ':root');
+const rootBlocks = blocks(fs.readFileSync(path.join(CSS, 'variables.css'), 'utf8')).filter(b => b.selectors.includes(':root'));
 const themeBlocks = blocks(fs.readFileSync(path.join(CSS, 'themes.css'), 'utf8'));
 
 // The product's theme set (identity.theme): `root` owns :root (no data-theme
@@ -40,14 +42,14 @@ const themeBlocks = blocks(fs.readFileSync(path.join(CSS, 'themes.css'), 'utf8')
 const ROOT_THEME = identity.theme.root;
 const THEMES = identity.theme.picker.slice();
 const THEME_BLOCK_IDS = [...new Set(themeBlocks
-  .map(b => (b.selector.match(/^html\[data-theme="([\w-]+)"\]$/) || [])[1]).filter(Boolean))];
+  .flatMap(b => b.selectors.map(sel => (sel.match(/^html\[data-theme="([\w-]+)"\]$/) || [])[1])).filter(Boolean))];
 
 function tokensFor(theme) {
   const t = {};
   for (const b of rootBlocks) Object.assign(t, b.decls);
   if (theme === ROOT_THEME) return t;
   for (const b of themeBlocks) {
-    if (b.selector === 'html[data-theme]' || b.selector === `html[data-theme="${theme}"]`) Object.assign(t, b.decls);
+    if (b.selectors.includes('html[data-theme]') || b.selectors.includes(`html[data-theme="${theme}"]`)) Object.assign(t, b.decls);
   }
   return t;
 }
