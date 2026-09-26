@@ -38,7 +38,7 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
-  // Remove any files written to public/assets/content/ during the test
+  // Remove any files written to UPLOAD_ROOT/content/ during the test
   while (writtenFiles.length) {
     const f = writtenFiles.pop();
     try { fs.unlinkSync(f); } catch { /* already gone */ }
@@ -52,7 +52,7 @@ afterAll(async () => {
 function trackedFilePathFromUrl(url) {
   // url shape: /assets/content/<filename>
   const filename = url.replace('/assets/content/', '');
-  const abs = path.join(__dirname, '..', '..', 'public', 'assets', 'content', filename);
+  const abs = path.join(require('../../server/config/paths').contentUploadDir(), filename);
   writtenFiles.push(abs);
   return abs;
 }

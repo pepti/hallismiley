@@ -48,6 +48,10 @@ const { ensureTestServer, assertNotSharedPort } = require('./lib/testPg');
 const log = (msg) => process.stdout.write(`[jest] ${msg}\n`);
 
 module.exports = async function globalSetup(globalConfig) {
+  // This run's upload folder in the OS temp dir (tests/lib/testUploads.js);
+  // the workers inherit TEST_UPLOAD_BASE. Dead runs' folders are swept first.
+  const uploads = require('./lib/testUploads').prepare();
+  if (uploads.swept) log(`uploads: removed ${uploads.swept} folder(s) left by dead runs`);
   const { url: baseUrl, name: dbName, source, server } = resolveTestBaseUrl();
   // The .env is never loaded into the Jest main process, so a TEST_DATABASE_URL
   // written there does nothing (LESSONS 2026-09-26) — say so instead of

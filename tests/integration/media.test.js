@@ -28,7 +28,7 @@ let projectId;
 const uploadDirs = new Set();
 
 function cleanupUploadDir(id) {
-  const dir = path.join(__dirname, '../../public/assets/projects', String(id));
+  const dir = path.join(require('../../server/config/paths').UPLOAD_ROOT, 'projects', String(id));
   if (fs.existsSync(dir)) {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -280,7 +280,7 @@ describe('POST /api/v1/projects/:id/media', () => {
       .attach('file', PNG_BUFFER, { filename: 'disk-test.png', contentType: 'image/png' });
 
     expect(res.status).toBe(201);
-    const diskPath = path.join(__dirname, '../../public', res.body.file_path);
+    const diskPath = path.join(require('../../server/config/paths').UPLOAD_ROOT, res.body.file_path.slice('/assets/'.length));
     expect(fs.existsSync(diskPath)).toBe(true);
   });
 });
@@ -447,7 +447,7 @@ describe('DELETE /api/v1/projects/:id/media/:mediaId', () => {
       .attach('file', PNG_BUFFER, { filename: 'del-test.png', contentType: 'image/png' });
 
     expect(uploadRes.status).toBe(201);
-    const diskPath  = path.join(__dirname, '../../public', uploadRes.body.file_path);
+    const diskPath  = path.join(require('../../server/config/paths').UPLOAD_ROOT, uploadRes.body.file_path.slice('/assets/'.length));
     expect(fs.existsSync(diskPath)).toBe(true);
 
     const delRes = await request(app)
