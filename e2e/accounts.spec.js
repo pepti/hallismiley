@@ -132,6 +132,69 @@ test.describe('customer accounts', () => {
     await expect(page.locator('#acct-audit')).toContainText('Staða breytt');
   });
 
+  test('a pass-through invoice: live preview, issued from the form, no commission', async ({ page }) => {
+    // D-022's hosting/AI pass-through (migration 122). The figures come from
+    // the account response's `passthrough_terms` (the product seam), so this
+    // engine spec pins no product's markup or allowance.
+    test.setTimeout(60_000);
+    const name = `E2E Hýsing ${STAMP}`;
+    await signInViaApi(page, TEST_ADMIN);
+    await page.goto('/#/admin/accounts');
+    await page.click('#accounts-new');
+    await page.fill('#acct-create-form [name=name]', name);
+    await page.selectOption('#acct-create-form [name=tier]', 'rekstur');
+    await page.fill('#acct-create-form [name=kennitala]', `98${String(STAMP).slice(-8)}`);
+    await page.fill('#acct-create-form [name=street]', 'Bæjargata 7');
+    await page.fill('#acct-create-form [name=postal_zone]', '101');
+    await page.fill('#acct-create-form [name=city]', 'Reykjavík');
+    await page.click('#acct-create-form [type=submit]');
+    await page.waitForURL(/\/admin\/accounts\/\d+/, { timeout: 10_000 });
+    const acctId = page.url().match(/\/admin\/accounts\/(\d+)/)[1];
+    await page.click('.acct-actions [data-status="offered"]');
+    await expect(page.locator('.acct-status .acct-chip')).toHaveText('Tilboð sent');
+    await page.click('.acct-actions [data-status="signed"]');
+    await expect(page.locator('.acct-status .acct-chip')).toHaveText('Undirritað');
+
+    const detail = await (await page.request.get(`/api/v1/admin/accounts/${acctId}`)).json();
+    const terms = detail.passthrough_terms;
+    expect(terms).toBeTruthy();
+    const up = n => Math.round(n * (10000 + Number(terms.markup_bp)) / 10000);
+    const hostingCost = 10000;
+    const aiCost = Number(terms.ai_allowance_isk) + 3000;
+    const net = up(hostingCost) + up(3000);
+    const vat = Math.round(net * Number(terms.vat_rate) / 100);
+
+    // One hosting row, one AI row; the preview shows the allowance and the total.
+    await page.selectOption('#acct-inv-kind', 'passthrough');
+    await page.fill('#acct-invoice-form [name=period]', '2026-09');
+    const rows = page.locator('#acct-pt-lines .acct-pt__row');
+    await rows.nth(0).locator('[name=pt_description]').fill('Standandi TEST-umhverfi');
+    await rows.nth(0).locator('[name=pt_cost]').fill(String(hostingCost));
+    await page.click('#acct-pt-add');
+    await rows.nth(1).locator('[name=pt_type]').selectOption('ai');
+    await rows.nth(1).locator('[name=pt_description]').fill('Gervigreind í kerfinu');
+    await rows.nth(1).locator('[name=pt_cost]').fill(String(aiCost));
+    const preview = page.locator('#acct-pt-preview');
+    await expect(preview.locator('tbody tr')).toHaveCount(2);
+    const grouped = n => new RegExp(String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '[.,]'));
+    await expect(preview).toContainText(grouped(net + vat));
+
+    page.once('dialog', d => d.accept());
+    await page.click('#acct-invoice-form [type=submit]');
+    await page.waitForURL(/\/admin\/books\/invoices\//, { timeout: 10_000 });
+
+    // The server's figures match the preview, and no seller is paid on it.
+    const invoiceMatch = page.url().match(/\/admin\/books\/invoices\/([^/?#]+)/);
+    expect(invoiceMatch, page.url()).toBeTruthy();
+    const invoiceId = invoiceMatch[1];
+    const inv = await (await page.request.get(`/api/v1/admin/bookkeeping/invoices/${invoiceId}`)).json();
+    const invoice = inv.invoice || inv;
+    expect(Number(invoice.subtotal_net)).toBe(net);
+    expect(Number(invoice.total_gross)).toBe(net + vat);
+    const { events } = await (await page.request.get(`/api/v1/admin/accounts/${acctId}/commission`)).json();
+    expect(events).toHaveLength(0);
+  });
+
   test('the handbook-only sales user is bounced and 403d', async ({ page }) => {
     await loginAsSales(page);
     await page.goto('/#/admin/accounts');

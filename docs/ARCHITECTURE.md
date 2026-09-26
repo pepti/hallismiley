@@ -964,7 +964,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Auth | `server/auth/accountScope.js`, `server/auth/commissionScope.js` |
 | Views | `public/js/views/AdminAccountsView.js`, `AdminAccountDetailView.js`, `AdminCommissionView.js`, `AdminStatementView.js`, `AdminCustomersView.js` |
 | Components | `public/js/components/CommissionStatement.js`, `CustomerNotes.js` |
-| Client | `public/js/services/accounts.js`, `commission.js`, `adminCustomers.js`, `adminCustomerNotes.js` |
+| Client | `public/js/services/accounts.js`, `commission.js`, `adminCustomers.js`, `adminCustomerNotes.js`; `public/js/utils/passthrough.js` (the pass-through invoice preview) |
 | CSS | `public/css/admin-accounts.css`, `admin-customers.css` |
 | Jest | `tests/integration/accounts.test.js`, `commission.test.js`, `commissionStatements.test.js`, `adminCustomers.test.js`, `adminCustomerNotes.test.js`, `staffAudit.test.js` |
 | e2e | `e2e/accounts.spec.js` (+ `e2e/lib/accounts.js`) |
@@ -984,6 +984,12 @@ company/                  gitignored: plans, decisions, logs, market-research st
   an admin, silently ([review-099](HISTORY.md#review-099)).
 - Lifecycle = `TRANSITIONS`; a skip is 409; every write lands in
   `staff_audit_log` on the SAME client; the log is immutable.
+- **Pass-through invoices never carry commission** ([passthrough-invoice](history.d/2026-09-26-feat-passthrough-invoice.md#passthrough-invoice-2026-09-26)):
+  D-022's hosting and AI costs are billed as `kind: 'passthrough'`, and the
+  commission hook runs for `invoiceService.COMMISSIONABLE_KINDS` (build,
+  recurring) ONLY — an allow-list, so a kind added later pays nobody until it
+  is added there on purpose. Never bill a pass-through as a `recurring`
+  invoice with `amount_net_isk` overridden: that pays the seller 10 % of it.
 - Commission: 15% build / 10% recurring, overage earns none (D-003); seller +
   rate snapshotted per invoice (`UNIQUE(invoice_id)`);
   payable is an AMOUNT (`PAYABLE_NOW_ISK`) netting credits and refunds with a
@@ -1041,7 +1047,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
   link and audits `user.created`; an absent flag keeps the old send-on-create
   behaviour for API callers.
 
-**History**: [accounts-commission](HISTORY.md#accounts-commission) · [review-099](HISTORY.md#review-099) · [migrations-100-102](HISTORY.md#migrations-100-102) · [harvest2-lane3-2026-09-26](history.d/2026-09-26-harvest2-lane3-users.md#harvest2-lane3-2026-09-26)
+**History**: [accounts-commission](HISTORY.md#accounts-commission) · [review-099](HISTORY.md#review-099) · [migrations-100-102](HISTORY.md#migrations-100-102) · [harvest2-lane3-2026-09-26](history.d/2026-09-26-harvest2-lane3-users.md#harvest2-lane3-2026-09-26) · [passthrough-invoice-2026-09-26](history.d/2026-09-26-feat-passthrough-invoice.md#passthrough-invoice-2026-09-26)
 
 ## 9. Bookkeeping — invoices, VSK, Peppol, intake, settings, replay, payroll
 
@@ -1056,8 +1062,8 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Client | `public/js/services/adminBookkeeping.js`; `public/js/utils/money.js`; `public/js/components/ScanInput.js` (the till's USB barcode scanner, harvested from icelandicstore) + `public/css/scan.css` |
 | Scripts | `server/scripts/books-replay.js`, `books-archive-export.js`, `books-backfill-orders.js`, `books-fetch-fx.js`, `seed-books-demo.js` |
 | CSS | `public/css/admin-bookkeeping.css` |
-| Jest | `tests/integration/adminBookkeeping.test.js`, `booksInvoice.test.js`, `booksExpenses.test.js`, `booksLedger.test.js`, `booksVatReturn.test.js`, `booksPeppolUbl.test.js`, `booksIntake.test.js`, `booksPos.test.js`, `booksPayroll.test.js`, `booksReconciliation.test.js`, `booksReports.test.js`, `booksReplay.test.js`, `booksBackfill.test.js`, `booksDeferredRevenue.test.js`, `seedBooksDemo.test.js`; `tests/unit/booksVat.test.js`, `booksVatPeriod.test.js`, `booksCsv.test.js`, `booksDate.test.js`, `booksFx.test.js`, `booksPdf.test.js`, `booksPayroll.test.js`, `booksReplay.test.js`, `booksIntakeShape.test.js`, `booksControllerParse.test.js`, `ublInvoice.test.js`, `money.client.test.js` |
-| Migrations | 072–079, 095, 096, 099, 101, 103 |
+| Jest | `tests/integration/adminBookkeeping.test.js`, `booksInvoice.test.js`, `booksExpenses.test.js`, `booksLedger.test.js`, `booksVatReturn.test.js`, `booksPeppolUbl.test.js`, `booksIntake.test.js`, `booksPos.test.js`, `booksPayroll.test.js`, `booksReconciliation.test.js`, `booksReports.test.js`, `booksReplay.test.js`, `booksBackfill.test.js`, `booksDeferredRevenue.test.js`, `seedBooksDemo.test.js`, `passthroughInvoice.test.js`; `tests/unit/passthrough.test.js`, `booksVat.test.js`, `booksVatPeriod.test.js`, `booksCsv.test.js`, `booksDate.test.js`, `booksFx.test.js`, `booksPdf.test.js`, `booksPayroll.test.js`, `booksReplay.test.js`, `booksIntakeShape.test.js`, `booksControllerParse.test.js`, `ublInvoice.test.js`, `money.client.test.js` |
+| Migrations | 072–079, 095, 096, 099, 101, 103, 122 (`passthrough` one-per-period index + the `service_kind` CHECK) |
 | Features | [bookkeeping-core](../features/bookkeeping-core.md), [books-intake](../features/books-intake.md), [books-replay](../features/books-replay.md), [books-settings](../features/books-settings.md), [invoices](../features/invoices.md), [payroll](../features/payroll.md), [peppol-outbound](../features/peppol-outbound.md), [pos](../features/pos.md), [vsk](../features/vsk.md) |
 | Feature doc | `docs/BOOKKEEPING-SYSTEM.md`, `docs/BOOKS-PARALLEL-RUN.md`, `docs/ACCOUNTANT-QUESTIONS.md` |
 
@@ -1079,10 +1085,24 @@ company/                  gitignored: plans, decisions, logs, market-research st
   account, one recurring per account per month; cancelled rows excluded;
   overage deliberately NOT deduplicated — it is metered), 23505 → 409; the
   client disables the submit button too, but the index is the guarantee
-  [review-099](HISTORY.md#review-099).
+  [review-099](HISTORY.md#review-099). One `passthrough` per account per
+  period (122) — the AI allowance is monthly — and there a FULLY credited
+  invoice frees the period as well as a cancelled one, so a corrected metered
+  bill is a full credit note plus a new invoice ([passthrough-invoice](history.d/2026-09-26-feat-passthrough-invoice.md#passthrough-invoice-2026-09-26)).
 - `createServiceInvoice`: build 50%/50% (D-005), recurring month with a
-  pro-rating override, overage; ex VSK + 24%; the same counter/lines/journal/
+  pro-rating override, overage, pass-through; ex VSK + 24%; the same counter/lines/journal/
   books-audit path as orders, with the account row locked [accounts-commission](HISTORY.md#accounts-commission).
+- **Pass-through arithmetic** ([passthrough-invoice](history.d/2026-09-26-feat-passthrough-invoice.md#passthrough-invoice-2026-09-26)):
+  `computePassthrough` is the one rule (the admin preview's
+  `utils/passthrough.js` is pinned to it by `tests/unit/passthrough.test.js`):
+  the AI allowance off the period's AI lines in order, never below zero; the
+  markup per line, `Math.round`; VSK once on the net total, allocated to the
+  lines by largest remainder so the lines sum to it. The markup and the
+  allowance are read from `billing.passthrough` (product config) — never a
+  literal in engine code. The net is credited to 4110 like the contract month
+  (ACCOUNTANT-QUESTIONS §12 is open on a separate account). `service_kind` is
+  a closed vocabulary since 122 (CHECK, NOT VALID): a new kind widens it in
+  the release that starts writing it.
 - The invoice keeps the buyer party AS AT ISSUE; the account holds the CURRENT
   value; `invoice_ready` (a kennitala) gates issuing, `peppol_complete` gates
   only the export; `peppol/party.js` is ONE rule with two callers; an
@@ -1117,7 +1137,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
   move stock — the engine's POS never did; that is a separate decision
   ([harvest-ice-c-2026-09-24](HISTORY.md#harvest-ice-c-2026-09-24)).
 
-**History**: [accounts-commission](HISTORY.md#accounts-commission) · [review-099](HISTORY.md#review-099) · [migrations-100-102](HISTORY.md#migrations-100-102) · [harvest-ice-c-2026-09-24](HISTORY.md#harvest-ice-c-2026-09-24) · `PLAN.md` Status (own books programme)
+**History**: [accounts-commission](HISTORY.md#accounts-commission) · [review-099](HISTORY.md#review-099) · [migrations-100-102](HISTORY.md#migrations-100-102) · [harvest-ice-c-2026-09-24](HISTORY.md#harvest-ice-c-2026-09-24) · [passthrough-invoice-2026-09-26](history.d/2026-09-26-feat-passthrough-invoice.md#passthrough-invoice-2026-09-26) · `PLAN.md` Status (own books programme)
 
 ## 10. Sales handbook — Handbók sölufólks
 

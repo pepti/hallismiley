@@ -309,6 +309,31 @@ hver reikningsskil. Ef við færum að rukka ársfjórðung eða ár fyrirfram b
 sama 2150-vélin á þá við.
 
 ---
+## 12. Endurseldur kostnaður — hýsing og gervigreind með álagi (D-022)
+
+Frá 26. september 2026 rukkum við viðskiptavini sérstaklega fyrir tvennt ofan á
+þjónustusamninginn: **hýsingu umfram staðlað umhverfi þrepsins** (Azure-kostnaður + 15 %)
+og **gervigreind í kerfi viðskiptavinarins umfram 2.000 kr. á mánuði** (kostnaður + 15 %).
+Við kaupum Azure og gervigreindarþjónustuna í eigin nafni (erlendir birgjar, öfug
+skattskylda á innkaupum, sjá §6) og endurseljum með álagi á eigin reikningi, reikningstegund
+`passthrough`. Hver lína sýnir kostnaðinn, innifalda hlutann og álagið.
+
+**Hvernig kerfið bókar það í dag:** allur nettóinn á **4110 Sala þjónustu 24%** (sami lykill
+og þjónustusamningurinn) og 24% útskattur á 2200, þ.e. öll fjárhæðin með álagi telst til
+veltu í reit A. Engin söluþóknun reiknast af þessum reikningum.
+
+**Það sem við þurfum til baka.**
+
+1. Staðfestingu á að þetta sé **eigin sala** (við erum aðili að viðskiptunum og leggjum á),
+   en ekki útlagður kostnaður fyrir hönd viðskiptavinar sem mætti halda utan veltu.
+2. Hvort þú viljir **sérstakan tekjulykil** (t.d. "Endurseldur kostnaður — hýsing og
+   gervigreind") svo framlegð af endursölu sjáist sér í rekstrarreikningi. Það er
+   einfalt í dag (engin slík færsla hefur verið bókuð) en dýrara eftir fyrstu færslu.
+   Á meðan má greina þessar tekjur eftir reikningstegund (`service_kind = 'passthrough'`).
+3. Hvort álagið eigi að koma fram sem sérstök lína á reikningnum í stað þess að vera
+   innifalið í línuverðinu (lýsing línunnar nefnir kostnaðinn og álagið nú þegar).
+
+---
 ## Standing notes
 
 - **Amounts are whole ISK.** Everything is stored as BIGINT; there are no subunits and no

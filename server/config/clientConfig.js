@@ -253,6 +253,23 @@ const SCHEMA = {
       enrolment: { type: 'string', default: 'optional', enum: ['optional', 'required'] },
     },
   },
+  billing: {
+    // The product's pass-through terms (D-022, 2026-09-26): hosting beyond
+    // the tier's standard pattern is billed at cost + markup, and AI inside
+    // the customer's system is included up to an allowance a month, the rest
+    // at cost + markup. Read by invoiceService.createServiceInvoice (kind
+    // `passthrough`, which carries NO seller commission) and handed to the
+    // admin's live preview by GET /api/v1/admin/accounts/:id. The defaults
+    // are Rekstrarkerfið's D-022 values; a product with other terms sets them
+    // in config/client.json. Env: CLIENT_CONFIG_BILLING_PASSTHROUGH_MARKUP_BP,
+    // CLIENT_CONFIG_BILLING_PASSTHROUGH_AI_ALLOWANCE_ISK.
+    passthrough: {
+      // Basis points on the cost, like the commission rates: 1500 = 15 %.
+      markupBp:       { type: 'int', default: 1500, min: 0, max: 10000 },
+      // Whole ISK of AI cost included per account per month (ex VSK).
+      aiAllowanceIsk: { type: 'int', default: 2000, min: 0, max: 10000000 },
+    },
+  },
   mcp: {
     // The MCP catalogue write tools (harvest-ice-c-2026-09-24; icelandicstore
     // #248/#250/#361). Each kind of write is its own switch and every switch
