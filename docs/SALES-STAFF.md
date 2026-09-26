@@ -169,7 +169,7 @@ fails the whole file, so a half-imported week cannot happen.
   `velkomin-i-soluteymid` point to it. The Samstarf copy is DRAFT until Halli
   approves it and publishes the guides.
 - **Demos happen on the demo instance `demo.rekstrarkerfi.is`** (D-020; being
-  built): Kaffibrennslan Glóð sample data, reset nightly, one login per seller.
+  built): Kaffibrennslan Hraunbaun sample data, reset nightly, one login per seller.
   The guides never send a seller to orangesmiley.is or the ops instance to demo.
 - Keep guides consistent with the tier matrix on the product site
   (rekstrarkerfi.is/verdskra, `VerdskraView.js` + `thjonusta.*` keys in the

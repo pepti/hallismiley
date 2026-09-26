@@ -314,6 +314,14 @@ The survey's headline is that **the harvest is not one-directional**. This repo'
 **Why.** A shop needs a kill switch, a minimum and a delivery price it can change without a redeploy; a cutover (a new site, a move) needs one message every visitor sees for a while.
 **Effort.** M. **Risk.** Money path: the pause, the minimum and the price are server-side with tests on each; the owner alert can never fail or hold up the Stripe webhook. **For Halli:** the pause answers 503 (the brief) where ice answers 403 so an intentional pause does not count against the 5xx error budget — one constant to flip; company and kennitala are checked but not stored on the order yet (needs a migration).
 
+### 33. ✅ Approved 2026-09-26 (harvest 2) — Expiry watch, role × route e2e harness, TEST-stack sample rows
+
+**Status.** Approved by Halli 2026-09-26 as Harvest 2 lane 9 and built on branch `harvest2/lane9-ops` from icelandicstore `941cf51d` (#90, #62, #183): [harvest2-lane9](docs/history.d/2026-09-26-harvest2-lane9-ops.md#harvest2-lane9-2026-09-26). No migration, no new strings. The watch is inert until its repository variables are set (PLAN.md → Status has the list).
+
+**What.** (a) `.github/workflows/secret-cert-watch.yml`: every Monday, fail (and optionally email) when a TLS certificate on a `WATCH_HOSTS` host is inside 21 days or a `WATCH_KEY_VAULTS` secret is inside 30 days or has no expiry; the judging in `scripts/expiry-watch.js`, unit-tested. (b) `e2e/roles`: anonymous, a plain user, a seller and an admin walk every route the router knows (derived from `router.js`, never hand-listed) — public pages render cleanly, admin pages open with the view or are refused without it, the sidebar offers exactly the role's grants, nothing scrolls sideways at 375px. Its first run found five real bugs, fixed on the branch. (c) `server/demo/testStackData.js` + `services/testStackSeeder.js`: a product's invented sample rows applied at boot on a TEST stack only (`APP_ENV=test`, not a production database), so they never reach production with a promote; the engine ships none.
+**Why.** A managed certificate that failed to renew, or a secret nobody stamped, is found by customers; a route nobody opened as a seller is found by the seller; a demo row in a migration is in production at the next promote.
+**Effort.** M. **Risk.** Low: the watch only reads (metadata, never values); the harness only adds tests; the seeder is gated three ways and never throws.
+
 ### Reverse queue — this repo → icelandicstore and the base
 
 Where the core is ahead. Queue for icelandicstore's next window; fold into the base PR where it fits.

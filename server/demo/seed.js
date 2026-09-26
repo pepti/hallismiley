@@ -5,7 +5,7 @@
 // freshly migrated database where only the staff accounts survived, and on the
 // first boot of a demo instance. The engine seeds nothing: this stub is the
 // contract. A product that runs a demo instance replaces this file with its
-// own story (rekstrarkerfid: Kaffibrennslan Glóð — products, orders,
+// own story (rekstrarkerfid: Kaffibrennslan Hraunbaun — products, orders,
 // invoices, a VSK period, change requests), goes through the real services
 // (the books refuse hand-written rows) and returns a summary for the log.
 //

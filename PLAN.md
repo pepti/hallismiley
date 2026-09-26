@@ -363,6 +363,24 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
   books-path decision for Halli/Bókari; (c) the sold-out card counts the
   Birgðavakt's `out` units (lane 6a, merged into this branch) and links to
   `/admin/inventory?status=out`.
+- 2026-09-26: Harvest 2 lane 9 (ops) is on branch `harvest2/lane9-ops`, not merged
+  ([harvest2-lane9-2026-09-26](docs/history.d/2026-09-26-harvest2-lane9-ops.md#harvest2-lane9-2026-09-26)):
+  the weekly TLS + Key Vault expiry watch (`secret-cert-watch.yml`, ice #90), the
+  role × route e2e harness (`e2e/roles`, ice #62; its first run found and the
+  branch fixed five real bugs), and TEST-stack sample rows that cannot ride a
+  promote (`services/testStackSeeder.js`, ice #183; the engine ships none). Open:
+  (a) **for Halli — arm the watch** (repository settings, no edit): variable
+  `WATCH_HOSTS` = `www.orangesmiley.is orangesmiley.is`, variable
+  `WATCH_KEY_VAULTS` = `orangesm-prod-kv`, and the three `AZURE_CLIENT_ID` /
+  `AZURE_TENANT_ID` / `AZURE_SUBSCRIPTION_ID` as REPOSITORY secrets (the job runs
+  in no environment; the deploy identity already has Key Vault Reader and a
+  `ref:refs/heads/master` federated subject); `ALERT_EMAIL_TO`/`_FROM` +
+  `RESEND_API_KEY` add the digest email. Then dispatch it once with
+  `warn_days=400` to see the alert fire. Until then it runs green with two
+  warnings; (b) the harness adds ~220 tests (~1.7 min locally) to every e2e run —
+  watch the first CI run on the 2-vCPU runner; (c) ice can move its
+  `server/config/demoData.js` datasets into the engine's product-owned
+  `server/demo/testStackData.js` at its next graft and drop its own seeder.
 - Upward harvest from icelandicstore `4694289`, lane 1 (chunks A then B, branch
   `harvest/ice-2026-09-24-ab`, not merged). Chunk A landed on the branch
   ([harvest-ice-a-2026-09-24](docs/HISTORY.md#harvest-ice-a-2026-09-24)): admin

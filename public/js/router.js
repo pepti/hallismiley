@@ -102,6 +102,9 @@ const VIEWS = {
 // release. A bug in the view's own constructor is NOT marked: it stays the
 // error it is instead of passing for a network problem.
 class AssetLoadError extends Error {}
+
+// Admin screens gated on the admin role itself (isAdmin()), not a view id.
+const ADMIN_ONLY_PATHS = new Set(['/admin/roles', '/admin/monitoring', '/admin/mcp']);
 async function make(name, ...args) {
   let View;
   try {
@@ -440,7 +443,16 @@ export class Router {
       navigateReplace('/' + getLocale() + '/');
       return;
     }
-    if (path === '/admin/roles' && (!isAuthenticated() || !isAdmin())) {
+    // Admin-only screens, and the projects board (its view or the editor
+    // carve-out). Their factories fall back to HomeView too, but in place —
+    // the home page painted under /admin/monitoring. The role × route harness
+    // (e2e/roles, harvest 2 lane 9) found monitoring, mcp and projects doing
+    // that; roles already redirected. Refuse them all the same way.
+    if (ADMIN_ONLY_PATHS.has(path) && (!isAuthenticated() || !isAdmin())) {
+      navigateReplace('/' + getLocale() + '/');
+      return;
+    }
+    if (path === '/admin/projects' && (!isAuthenticated() || !(canSeeView('projects') || canEdit()))) {
       navigateReplace('/' + getLocale() + '/');
       return;
     }

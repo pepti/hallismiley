@@ -44,8 +44,9 @@ if (missing.length) {
 // A TOTP_ENC_KEY that is set but malformed must stop the boot: the alternative
 // is discovering it when an admin tries to enrol. Unset is allowed for now (the
 // secret stays in its plaintext column, as it always was) but said out loud.
-// ADMIN_TOTP_EXEMPT is a test/dev convenience that production ignores
-// (auth/mfaPolicy.js) — finding it set there means someone expected otherwise.
+// ADMIN_TOTP_EXEMPT is a test/dev convenience that only NODE_ENV=development or
+// test honours (auth/mfaPolicy.js) — finding it set anywhere else means someone
+// expected otherwise.
 {
   const secretBox = require('./utils/secretBox');
   try {
@@ -56,8 +57,8 @@ if (missing.length) {
     logger.fatal(`[server] ${err.message}`);
     process.exit(1);
   }
-  if (process.env.NODE_ENV === 'production' && process.env.ADMIN_TOTP_EXEMPT) {
-    logger.warn('[server] ADMIN_TOTP_EXEMPT is set but IGNORED when NODE_ENV=production — under security.mfa.enrolment=required every protected account must enrol a second factor');
+  if (process.env.ADMIN_TOTP_EXEMPT && !['development', 'test'].includes(process.env.NODE_ENV)) {
+    logger.warn(`[server] ADMIN_TOTP_EXEMPT is set but IGNORED when NODE_ENV=${process.env.NODE_ENV} (only development/test honour it) — under security.mfa.enrolment=required every protected account must enrol a second factor`);
   }
 }
 
@@ -136,6 +137,12 @@ async function start() {
     await demoReset.seedIfFresh()
       .catch((err) => logger.error({ err }, '[server] demo seed on first boot failed'));
   }
+
+  // A TEST stack's invented sample rows (server/demo/testStackData.js,
+  // product-owned; ice #183). AFTER migrate() on purpose: re-applied on every
+  // boot, which also restores them after a PROD→TEST clone. No-op unless
+  // APP_ENV=test on a non-production database; never throws.
+  await require('./services/testStackSeeder').applyTestStackData();
 
   // Did the update we triggered before the last restart actually land? This
   // runs AFTER migrations and BEFORE listen, on purpose: migrations are the

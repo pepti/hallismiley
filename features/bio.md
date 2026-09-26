@@ -13,7 +13,7 @@ paths:
 migrations: [011_halli_bio_content, 039_halli_bio_cv_arrays, 040_halli_bio_image_urls, 044_halli_bio_code_snippet]
 since: 2026-08-09
 origin: null
-history: [homepage, r1]
+history: [homepage, r1, harvest2-lane9-2026-09-26]
 ---
 
 The personal bio/CV page the base ships at `/halli` (and `/about`), fed by `site_content` rows (011/039/040/044). Hidden here; keeps the waterfall hero on purpose.

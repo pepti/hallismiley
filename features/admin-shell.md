@@ -35,7 +35,7 @@ paths:
 migrations: [053_admin_nav_config, 111_user_ui_prefs]
 since: 2026-08-09
 origin: null
-history: [r1, admin-reshape, harvest-2, identity-seam-2026-09-22, harvest-ice-b-2026-09-24, admin-home-idag-2026-09-26, harvest2-lane5-2026-09-26]
+history: [r1, admin-reshape, harvest-2, identity-seam-2026-09-22, harvest-ice-b-2026-09-24, admin-home-idag-2026-09-26, harvest2-lane5-2026-09-26, harvest2-lane9-2026-09-26]
 ---
 
 The sidebar (`ADMIN_NAV`, grouped IA with per-admin layout and 12 row tints saved in `admin_nav_config`) and surface hiding: `HIDDEN_ADMIN_VIEWS` in `adminSurface.js` hides lines for `'*'` holders while the routes and ids stay live and grantable. The SET is the product's — `identity.surface.hiddenAdminViews` in `config/client.json`, read through `utils/identity.js`. The admin home "Í dag" at `/admin` is its own feature since 2026-09-26, [admin-home](admin-home.md), so a product whose `/admin` is its own overview can fork it alone.

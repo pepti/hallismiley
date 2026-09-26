@@ -370,6 +370,28 @@ yearly books archive to media in Iceland is the compliance step, not a nicety.
 | Latest changes | Admin → Monitoring | the commits `generate-changes.js` stamped |
 | Release on the wire | any response header; view-source of a page | `X-App-Build` = `sha256(<sha>)[:12]`; the shell's `<meta name="app-build">` says the same and its scripts/stylesheets load from `/js/_<that tag>/…` and `/css/_<that tag>/…` (cached a year; any other tag 404s). A build without `GIT_SHA` reports `unknown` and is served unstamped — fix the build-args, the site still works (since 2026-09-24, [harvest-ice-e](HISTORY.md#harvest-ice-e-2026-09-24)) |
 
+### The expiry watch (`.github/workflows/secret-cert-watch.yml`)
+
+Every Monday 06:30 UTC (and on dispatch) the watch fails when a TLS
+certificate on an instance hostname expires within **21 days** (managed
+certificates renew ~45 days out, so that means the renewal failed) or a Key
+Vault secret expires within **30 days** or has **no expiry stamp**. Ported
+from icelandicstore #90 ([harvest2-lane9](history.d/2026-09-26-harvest2-lane9-ops.md#harvest2-lane9-2026-09-26));
+the judging is `scripts/expiry-watch.js` (unit-tested), the workflow only
+gathers the inputs. Arming is repository settings, no edit:
+
+| Setting | Kind | What |
+|---|---|---|
+| `WATCH_HOSTS` | repository variable | hostnames, space-separated — `www.orangesmiley.is orangesmiley.is` here. The engine has no fleet manifest CI can read, so this variable IS the host list; a downstream sets its own |
+| `WATCH_KEY_VAULTS` | repository variable | vault names, space-separated — `orangesm-prod-kv` here |
+| `AZURE_CLIENT_ID` / `AZURE_TENANT_ID` / `AZURE_SUBSCRIPTION_ID` | **repository** secrets | the deploy identity's OIDC login. The job runs in no environment, so its subject is `ref:refs/heads/master` (a federated credential exists for it, §6). The identity's Key Vault Reader role lists secret metadata and cannot read a value |
+| `ALERT_EMAIL_TO` / `ALERT_EMAIL_FROM` + `RESEND_API_KEY` | variables + secret (optional) | the digest email, deploy.yml's alert pattern; unset = the failed run is the alert (GitHub notifies) |
+
+Either half unset is skipped with a warning and the run stays green, so a repo
+without Azure is not red every week. The dispatch input `warn_days` overrides
+both thresholds — set it to 400 once after arming to see the alert path fire.
+Rotation steps: RUNBOOK → "Certificates and Key Vault secrets".
+
 ## 8. Rollback
 
 Image-pin: point the App Service back at the previous **digest** — every

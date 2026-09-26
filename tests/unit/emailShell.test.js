@@ -94,13 +94,13 @@ describe('email shell — the engine defaults', () => {
 describe('email shell — a downstream identity leaks no engine brand', () => {
   const DOWNSTREAM = {
     identity: {
-      brand: { name: 'Kaffibrennslan Glóð', legalName: 'Kaffibrennslan Glóð ehf.', alternateNames: [], titleSuffix: ' — Glóð' },
-      organization: { email: 'hallo@glod.test' },
-      email: { logo: 'glod-logo.png', logoWidth: 150, logoHeight: 52, logoWordmark: true, palette: { accent: '#0B5D3B' } },
+      brand: { name: 'Kaffibrennslan Hraunbaun', legalName: 'Kaffibrennslan Hraunbaun ehf.', alternateNames: [], titleSuffix: ' — Hraunbaun' },
+      organization: { email: 'hallo@hraunbaun.test' },
+      email: { logo: 'hraunbaun-logo.png', logoWidth: 150, logoHeight: 52, logoWordmark: true, palette: { accent: '#0B5D3B' } },
     },
   };
   let mails;
-  beforeAll(async () => { mails = await renderAllEmails(load(DOWNSTREAM, 'https://www.glod.test'), sent); });
+  beforeAll(async () => { mails = await renderAllEmails(load(DOWNSTREAM, 'https://www.hraunbaun.test'), sent); });
 
   test('not one mail, subject or From line carries Orange Smiley', () => {
     for (const { name, msg } of mails) {
@@ -112,26 +112,26 @@ describe('email shell — a downstream identity leaks no engine brand', () => {
   test('its wordmark logo stands alone, alt text in the wordmark type as the blocked-image fallback', () => {
     const { html } = mails[0].msg;
     const img = imgTag(html);
-    expect(img).toMatch(/src="https:\/\/www\.glod\.test\/assets\/brand\/glod-logo\.png"/);
-    expect(img).toMatch(/alt="Kaffibrennslan Glóð"/);
+    expect(img).toMatch(/src="https:\/\/www\.hraunbaun\.test\/assets\/brand\/hraunbaun-logo\.png"/);
+    expect(img).toMatch(/alt="Kaffibrennslan Hraunbaun"/);
     expect(img).toMatch(/width="150" height="52"/);
     expect(img).toMatch(/font-size:18px;font-weight:700;/);
-    expect(html).toMatch(/<a href="https:\/\/www\.glod\.test" style="text-decoration:none;">\s*<img/);
+    expect(html).toMatch(/<a href="https:\/\/www\.hraunbaun\.test" style="text-decoration:none;">\s*<img/);
     expect(html).not.toMatch(/font-size:22px;font-weight:700;[^"]*">Kaffibrennslan/);   // no text lockup beside a wordmark
   });
 
   test('host, legal line, From and the palette override are its own', () => {
     const { html, from } = mails[0].msg;
-    expect(html).toMatch(/text-transform:uppercase;">glod\.test<\/p>/);
-    expect(html).toMatch(/>\s*Kaffibrennslan Glóð ehf\.\s*<\/p>/);
-    expect(html).toContain('style="color:#0B5D3B;text-decoration:underline;">glod.test</a>');
-    expect(from).toBe('Kaffibrennslan Glóð <hallo@glod.test>');
+    expect(html).toMatch(/text-transform:uppercase;">hraunbaun\.test<\/p>/);
+    expect(html).toMatch(/>\s*Kaffibrennslan Hraunbaun ehf\.\s*<\/p>/);
+    expect(html).toContain('style="color:#0B5D3B;text-decoration:underline;">hraunbaun.test</a>');
+    expect(from).toBe('Kaffibrennslan Hraunbaun <hallo@hraunbaun.test>');
   });
 
   test('a brand name with an RFC 5322 special is quoted in From', () => {
-    const svc = load({ identity: { brand: { name: 'Glóð ehf.', legalName: 'Glóð ehf.' }, organization: { email: 'hallo@glod.test' } } }, 'https://www.glod.test');
+    const svc = load({ identity: { brand: { name: 'Hraunbaun ehf.', legalName: 'Hraunbaun ehf.' }, organization: { email: 'hallo@hraunbaun.test' } } }, 'https://www.hraunbaun.test');
     return svc.sendVerificationEmail('a@example.test', 'tok', 'is').then(() => {
-      expect(sent[sent.length - 1].from).toBe('"Glóð ehf." <hallo@glod.test>');
+      expect(sent[sent.length - 1].from).toBe('"Hraunbaun ehf." <hallo@hraunbaun.test>');
     });
   });
 });
