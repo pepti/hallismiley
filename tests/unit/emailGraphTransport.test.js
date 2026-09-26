@@ -76,7 +76,8 @@ describe('transport selection', () => {
 describe('Graph sendMail', () => {
   test('token then sendMail; the client-request-id is the message id', async () => {
     script.push(TOKEN_OK(), json(202, {}));
-    const r = await mt.sendViaGraph(msg, { env: GRAPH_ENV });
+    const deadline = new AbortController();
+    const r = await mt.sendViaGraph(msg, { env: GRAPH_ENV, signal: deadline.signal });
     expect(r.error).toBeNull();
     expect(r.data.id).toMatch(/^[0-9a-f-]{36}$/);
 
@@ -91,7 +92,7 @@ describe('Graph sendMail', () => {
     expect(sendCall.url).toBe('https://graph.microsoft.com/v1.0/users/mailbox%40example.test/sendMail');
     expect(sendCall.init.headers.Authorization).toBe('Bearer tok-A');
     expect(sendCall.init.headers['client-request-id']).toBe(r.data.id);
-    expect(sendCall.init.signal).toBeDefined();
+    expect(sendCall.init.signal).toBe(deadline.signal);   // the caller's ONE deadline
     const body = JSON.parse(sendCall.init.body);
     expect(body.saveToSentItems).toBe(false);
     expect(body.message).toEqual({
@@ -112,6 +113,38 @@ describe('Graph sendMail', () => {
     script.push(json(200, { access_token: 'tok-B', expires_in: 3600 }), json(202, {}));
     await mt.sendViaGraph(msg, { env: { ...GRAPH_ENV, GRAPH_CLIENT_ID: 'client-2' } });
     expect(calls[4].init.headers.Authorization).toBe('Bearer tok-B');
+  });
+
+  test('concurrent sends with a cold cache share ONE token request', async () => {
+    let release;
+    script.push(() => new Promise((res) => { release = () => res(TOKEN_OK()); }), json(202, {}), json(202, {}), json(202, {}));
+    const sends = [1, 2, 3].map(() => mt.sendViaGraph(msg, { env: GRAPH_ENV }));
+    await new Promise((r) => setImmediate(r));
+    release();
+    const results = await Promise.all(sends);
+    expect(results.every((r) => r.error === null)).toBe(true);
+    expect(calls.filter((c) => c.url.includes('login.microsoftonline.com'))).toHaveLength(1);
+  });
+
+  test('one deadline covers the token and the send: a spent budget sends nothing', async () => {
+    const deadline = new AbortController();
+    script.push(() => { deadline.abort(new Error('send timed out after 10ms')); return TOKEN_OK(); });
+    await expect(mt.sendViaGraph(msg, { env: GRAPH_ENV, signal: deadline.signal })).rejects.toThrow(/timed out/);
+    expect(calls.filter((c) => c.url.includes('graph.microsoft.com'))).toHaveLength(0);
+  });
+
+  test("icelandicstore's M365_* names are read as a fallback", () => {
+    const g = mt.graphSettings({ M365_TENANT_ID: 't-ice', M365_CLIENT_ID: 'c-ice', M365_CLIENT_SECRET: 's-ice' }, 'shop@example.test');
+    expect(g).toMatchObject({ tenantId: 't-ice', clientId: 'c-ice', clientSecret: 's-ice', sender: 'shop@example.test' });
+    expect(mt.missingSettings({ EMAIL_TRANSPORT: 'graph', M365_TENANT_ID: 't', M365_CLIENT_ID: 'c', M365_CLIENT_SECRET: 's' }, 'shop@example.test')).toEqual([]);
+    // GRAPH_* wins when both are set.
+    expect(mt.graphSettings({ GRAPH_TENANT_ID: 'g', M365_TENANT_ID: 'm' }).tenantId).toBe('g');
+  });
+
+  test('GRAPH_SAVE_TO_SENT_ITEMS=true opts in to Sent Items copies', async () => {
+    script.push(TOKEN_OK(), json(202, {}));
+    await mt.sendViaGraph(msg, { env: { ...GRAPH_ENV, GRAPH_SAVE_TO_SENT_ITEMS: 'true' } });
+    expect(JSON.parse(calls[1].init.body).saveToSentItems).toBe(true);
   });
 
   test('a 401 on a cached token retries once with a fresh one', async () => {
@@ -179,6 +212,22 @@ describe('through deliver() — the choke point still rules', () => {
     await expect(svc.sendPasswordResetEmail('anna@example.test', 'tok', 'is')).rejects.toThrow(/Graph sendMail failed: 500 ErrorInternalServerError boom/);
     expect(spy).toHaveBeenCalledWith(expect.objectContaining({ channel: 'generic', transport: 'graph' }), expect.stringMatching(/email send FAILED/));
     spy.mockRestore();
+  });
+
+  test('a party announcement fans out through deliver() with bounded concurrency', async () => {
+    const svc = load();
+    let inFlight = 0;
+    let peak = 0;
+    const slowAccept = () => new Promise((res) => {
+      inFlight++; peak = Math.max(peak, inFlight);
+      setTimeout(() => { inFlight--; res(json(202, {})); }, 5);
+    });
+    script.push(TOKEN_OK(), ...Array.from({ length: 10 }, () => slowAccept));
+    const recipients = Array.from({ length: 10 }, (_, i) => ({ email: `guest${i}@example.test`, locale: 'is' }));
+    const r = await svc.sendPartyAnnouncement({ recipients, subject: '', body: '', partyInfo: {} });
+    expect(r).toEqual({ sent: 10, failed: 0 });
+    expect(peak).toBeLessThanOrEqual(4);
+    expect(peak).toBeGreaterThan(1);
   });
 
   test('with the switch off, GRAPH_* alone leaves Resend in charge (and unconfigured without its key)', () => {

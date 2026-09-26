@@ -70,8 +70,9 @@ describe('email palette — colour maths and token reading', () => {
     const r = resolveEmailPalette({ identity: { theme: THEME() }, rootCss: LIGHT_ROOT });
     expect(r.palette.heading).toBe('#111111');
     expect(r.palette.border).toBe('#808080');
-    expect(r.font).toBe("'Fraunces', 'Segoe UI', Helvetica, sans-serif");
-    expect(r.font).not.toMatch(/Arial|system-ui/);
+    // The design rules' tail: the theme's face, then the bare generic only.
+    expect(r.font).toBe("'Fraunces', sans-serif");
+    expect(r.font).not.toMatch(/Arial|system-ui|Segoe|Helvetica/);
     expect(r.warnings).toEqual([]);
   });
 });
@@ -198,6 +199,15 @@ describe('email palette — the rendered mails', () => {
           const ratio = contrastRatio(c, bg);
           expect({ name, c, bg, pass: ratio >= AA }).toEqual({ name, c, bg, pass: true });
         }
+      }
+    }
+  });
+
+  test('every font stack ends in the bare generic and names no banned face', () => {
+    for (const { name, msg } of mails) {
+      for (const stack of new Set([...msg.html.matchAll(/font-family:([^;"]+)/g)].map((m) => m[1].trim()))) {
+        expect({ name, stack, ok: /(^|, )sans-serif$/.test(stack) && !/Arial|system-ui|Inter|Roboto|Open Sans|Space Grotesk/i.test(stack) })
+          .toEqual({ name, stack, ok: true });
       }
     }
   });

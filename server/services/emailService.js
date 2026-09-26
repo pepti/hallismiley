@@ -97,10 +97,10 @@ function sendFailed(channel, detail) {
 // EMAIL_TRANSPORT=graph (services/mailTransport.js — the one switch, and why
 // the Graph variables alone never flip it). Both answer Resend's
 // { data: { id }, error } shape; Graph's id is its minted client-request-id.
-function sendThroughTransport(msg) {
+function sendThroughTransport(msg, signal) {
   const name = mailTransport.transportName();
   if (name === 'graph') {
-    return mailTransport.sendViaGraph(msg, { fallbackSender: FROM_ADDR, timeoutMs: EMAIL_TIMEOUT_MS });
+    return mailTransport.sendViaGraph(msg, { fallbackSender: FROM_ADDR, signal, timeoutMs: EMAIL_TIMEOUT_MS });
   }
   if (name === 'resend') return getClient().emails.send(msg);
   return Promise.resolve({ data: null, error: { message: mailTransport.missingSettings()[0] } });
@@ -121,14 +121,21 @@ async function deliver(payload, channel = 'generic') {
   // line would slip past it, so under the allowlist there is none.
   if (ALLOWLIST.length) { delete msg.cc; delete msg.bcc; }
   if (!msg.replyTo && REPLY_TO) msg.replyTo = REPLY_TO;
+  // ONE deadline per message: the same signal bounds everything the
+  // transport does for it (Graph: the token fetch, sendMail and the 401
+  // retry), and the race bounds a transport that takes no signal (the
+  // Resend SDK).
+  const deadline = new AbortController();
   let timer;
+  const timedOut = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      const err = new Error(`send timed out after ${EMAIL_TIMEOUT_MS}ms`);
+      deadline.abort(err);
+      reject(err);
+    }, EMAIL_TIMEOUT_MS);
+  });
   try {
-    const result = await Promise.race([
-      sendThroughTransport(msg),
-      new Promise((_, reject) => {
-        timer = setTimeout(() => reject(new Error(`send timed out after ${EMAIL_TIMEOUT_MS}ms`)), EMAIL_TIMEOUT_MS);
-      }),
-    ]);
+    const result = await Promise.race([sendThroughTransport(msg, deadline.signal), timedOut]);
     if (result && result.error) sendFailed(channel, result.error.message || String(result.error));
     return result;
   } catch (err) {
@@ -814,15 +821,32 @@ async function sendRsvpConfirmation({ user, answers, rsvpForm, isUpdate, partyIn
 
 // ── Party announcement to going/maybe guests ──────────────────────────────────
 // Sends one email per recipient (not a single message with array `to`) — that
-// way each guest only sees their own address in the To: header. Resend's
-// default rate limit is 100 req/sec, well above any plausible guest list.
-// Body is the host's free-form message (optional); falls back to the i18n
+// way each guest only sees their own address in the To: header, a few at a
+// time (settleBounded below). Body is the host's free-form message (optional); falls back to the i18n
 // default copy. Recipients are { email, locale } — the host's free-form
 // subject/body go out as-typed to everyone, but the surrounding chrome
 // (heading, when-and-where labels, button, default intro/signoff) localizes
 // per guest (Icelandic by default). Returns { sent, failed } so the caller can
 // report partial failures (e.g. a single bounce shouldn't blank the whole
 // result).
+
+const PARTY_SEND_CONCURRENCY = 4;
+
+// Promise.allSettled over `items`, with at most `limit` calls of `fn` in
+// flight; results keep the input order.
+async function settleBounded(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const i = next++;
+      try { results[i] = { status: 'fulfilled', value: await fn(items[i], i) }; }
+      catch (reason) { results[i] = { status: 'rejected', reason }; }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
 
 async function sendPartyAnnouncement({ recipients, subject, body, partyInfo }) {
   if (!Array.isArray(recipients) || recipients.length === 0) return { sent: 0, failed: 0 };
@@ -896,14 +920,15 @@ async function sendPartyAnnouncement({ recipients, subject, body, partyInfo }) {
   // legacy plain-string recipients (treated as Icelandic default).
   // Through deliver(), like every other sender (it used to call the Resend
   // client directly, which skipped EMAIL_ALLOWLIST and the placeholder drop,
-  // and would have ignored EMAIL_TRANSPORT) — harvest 2 lane 2.
-  const results = await Promise.allSettled(
-    recipients.map(r => {
-      const to = typeof r === 'string' ? r : r.email;
-      const { subject: finalSubject, html } = renderFor((typeof r === 'object' && r.locale) || 'is');
-      return deliver({ from: FROM, to, subject: finalSubject, html }, 'party');
-    })
-  );
+  // and would have ignored EMAIL_TRANSPORT) — harvest 2 lane 2. At most
+  // PARTY_SEND_CONCURRENCY in flight: an unbounded fan-out of a long guest
+  // list trips provider throttling (Exchange allows ~30 messages/minute per
+  // mailbox) and opens every socket at once.
+  const results = await settleBounded(recipients, PARTY_SEND_CONCURRENCY, (r) => {
+    const to = typeof r === 'string' ? r : r.email;
+    const { subject: finalSubject, html } = renderFor((typeof r === 'object' && r.locale) || 'is');
+    return deliver({ from: FROM, to, subject: finalSubject, html }, 'party');
+  });
 
   let sent = 0, failed = 0;
   results.forEach((r, i) => {

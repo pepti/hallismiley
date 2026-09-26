@@ -174,7 +174,12 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
     application access policy) if ever used — nothing turns it on; (c) the
     admin email-health readers (`adminController`, `PartyAdminView`) still use
     the old `resendConfigured` name, kept meaning "the selected transport is
-    configured" — rename them in a follow-up. No new DRAFT strings.
+    configured" — rename them in a follow-up; (d) **icelandicstore sync
+    precondition**: set `EMAIL_TRANSPORT=graph` (and
+    `GRAPH_SAVE_TO_SENT_ITEMS=true` to keep Sent Items copies) on its TEST and
+    PROD App Services BEFORE it takes this sync — its `M365_*` settings are
+    read as they are, but without the switch a production boot refuses to
+    start (also in `engine.json`). No new DRAFT strings.
 - Upward harvest from icelandicstore `4694289`, lane 1 (chunks A then B, branch
   `harvest/ice-2026-09-24-ab`, not merged). Chunk A landed on the branch
   ([harvest-ice-a-2026-09-24](docs/HISTORY.md#harvest-ice-a-2026-09-24)): admin

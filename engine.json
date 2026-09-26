@@ -340,11 +340,14 @@
       "migrations": {},
       "trimmed": [
         "ice #173 removal of Resend (the engine keeps it as the default transport)",
-        "ice #173 M365_* variable names (GRAPH_* here) and saveToSentItems:true (false here)",
+        "ice #173 saveToSentItems:true as the default (an opt-in here: GRAPH_SAVE_TO_SENT_ITEMS=true)",
         "ice #173 invite-customers.js pacing (ice-only script)",
         "ice #190 logo.png artwork (the engine ships favicon.svg rasterised as orangesmiley-emblem.png)",
         "ice #179 per-hex palette (derived from the instance theme tokens by utils/emailPalette.js)"
-      ]
+      ],
+      "syncPreconditions": {
+        "ice": "Before icelandicstore takes the sync carrying this lane: set EMAIL_TRANSPORT=graph on its TEST and PROD App Services (its M365_* settings are read as a fallback) and GRAPH_SAVE_TO_SENT_ITEMS=true to keep Sent Items copies; without the switch the engine selects Resend and a production boot refuses to start (no RESEND_API_KEY). Take the engine emailService.js on the conflict and set identity.email to logo.png (logoWordmark true, 150x52)."
+      }
     }
   ]
 }

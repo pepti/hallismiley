@@ -54,10 +54,13 @@ the engine cannot, because every product has its own theme and logo.
 - `server/services/mailTransport.js`: ONE switch, `EMAIL_TRANSPORT=resend|graph` (default resend).
   The `GRAPH_*` variables alone never move an instance off Resend — a half-finished Entra setup must
   not silently change how production mails; an unknown value is "not configured", named.
-- Graph: client-credentials token (`GRAPH_TENANT_ID`, `GRAPH_CLIENT_ID`, `GRAPH_CLIENT_SECRET`),
-  cached until a minute before expiry and keyed by tenant/app; `sendMail` as `GRAPH_SENDER` (default
-  the From address) with `saveToSentItems: false`; every call a bounded `trackedFetch` (App Insights
-  dependency, `AbortSignal.timeout`); a 401 on a cached token retries once. Graph answers 202 with no
+- Graph: client-credentials token (`GRAPH_TENANT_ID`, `GRAPH_CLIENT_ID`, `GRAPH_CLIENT_SECRET`;
+  icelandicstore's `M365_*` names are read as a fallback), cached until a minute before expiry,
+  keyed by tenant/app, with ONE in-flight token request shared by concurrent sends; `sendMail` as
+  `GRAPH_SENDER` (default the From address) with `saveToSentItems: false` unless
+  `GRAPH_SAVE_TO_SENT_ITEMS=true` opts in; every call a `trackedFetch` (App Insights dependency)
+  under ONE deadline per message — the `AbortSignal` `deliver()` creates bounds the token fetch,
+  sendMail and the 401 retry together; a 401 on a cached token retries once. Graph answers 202 with no
   message id, so the minted `client-request-id` is returned as the id — the invite-sent-means-sent
   contract (`utils/inviteSend.js`) reads it, and it is what an Exchange message trace finds. Errors
   map to `{ error }` with the AADSTS code or the Graph error code, never the secret.
@@ -68,7 +71,8 @@ the engine cannot, because every product has its own theme and logo.
   `transportConfigured`, `missingSettings`, and keeps `resendConfigured` meaning "the selected
   transport is configured" for its two readers (admin email health, PartyAdminView).
 - `sendPartyAnnouncement` used to call the Resend client directly — skipping `EMAIL_ALLOWLIST` and the
-  placeholder drop. It goes through `deliver()` now.
+  placeholder drop. It goes through `deliver()` now, at most four sends in flight (Exchange throttles
+  a mailbox at about 30 messages a minute; an unbounded fan-out opened every socket at once).
 - `server/server.js`: production's boot check requires the selected transport's settings (was:
   `RESEND_API_KEY` only), and the boot warning names what is missing.
 - `emailGraphTransport.test.js`: selection, token + cache + retry, sendMail payload, the error
@@ -76,13 +80,28 @@ the engine cannot, because every product has its own theme and logo.
   failure is logged at error level and the sender throws.
 - Documented in `.env.example` and `docs/DEPLOYMENT.md`.
 
-**Trimmed from ice.** #173's removal of Resend (the engine keeps it as the default) and its
-`M365_*` names (the engine's are `GRAPH_*`; icelandicstore maps its settings when it takes the sync);
-`saveToSentItems: true` (false here — a transactional stream would fill the shared mailbox);
-`invite-customers.js` pacing (ice-only script). #190's `logo.png` (ice's own artwork). #179's
+**Trimmed from ice.** #173's removal of Resend (the engine keeps it as the default); its
+`saveToSentItems: true` as the default (an opt-in here — a transactional stream would fill the shared
+mailbox); `invite-customers.js` pacing (ice-only script). #190's `logo.png` (ice's own artwork). #179's
 per-hex palette (derived here).
 
+**Review pass** (`invariant-reviewer` on the branch diff). Must-fixes, all fixed on the branch: (1) the
+email font tail was `'Segoe UI', Helvetica, sans-serif` — the design rules allow only the bare
+generic tail, so it is `sans-serif` alone, and `emailPalette.test.js` checks every font stack in every
+rendered mail; (2) icelandicstore's `M365_*` settings would have gone unread after its sync —
+`graphSettings` falls back to them, `GRAPH_SAVE_TO_SENT_ITEMS` is an opt-in (ice saves copies today),
+and the sync precondition below is recorded here and in `engine.json`; (3) the token fetch, the send
+and the retry each had their own timeout, so one message could take several — one deadline signal
+per `deliver()` now. Should-fixes, done: bounded concurrency for the party announcement, a shared
+in-flight token promise, `features/client-config.md` documents `identity.email`.
+
 **Owed / for Halli.**
+- **icelandicstore sync precondition**: before ice takes the engine sync that carries this lane, its
+  TEST and PROD App Services need `EMAIL_TRANSPORT=graph` (its `M365_*` settings are then read as
+  they are) and `GRAPH_SAVE_TO_SENT_ITEMS=true` if the store keeps its Sent Items copies. Without
+  the switch the engine selects Resend, finds no `RESEND_API_KEY` and a production boot refuses to
+  start. Its `emailService.js` conflicts wholesale (the Graph rewrite): take the engine's, and set
+  `identity.email` to its `logo.png` (`logoWordmark: true`, 150 × 52).
 - Downstreams' emails change look on their next engine sync: light, their own theme's tokens, and
   the Orange Smiley emblem until each sets `identity.email.logo` to its own file in
   `public/assets/brand/` (icelandicstore: `logo.png`, `logoWordmark: true`, 150 × 52).

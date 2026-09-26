@@ -1261,13 +1261,17 @@ company/                  gitignored: plans, decisions, logs, market-research st
   colour in every rendered mail; translated `email.*` strings carry no colour
   (the footer link's style is handed in as `{linkStyle}`).
 - **One transport switch**: `EMAIL_TRANSPORT=resend|graph` (default resend;
-  `services/mailTransport.js`). The `GRAPH_*` variables alone never switch it.
-  Every transport answers Resend's `{ data: { id }, error }` behind
-  `deliver()`, which stays the only way out (placeholder drop,
-  `EMAIL_ALLOWLIST` incl. dropping cc/bcc, bounded wait, loud failure) — no
-  sender calls a transport directly. Graph's id is the minted
-  `client-request-id`; `saveToSentItems` is false. Production's boot requires
-  the selected transport's settings.
+  `services/mailTransport.js`). The `GRAPH_*` (or ice's `M365_*`) variables
+  alone never switch it. Every transport answers Resend's
+  `{ data: { id }, error }` behind `deliver()`, which stays the only way out
+  (placeholder drop, `EMAIL_ALLOWLIST` incl. dropping cc/bcc, ONE deadline
+  signal per message covering every call the transport makes, loud failure)
+  — no sender calls a transport directly, and a fan-out (the party
+  announcement) is bounded. Graph's id is the minted `client-request-id`;
+  `saveToSentItems` is false unless `GRAPH_SAVE_TO_SENT_ITEMS=true`.
+  Production's boot requires the selected transport's settings.
+- The email font stack is the theme's face plus the bare `sans-serif` tail —
+  no named system face (design rules).
 
 **History**: [harvest-1](HISTORY.md#harvest-1) · [r1](HISTORY.md#r1) · [go-live](HISTORY.md#go-live) · [harvest-ice-a-2026-09-24](HISTORY.md#harvest-ice-a-2026-09-24) · [harvest2-lane2-2026-09-26](history.d/2026-09-26-harvest2-lane2-email.md#harvest2-lane2-2026-09-26)
 

@@ -98,11 +98,12 @@ const TEXT_PAIRS = Object.freeze([
 const AA = 4.5;
 
 // The email font: the theme's body face first (a recipient who has it gets
-// the brand voice), then a system sans every mail client has. Named defaults
-// banned by the design rules are dropped even from here; the generic tail is
+// the brand voice), then the bare generic `sans-serif` — the design rules'
+// tail for every stack; no named system face is added. Named defaults banned
+// by the design rules are dropped even from here; the generic tail is
 // re-added once.
 const BANNED_FONTS = /^(inter|roboto|open sans|arial|system-ui|space grotesk|-apple-system|blinkmacsystemfont)$/i;
-const MAIL_FONT_TAIL = ["'Segoe UI'", 'Helvetica', 'sans-serif'];
+const MAIL_FONT_TAIL = ['sans-serif'];
 const FALLBACK_FONT = MAIL_FONT_TAIL.join(', ');
 
 // ── Colour maths ─────────────────────────────────────────────────────────────
