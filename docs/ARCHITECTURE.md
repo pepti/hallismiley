@@ -295,9 +295,9 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Components | `public/js/components/NavBar.js` |
 | Client | `public/js/router.js` (lazy `VIEWS` table + `make()`), `routePatterns.json` (the route list the server 404s against; `server/utils/spaRoutes.js` reads it), `navigate.js`, `main.js`, `consent.js`; `public/js/utils/identity.js` (the client half of the identity seam), `reveal.js`, `motion.js`, `productSite.js`, `sanitizeHtml.js`, `slug.js`, `features.js` |
 | CSS | `public/css/home.css`, `business-pages.css`, `contact.css`, `video-section.css`, `fonts.css` |
-| Jest | `tests/integration/contact.test.js`, `sitemap.test.js`, `llms.test.js`, `ssrMeta.test.js`, `identityDownstream.test.js`, `spaStatus.test.js`; `tests/unit/routePatterns.test.js`, `routerLazyViews.test.js`; `tests/unit/clientConfig.test.js`, `identityConfig.test.js`, `appEnv.test.js`, `slug.test.js`, `slug.client.test.js`, `outboundAllowlist.test.js`, `version.test.js`, `buildManifest.test.js` |
+| Jest | `tests/integration/contact.test.js`, `contactContentOs002.test.js`, `sitemap.test.js`, `llms.test.js`, `ssrMeta.test.js`, `identityDownstream.test.js`, `spaStatus.test.js`; `tests/unit/routePatterns.test.js`, `routerLazyViews.test.js`; `tests/unit/clientConfig.test.js`, `identityConfig.test.js`, `appEnv.test.js`, `slug.test.js`, `slug.client.test.js`, `outboundAllowlist.test.js`, `version.test.js`, `buildManifest.test.js` |
 | e2e | `e2e/business-routes.spec.js`, `lazy-views.spec.js`, `contact.spec.js`, `navigation.spec.js`, `responsive.spec.js`, `responsive-screenshots.spec.js`, `editable-homepage.spec.js` |
-| Migrations | 005, 017, 091, 092 (seeded company copy) |
+| Migrations | 005, 017, 091, 092, os_002 (seeded company copy) |
 | Features | [public-site](../features/public-site.md), [company-content](../features/os/company-content.md) (os) |
 | Feature doc | `docs/API.md` (Contact); `docs/SALES-STAFF.md` for what a submission becomes |
 
@@ -341,6 +341,13 @@ company/                  gitignored: plans, decisions, logs, market-research st
   service names — change them together; no `price` in structured data;
   `public/js/utils/productSite.js` is the one place that builds the product-site
   URL ([services-page](HISTORY.md#services-page)).
+- **The company site names no software it replaces, and does not describe
+  the product's stack** ([contact-page-company-2026-09-26](HISTORY.md#contact-page-company-2026-09-26)):
+  categories ("vefverslunarkerfi", "bókhaldskerfi"), not products, in copy
+  and in the contact form's platform select (`KNOWN_PLATFORMS` still accepts
+  the old product values). A contact-copy change ships with a product
+  migration for the seeded rows; `contactContentOs002.test.js` checks the
+  ContactView defaults and os_002 agree.
 - Homepage = the hallismiley composition: dark video hero, light site below;
   the media-hero surfaces are fixed dark on EVERY theme (`home.css`), which is
   how invariant 15 is met. A new hero clip gets a NEW filename (the `public/`
