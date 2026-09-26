@@ -280,6 +280,45 @@ describe('POST /inventory/count (one audited batch)', () => {
     expect(await stockOf(p.id)).toBe(5);
   });
 
+  test('a variant product counted at product level AND by one of its variants is refused before any lock', async () => {
+    const tee = await mkProduct('pre-par', { variant_axes: ['size'] });
+    const v = await ProductVariant.create({ product_id: tee.id, sku: 'L6A-PRE-V', attributes: { size: 'M' }, stock: 3 });
+    const res = await request(app).post(`${BASE}/count`).set('Cookie', adminCookie).send({
+      lines: [{ productId: tee.id, variantId: v.id, mode: 'set', qty: 5 }, { productId: tee.id, mode: 'set', qty: 9 }],
+    });
+    expect(res.status).toBe(409);
+    expect(res.body.lines).toEqual([expect.objectContaining({ line: 2, reason: 'VARIANT_REQUIRED' })]);
+    expect(await stockOf(tee.id, v.id)).toBe(3);
+  });
+
+  test('a refused batch inside a CALLER\'s transaction is rolled back to its savepoint — the caller\'s own writes survive', async () => {
+    const a = await mkProduct('sp-a', { stock: 2 });
+    const b = await mkProduct('sp-b', { stock: 0 });
+    const client = await db.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(`UPDATE products SET bin = 'SP-1' WHERE id = $1`, [a.id]);
+      await expect(Inventory.applyBatch([
+        { productId: a.id, mode: 'increment', qty: 5 },
+        { productId: b.id, mode: 'decrement', qty: 1 },
+      ], { userId: adminId }, client)).rejects.toMatchObject({ code: 'BATCH_REFUSED' });
+      await client.query('COMMIT');       // a careless caller commits anyway
+    } finally { client.release(); }
+    expect(await stockOf(a.id)).toBe(2);   // nothing of the batch
+    expect((await db.query('SELECT bin FROM products WHERE id = $1', [a.id])).rows[0].bin).toBe('SP-1');
+    expect(await rows(a.id)).toEqual([]);
+  });
+
+  test('a re-sent count is answered "already saved" even when a line would now be refused', async () => {
+    const p = await mkProduct('token2', { stock: 5 });
+    const body = { clientToken: 'l6a-token-00000002', lines: [{ productId: p.id, mode: 'decrement', qty: 5 }] };
+    expect((await request(app).post(`${BASE}/count`).set('Cookie', adminCookie).send(body)).status).toBe(200);
+    const again = await request(app).post(`${BASE}/count`).set('Cookie', adminCookie).send(body);
+    expect(again.status).toBe(409);
+    expect(again.body.reason).toBe('DUPLICATE_BATCH');
+    expect(await stockOf(p.id)).toBe(0);
+  });
+
   test('a re-sent count (same client token) is refused whole — nothing moves twice', async () => {
     const p = await mkProduct('token', { stock: 1 });
     const body = { clientToken: 'l6a-token-00000001', lines: [{ productId: p.id, mode: 'increment', qty: 5 }] };
@@ -306,7 +345,10 @@ describe('POST /inventory/count (one audited batch)', () => {
     const results = await Promise.all([batch(3, true), batch(4, false), batch(5, true)]);
     expect(results).toHaveLength(3);
     expect(await stockOf(tee.id, v.id)).toBe(22);
-    const chain = (await rows(tee.id)).map(r => [r.previous_stock, r.new_stock]);
+    // created_at is each transaction's START (NOW()), not its commit, so the
+    // rows are put in chain order by their figures: all increments, so every
+    // row must start where another ended.
+    const chain = (await rows(tee.id)).map(r => [r.previous_stock, r.new_stock]).sort((a, b) => a[0] - b[0]);
     expect(chain).toHaveLength(3);
     for (let i = 1; i < chain.length; i += 1) expect(chain[i][0]).toBe(chain[i - 1][1]);
     expect(chain[0][0]).toBe(10);

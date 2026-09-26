@@ -98,6 +98,21 @@ function hasVariantAxes(p) {
   return Boolean(p.variant_axes) && p.variant_axes !== '[]';
 }
 
+// One refusal for a whole batch (applyLines with collectShortfalls /
+// refuseVariantParents): every refused line, in the caller's order, plus the
+// single-line fields the INSUFFICIENT_STOCK responder reads.
+function batchRefused(lines) {
+  const sorted = lines.slice().sort((a, b) => a.index - b.index);
+  const first = sorted[0];
+  const e = new Error('Stock batch refused');
+  e.code = 'BATCH_REFUSED';
+  e.status = 409;
+  e.lines = sorted;
+  e.productId = first.productId; e.variantId = first.variantId;
+  e.onHand = first.onHand; e.wanted = first.qty;
+  return e;
+}
+
 function insufficient(line, previous) {
   const e = new Error('Not enough on hand for that movement');
   e.code = 'INSUFFICIENT_STOCK';
@@ -257,6 +272,25 @@ class Inventory {
     // line's own row is taken FOR UPDATE below, and share-then-upgrade is how
     // two fulfilments of one product deadlocked in ice (40P01, 2026-09-20).
     const levelIds = new Set(norm.filter(l => !l.variantId).map(l => l.productId));
+    // A product-level line on a product WITH variant axes is refused BEFORE any
+    // lock is taken (read without a lock; the check under the row lock below
+    // stays as the backstop). Locking first would take that parent FOR UPDATE
+    // after its variants — the reverse of the module order, and a cycle with
+    // a checkout or a fulfilment on the same product (harvest2-lane6a review).
+    if (refuseVariantParents && levelIds.size) {
+      const { rows: parents } = await client.query(
+        'SELECT id, stock, variant_axes FROM products WHERE id = ANY($1::text[])', [[...levelIds]]
+      );
+      const early = [];
+      for (const p of parents) {
+        if (!hasVariantAxes(p)) continue;
+        for (const l of norm.filter(x => !x.variantId && x.productId === String(p.id))) {
+          early.push({ index: l.i, productId: l.productId, variantId: null, reason: 'VARIANT_REQUIRED',
+            onHand: Number(p.stock), mode: l.mode, qty: l.qty, result: null });
+        }
+      }
+      if (early.length) throw batchRefused(early);
+    }
     const parentIds = [...new Set(norm.filter(l => l.variantId).map(l => l.productId))]
       .filter(id => !levelIds.has(id)).sort();
     if (parentIds.length) {
@@ -326,18 +360,7 @@ class Inventory {
         previous, stock: next, delta: next - previous, adjustmentId: adj[0].id,
       };
     }
-    if (refused.length) {
-      refused.sort((a, b) => a.index - b.index);
-      const first = refused[0];
-      const e = new Error('Stock batch refused');
-      e.code = 'BATCH_REFUSED';
-      e.status = 409;
-      e.lines = refused;
-      // The single-line fields the INSUFFICIENT_STOCK responder reads.
-      e.productId = first.productId; e.variantId = first.variantId;
-      e.onHand = first.onHand; e.wanted = first.qty;
-      throw e;
-    }
+    if (refused.length) throw batchRefused(refused);
     return results;
   }
 
@@ -357,17 +380,22 @@ class Inventory {
   //                             was saved before, nothing moved now
   // Runs in its own transaction, or in the caller's when `client` is given
   // (the receipt finalise holds its receipt row). Either way it is ONE
-  // applyLines call, so the module lock order holds.
+  // applyLines call, so the module lock order holds, and it runs under a
+  // SAVEPOINT: a refused batch is rolled back to it before the error leaves,
+  // so a caller that catches the error and commits still commits nothing of
+  // the batch. `maxLines` caps the batch (BATCH_MAX_LINES — the HTTP count);
+  // a server-built batch such as a receipt passes its own ceiling.
   // → { batchId, results } (results in the caller's line order).
   static async applyBatch(adjustments, {
     userId = null, reason = null, note = null, clientToken = null, goodsReceiptId = null,
+    maxLines = BATCH_MAX_LINES,
   } = {}, client = null) {
-    const lines = Inventory.normaliseBatch(adjustments, { reason, note });
+    const lines = Inventory.normaliseBatch(adjustments, { reason, note, maxLines });
     if (!client) {
       const own = await db.pool.connect();
       try {
         await own.query('BEGIN');
-        const out = await Inventory.applyBatch(lines, { userId, clientToken, goodsReceiptId }, own);
+        const out = await Inventory.applyBatch(lines, { userId, clientToken, goodsReceiptId, maxLines }, own);
         await own.query('COMMIT');
         return out;
       } catch (err) {
@@ -377,19 +405,32 @@ class Inventory {
         own.release();
       }
     }
+    const duplicate = () => {
+      const e = new Error('This batch was already saved');
+      e.code = 'DUPLICATE_BATCH'; e.status = 409;
+      return e;
+    };
+    // A re-sent batch is answered as one before any lock is taken, so the
+    // answer is "already saved" even when a line would now be refused. The
+    // unique index below stays the guard for two sends racing.
+    if (clientToken) {
+      const { rows } = await client.query(
+        'SELECT 1 FROM inventory_adjustments WHERE client_token = $1 LIMIT 1', [String(clientToken)]
+      );
+      if (rows.length) throw duplicate();
+    }
     const batchId = crypto.randomUUID();
+    await client.query('SAVEPOINT inventory_batch');
     try {
       const results = await Inventory.applyLines(client, lines, {
         userId, batchId, goodsReceiptId, clientToken,
         collectShortfalls: true, refuseVariantParents: true,
       });
+      await client.query('RELEASE SAVEPOINT inventory_batch');
       return { batchId, results };
     } catch (err) {
-      if (err && err.code === '23505' && err.constraint === 'uq_inventory_adjustments_client_token') {
-        const e = new Error('This batch was already saved');
-        e.code = 'DUPLICATE_BATCH'; e.status = 409;
-        throw e;
-      }
+      try { await client.query('ROLLBACK TO SAVEPOINT inventory_batch'); } catch { /* the transaction is gone */ }
+      if (err && err.code === '23505' && err.constraint === 'uq_inventory_adjustments_client_token') throw duplicate();
       throw err;
     }
   }
@@ -398,14 +439,14 @@ class Inventory {
   // `.index` on the first bad line. A product or variant named twice is
   // refused rather than merged: two 'set' lines for one shelf are a
   // contradiction, and merging them would hide it.
-  static normaliseBatch(adjustments, { reason = null, note = null } = {}) {
+  static normaliseBatch(adjustments, { reason = null, note = null, maxLines = BATCH_MAX_LINES } = {}) {
     const bad = (index, why) => {
       const e = new Error(`Invalid batch line ${index}: ${why}`);
       e.code = 'BATCH_INVALID'; e.status = 400; e.index = index; e.why = why;
       return e;
     };
     if (!Array.isArray(adjustments) || adjustments.length === 0) throw bad(-1, 'empty');
-    if (adjustments.length > BATCH_MAX_LINES) throw bad(-1, 'tooMany');
+    if (maxLines != null && adjustments.length > maxLines) throw bad(-1, 'tooMany');
     const seen = new Set();
     const cleanNote = (v) => ((typeof v === 'string' && v.trim()) ? v.trim().slice(0, 500) : null);
     return adjustments.map((a, i) => {

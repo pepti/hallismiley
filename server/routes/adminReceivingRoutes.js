@@ -47,6 +47,7 @@ const receiptFile = (req, res, next) => {
 router.use(requireAuth, requireView('receiving'));
 
 router.get('/',                        ctrl.list);
+router.get('/search',                  ctrl.search);   // before /:id
 router.post('/',                       csrfProtect, sanitizeBody, ctrl.create);
 router.get('/:id',                     ctrl.get);
 router.get('/:id/receipt.pdf',         ctrl.receiptPdf);

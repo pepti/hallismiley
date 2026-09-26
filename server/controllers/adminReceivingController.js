@@ -65,6 +65,11 @@ const RECEIPT_ERRORS = {
 };
 
 async function respond(req, res, err) {
+  // A product or variant removed between the match and the write fails its
+  // foreign key: the catalogue changed under the page, not a server fault.
+  if (err && err.code === '23503') {
+    return res.status(409).json({ error: t(req.locale, 'errors.receiving.itemChanged'), code: 409, reason: 'ITEM_CHANGED' });
+  }
   const key = err && err.status && RECEIPT_ERRORS[err.code];
   if (key) {
     return res.status(err.status).json({
@@ -122,6 +127,16 @@ const adminReceivingController = {
         createdBy: req.user ? req.user.id : null,
       });
       return res.status(201).json({ receipt });
+    } catch (err) { return next(err); }
+  },
+
+  // GET /search?q= → { items } — the line matcher's picker, behind this view
+  // (a receiving-only role has no `inventory` view to search through).
+  async search(req, res, next) {
+    try {
+      const q = String(req.query.q == null ? '' : req.query.q).trim().slice(0, 200);
+      if (!q) return res.json({ items: [] });
+      return res.json({ items: await Inventory.searchItems(q, { limit: 20 }) });
     } catch (err) { return next(err); }
   },
 

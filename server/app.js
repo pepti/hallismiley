@@ -360,7 +360,7 @@ app.use('/api/v1/admin/bins', (req, res, next) => {
 // receiving SCAN is exempt here: it has its own per-user limiter in
 // adminReceivingRoutes.js, because a pallet is hundreds of one-unit POSTs.
 app.use(['/api/v1/admin/inventory', '/api/v1/admin/receiving'], (req, res, next) => {
-  if (req.method === 'POST' && /^\/[^/]+\/scan$/.test(req.path)) return next();
+  if (req.method === 'POST' && req.baseUrl === '/api/v1/admin/receiving' && /^\/[^/]+\/scan$/.test(req.path)) return next();
   if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
     return writeLimiter(req, res, next);
   }

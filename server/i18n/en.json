@@ -527,5 +527,6 @@
   "errors.receiving.supplierRequired": "Give the supplier's name (at most 200 characters).",
   "errors.receiving.fieldTooLong": "That field can be at most {max} characters.",
   "errors.receiving.lineStatusInvalid": "That change is not valid for a line.",
-  "errors.receiving.qtyInvalid": "Enter a whole number of 0 or more."
+  "errors.receiving.qtyInvalid": "Enter a whole number of 0 or more.",
+  "errors.receiving.itemChanged": "An item on this receipt changed in the catalogue meanwhile — reload and try again."
 }

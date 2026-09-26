@@ -61,7 +61,15 @@
 .stock-dot--ok       { background: var(--success); }
 
 /* ── Tables ───────────────────────────────────────────────────────────────── */
+/* The wrap is the containing block of the header's .sr-only label: without
+   it that absolutely positioned span sits at the table's far right edge in
+   the INITIAL containing block and widens the whole page at 375px. */
+.stock-page .admin-table-wrap { position: relative; }
+.stock-table th,
+.stock-table td { padding-left: var(--sp-3); padding-right: var(--sp-3); }
 .stock-table td { vertical-align: middle; }
+.stock-table .admin-table__actions { white-space: nowrap; }
+.stock-table .admin-table__actions .btn { padding-left: var(--sp-2); padding-right: var(--sp-2); letter-spacing: 0.04em; }
 .stock-c-name { min-width: 14rem; }
 .stock-name { display: block; font-weight: 500; color: var(--text-primary); }
 .stock-sku,
@@ -257,7 +265,7 @@ tr.is-unmatched td:first-child { box-shadow: inset 3px 0 0 var(--error); }
 @media (max-width: 640px) {
   .stock-count__add { grid-template-columns: minmax(0, 1fr); }
   .stock-count__actions { margin-left: 0; width: 100%; }
-  .stock-count__actions .btn { flex: 1 1 0; }
+  .stock-count__actions .btn { flex: 1 1 0; min-width: 0; white-space: normal; }
   .stock-c-name { min-width: 10rem; }
   .stock-toolbar .admin-search { max-width: none; }
   .receiving-actions .btn { flex: 1 1 auto; }

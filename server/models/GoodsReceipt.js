@@ -14,10 +14,13 @@
 // received_qty is DERIVED from the scan log (recomputed on every scan and
 // undo), so an undo can never drift from what was physically scanned.
 //
-// Lock order: the goods_receipts row first (FOR UPDATE), then — finalise
-// only — the stock rows in the Inventory module's order. Nothing else locks a
-// receipt row and then a stock row, and no stock writer ever locks a receipt,
-// so the two orders cannot cycle.
+// Lock order: the goods_receipts row first (FOR UPDATE), then the stock rows
+// in the Inventory module's order — FOR UPDATE through Inventory.applyBatch at
+// finalise, and FOR KEY SHARE through Inventory.lockReferences before any
+// line or scan insert/update whose product/variant foreign keys would
+// otherwise share-lock them in the supplier file's order (a cycle with a
+// fulfilment or a count; harvest2-lane6a review). No stock writer ever locks
+// a receipt, so the receipt-first order cannot cycle either.
 const db = require('../config/database');
 const Inventory = require('./Inventory');
 
@@ -253,6 +256,7 @@ const GoodsReceipt = {
     try {
       await client.query('BEGIN');
       const receipt = await GoodsReceipt._lockDraft(client, receiptId);
+      await Inventory.lockReferences(client, matches.filter(m => m.productId));
       const { rows: cnt } = await client.query(
         `SELECT COUNT(*)::int AS n, COALESCE(MAX(sort_order), -1)::int AS last
            FROM goods_receipt_lines WHERE receipt_id = $1`, [receipt.id]
@@ -315,6 +319,7 @@ const GoodsReceipt = {
           if (item.variant_required) throw typed('Choose a variant', 'VARIANT_REQUIRED', 409);
           productId = item.product_id; variantId = item.variant_id;
           status = 'manual';
+          await Inventory.lockReferences(client, [{ productId, variantId }]);
         }
       }
       if (patch.matchStatus !== undefined) status = patch.matchStatus;
@@ -343,6 +348,7 @@ const GoodsReceipt = {
     try {
       await client.query('BEGIN');
       const receipt = await GoodsReceipt._lockDraft(client, receiptId);
+      await Inventory.lockReferences(client, [{ productId, variantId }]);
       const lineId = await GoodsReceipt._lineFor(client, receipt.id, productId, variantId);
       await client.query(
         `INSERT INTO goods_receipt_scans
@@ -446,8 +452,10 @@ const GoodsReceipt = {
       const note = receipt.reference ? `${receipt.supplier_name} · ${receipt.reference}` : receipt.supplier_name;
       let batchId = null;
       if (adjustments.length) {
+        // No line cap: a receipt carries up to MAX_LINES lines plus its
+        // extras, and the batch cap exists for the HTTP count (review).
         ({ batchId } = await Inventory.applyBatch(adjustments, {
-          userId, reason: 'receipt', note, goodsReceiptId: receipt.id,
+          userId, reason: 'receipt', note, goodsReceiptId: receipt.id, maxLines: null,
         }, client));
       }
       await client.query(

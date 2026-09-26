@@ -57,3 +57,8 @@ export function finalizeReceipt(receiptId, excludeExtras = []) {
 }
 export function cancelReceipt(receiptId)     { return call(`${BASE}/${id(receiptId)}/cancel`, { method: 'POST' }); }
 export function receiptPdfUrl(receiptId)     { return `${BASE}/${id(receiptId)}/receipt.pdf`; }
+// The line matcher's picker (stocked units only) — behind the receiving view.
+export async function searchItems(q) {
+  const data = await call(`${BASE}/search?q=${encodeURIComponent(q)}`);
+  return data.items || [];
+}

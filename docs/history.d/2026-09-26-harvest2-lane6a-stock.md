@@ -102,11 +102,49 @@ ported. Every surface is retail and hidden here (`identity.surface.hiddenAdminVi
   previous → new audit chain. Two batches that cannot both fit: exactly one wins and the other is
   refused. Two finalises racing: exactly one moves stock.
 
-**Measured.** Unit: 115 → 116 suites; the new `inventoryStatus.test.js` has 11 tests. The engine
-pins `identityConfig.test.js` (hidden views) and `routePatterns.json` (four routes) moved with the
-change. Integration: `adminInventory.test.js` 12 tests and `goodsReceipts.test.js` 8 tests, both
-green on real Postgres. `inventoryThreeNumbers.test.js` stays green (19 tests). `migrate.js --plan`
-on a master-level copy: only `118_goods_receipts` RUN, and a second run is a no-op.
+**Review pass** (the `invariant-reviewer` agent on `git diff master...HEAD`, asked specifically
+about the stock money path and the lock order). Verdict: every invariant passes. There is one
+single write path, all-or-nothing holds, stock can never go below zero, every route is gated with
+CSRF on writes, and migration 118 is expand-only. Every finding was fixed on the branch:
+1. *A receipt with more than 500 distinct items could never finalise*, because the count's batch
+   cap applied to it too. `applyBatch` now takes `maxLines`, and finalise passes none. Test: 501
+   items in one batch.
+2. *Importing lines could deadlock with a stock writer.* A line or scan insert share-locks its
+   product/variant through the foreign key, in the supplier file's order. `addLines`, `addScan`
+   and `updateLine` now call `Inventory.lockReferences` right after the receipt lock, and the
+   model header now states the order correctly.
+3. *A crafted count could deadlock.* Naming a variant product at product level AND one of its
+   variants took that parent FOR UPDATE after the variant. A product-level line on a variant
+   product is now refused BEFORE any lock (read without a lock; the check under the lock stays as
+   the backstop). Test added.
+4. *All or nothing depended on the caller rolling back.* `applyBatch` now runs under a SAVEPOINT
+   and rolls back to it before the error leaves. Test: a caller that catches and commits keeps its
+   own write and none of the batch.
+5. *A re-sent count whose line would now be refused* said "below zero" instead of "already saved".
+   There is now a lock-free token check first; the unique index stays the race guard. Test added.
+6. *A receiving-only role could not use the line matcher*, which searched through the `inventory`
+   view. It now searches through `GET /api/v1/admin/receiving/search`, behind `receiving`.
+   Test added.
+7. Nits:
+   - The scan limiter exemption is scoped to the receiving mount (`req.baseUrl`).
+   - A product or variant deleted between the match and the write (a foreign-key failure, 23503)
+     is a 409 `ITEM_CHANGED`, not a 500 (new DRAFT key `errors.receiving.itemChanged`).
+   - The skipped numbers 116/117 are the other lanes'. `migrationSet.test.js` makes whichever lane
+     merges after this one renumber above 118.
+
+The 375 px screenshots found one more bug. The header's `.sr-only` label is absolutely positioned,
+and it widened the whole page to the table's width, because its containing block was the initial
+one. `.stock-page .admin-table-wrap` is now `position: relative`. Table padding was tightened so
+the actions column fits at 1440 px.
+
+**Measured.** Unit: 128 suites green after the master merge (the new `inventoryStatus.test.js` has
+11 tests). The engine pins moved with the change: `identityConfig.test.js` (hidden views) and
+`routePatterns.json` (four routes). Integration, on real Postgres: `adminInventory.test.js` 15
+tests, `goodsReceipts.test.js` 10, and `inventoryThreeNumbers.test.js` still green (19). e2e:
+`e2e/admin-stock.spec.js` has 3 tests (watch + Fix stock, a scanned count, a receipt scanned and
+finalised). `migrate.js --plan` on a master-level copy: only `118_goods_receipts` RUN, and a second
+run is a no-op. Screenshots of the three screens on Glóð, Bjart and Miðnætti at 1440 px and 375 px
+were checked by eye. At 375 px the tables scroll sideways inside their wrap, the kit's pattern.
 
 **Trimmed from ice.**
 - Inventory Watch: the made-to-order exclusion and its "excluded" tally; recipe/`build_consume`
@@ -122,7 +160,7 @@ on a master-level copy: only `118_goods_receipts` RUN, and a second run is a no-
   `adminStockCount.*` (25), `adminReceiving.*` (66);
 - server `errors.inventory.batchEmpty` / `batchTooMany` / `batchDuplicateLine` /
   `batchLineInvalid` / `batchRefused` / `belowZero` / `variantRequired` / `duplicateBatch` /
-  `stockRange` / `noteTooLong` / `codeRequired` / `codeNotFound`, and `errors.receiving.*` (12).
+  `stockRange` / `noteTooLong` / `codeRequired` / `codeNotFound`, and `errors.receiving.*` (13).
 
 The Icelandic was drafted natively. The receipt PDF's fixed bilingual labels ("GOODS RECEIPT /
 Vörumóttaka", "Received by / Móttekið af" …) are DRAFT too.

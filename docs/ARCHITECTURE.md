@@ -1035,7 +1035,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Scripts | `server/scripts/seed-shop.js`, `import-products-csv.js` |
 | CSS | `public/css/shop.css`, `admin-products.css`, `admin-orders.css`, `admin-collections.css`, `admin-discounts.css`, `admin-bins.css`, `admin-sales.css`, `barcode-scanner.css`, `admin-stock.css` |
 | Jest | `tests/integration/shop.test.js`, `discounts.test.js`, `adminOrderBulk.test.js`, `adminProductImportExport.test.js`, `sections.test.js`, `inventoryThreeNumbers.test.js`, `adminProductImportFile.test.js`, `adminOrderExport.test.js`, `adminInventory.test.js`, `goodsReceipts.test.js`; `tests/unit/discountEngine.test.js`, `shopFilters.test.js`, `bins-grid.test.js`, `qr.test.js`, `availability.client.test.js`, `productImportParseFile.test.js`, `productImportVariantCell.test.js`, `productImportVariantGroups.test.js`, `parsePdfWorker.test.js`, `imageUrl.test.js` (fixture `tests/fixtures/pdfFixture.js`), `colorLabels.client.test.js`, `duplicateNames.client.test.js`, `vatDisplay.client.test.js`, `cartPriceSync.client.test.js`, `inventoryStatus.test.js` |
-| e2e | `e2e/admin-product-group.spec.js`, `cart-sold-out.spec.js` |
+| e2e | `e2e/admin-product-group.spec.js`, `cart-sold-out.spec.js`, `admin-stock.spec.js` |
 | Migrations | 022–025, 045, 048, 049, 050, 054, 055, 057, 074, 112, 113, 115 (`orders.notes`, the checkout note), 118 (goods receipts, the stock batch handle) |
 | Features | [cart-checkout](../features/cart-checkout.md), [discounts](../features/discounts.md), [orders](../features/orders.md), [shop-catalog](../features/shop-catalog.md), [goods-receiving](../features/goods-receiving.md) |
 | Feature doc | — (retail is hidden here; ENHANCEMENTS #22, #23, #25 landed by the 2026-09-24 ice harvest, #24 in part; #26 remains) |
@@ -1130,16 +1130,19 @@ company/                  gitignored: plans, decisions, logs, market-research st
   `requireAuth`, `requireView('products')`, the limiters and (apply) CSRF, with
   `sanitizeBody` re-applied; `app.js` skips its global parser for that path.
   Never mount a large parser for an admin path at app level again ([ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23)).
-- **A batch of stock movements is ONE `Inventory.applyBatch` call** ([harvest2-lane6a](history.d/2026-09-26-harvest2-lane6a-stock.md#harvest2-lane6a-2026-09-26)):
+- **A batch of stock movements is ONE `Inventory.applyBatch` call** under a SAVEPOINT (a refused
+  batch rolls back to it even inside a caller's transaction; `maxLines` caps only the HTTP count) ([harvest2-lane6a](history.d/2026-09-26-harvest2-lane6a-stock.md#harvest2-lane6a-2026-09-26)):
   its own transaction (or the caller's, which then holds only rows taken
   BEFORE the stock rows), one `applyLines` call inside, so the module lock
   order holds; every row carries the same `batch_id` (migration 118). It is
   all or nothing: every line is checked under its lock and a line that would
-  go below zero, or a product-level line on a product WITH variant axes, is
+  go below zero, or a product-level line on a product WITH variant axes (checked
+  BEFORE any lock, so it never locks a parent after its variants), is
   refused in one 409 naming every such line (`lines[]`) — never clamped to
   0, never a partial write. One product/variant twice in a batch is a 400. A
-  `clientToken` lands on one row (the unique `client_token` index), so a
-  re-sent batch is 409 `DUPLICATE_BATCH` and moves nothing. `applyLines`
+  `clientToken` is checked first and lands on one row (the unique
+  `client_token` index), so a re-sent batch is 409 `DUPLICATE_BATCH` and
+  moves nothing. `applyLines`
   refuses a variant that does not belong to the product the line names.
 - **Inventory Watch** (`/admin/inventory`, view `inventory`; `GET
   /api/v1/admin/shop/reports/inventory` is answered BEFORE the `/reports`
@@ -1159,8 +1162,9 @@ company/                  gitignored: plans, decisions, logs, market-research st
   (reason `receipt`, `goods_receipt_id` on every row), and flips the status
   in the same transaction — a second finalise waits, then finds
   `finalized` (409, nothing moves). Stock moves by the scan log (received),
-  never by expected. No stock writer locks a receipt row, so the two orders
-  cannot cycle. Receiving scans have their own per-user limiter (a pallet is
+  never by expected. Every line/scan write takes the receipt row, then
+  `Inventory.lockReferences` on the rows its foreign keys touch, before the
+  insert. No stock writer locks a receipt row, so the two orders cannot cycle. Receiving scans have their own per-user limiter (a pallet is
   hundreds of POSTs); every other write is under `writeLimiter`.
 
 **History**: [harvest-2](HISTORY.md#harvest-2) · [ui-kit](HISTORY.md#ui-kit) · [ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23) · [harvest-ice-c-2026-09-24](HISTORY.md#harvest-ice-c-2026-09-24) · [harvest-ice-d-2026-09-24](HISTORY.md#harvest-ice-d-2026-09-24) · [harvest2-lane6a-2026-09-26](history.d/2026-09-26-harvest2-lane6a-stock.md#harvest2-lane6a-2026-09-26)

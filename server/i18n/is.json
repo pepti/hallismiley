@@ -527,5 +527,6 @@
   "errors.receiving.supplierRequired": "Skráðu nafn birgjans (mest 200 stafir).",
   "errors.receiving.fieldTooLong": "Þessi reitur má mest vera {max} stafir.",
   "errors.receiving.lineStatusInvalid": "Þessi breyting á ekki við línu.",
-  "errors.receiving.qtyInvalid": "Sláðu inn heila tölu, 0 eða meira."
+  "errors.receiving.qtyInvalid": "Sláðu inn heila tölu, 0 eða meira.",
+  "errors.receiving.itemChanged": "Vara á þessari móttöku breyttist í vörulistanum á meðan — hlaðið síðunni aftur og reyndu aftur."
 }

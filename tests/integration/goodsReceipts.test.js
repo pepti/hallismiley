@@ -292,6 +292,32 @@ describe('scan, reconcile, finalise', () => {
     expect(await stockOf(ghost.id)).toBe(before);
   });
 
+  test('a receipt with more than one count-batch of distinct items (500) still finalises, as one batch', async () => {
+    const id = await newReceipt(adminCookie, { supplierName: 'L6A big' });
+    const { rows: made } = await db.query(
+      `INSERT INTO products (slug, name, description, price_isk, price_eur, stock, category, sku, active)
+       SELECT '${SLUG}big-' || g, 'GR big ' || g, '', 100, 1, 0, 'product', 'L6A-BIG-' || g, TRUE
+         FROM generate_series(1, 501) g RETURNING id`
+    );
+    await db.query(
+      `INSERT INTO goods_receipt_scans (receipt_id, product_id, scanned_code, qty)
+       SELECT $1, p, 'bulk', 2 FROM unnest($2::text[]) p`, [id, made.map(r => r.id)]
+    );
+    const fin = await request(app).post(`${BASE}/${id}/finalize`).set('Cookie', adminCookie).send({});
+    expect(fin.status).toBe(200);
+    expect(fin.body.finalized).toMatchObject({ lines: 501, units: 1002 });
+    const ledger = await adjustmentsFor(id);
+    expect(ledger).toHaveLength(501);
+    expect(new Set(ledger.map(r => r.batch_id)).size).toBe(1);
+  });
+
+  test('the line matcher searches behind the receiving view (a receiving-only role can use it)', async () => {
+    const res = await request(app).get(`${BASE}/search?q=L6A-GR-TEE`).set('Cookie', rcvCookie);
+    expect(res.status).toBe(200);
+    expect(res.body.items.map(i => i.sku).sort()).toEqual(['L6A-GR-TEE-M', 'L6A-GR-TEE-S']);
+    expect((await request(app).get(`${BASE}/search?q=x`).set('Cookie', invCookie)).status).toBe(403);
+  });
+
   test('body checks: qty per scan, line status, expected qty', async () => {
     const id = await newReceipt(adminCookie, { supplierName: 'L6A checks' });
     await importCsv(id);

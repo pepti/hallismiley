@@ -22,9 +22,8 @@ import { attachCombobox } from '../components/Combobox.js';
 import { adminPageTitle } from '../utils/pageTitle.js';
 import { formatDateTime, formatNumber } from '../utils/format.js';
 import { unitName, parseCount } from '../utils/stockUnits.js';
-import { searchItems } from '../services/adminInventory.js';
 import {
-  getReceipt, importLines, updateLine, scan, deleteScan, finalizeReceipt, cancelReceipt, receiptPdfUrl,
+  getReceipt, importLines, updateLine, scan, deleteScan, finalizeReceipt, cancelReceipt, receiptPdfUrl, searchItems,
 } from '../services/adminReceiving.js';
 
 const VARIANCE_CLASS = { exact: 'ok', short: 'low', over: 'watch', not_received: 'out', pending: 'none' };

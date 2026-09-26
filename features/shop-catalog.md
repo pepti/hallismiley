@@ -53,6 +53,7 @@ paths:
   - tests/fixtures/pdfFixture.js
   - tests/unit/bins-grid.test.js
   - e2e/admin-product-group.spec.js
+  - e2e/admin-stock.spec.js
 migrations: [022_ecommerce, 023_product_taxonomy, 024_product_variants, 025_shop_content, 045_shop_sections, 048_product_codes, 049_collections, 057_product_bin, 074_product_vat_rate, 112_inventory_adjustments, 113_variant_barcode]
 since: 2026-08-09
 origin: null
