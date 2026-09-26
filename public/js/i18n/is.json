@@ -3097,5 +3097,17 @@
   "meta.contact.title": "Hafa samband",
   "meta.privacy.title": "Persónuverndarstefna",
   "meta.terms.title": "Notkunarskilmálar",
-  "meta.party.title": "40 ára afmæli Halla"
+  "meta.party.title": "40 ára afmæli Halla",
+  "demo.banner": "Þetta er sýnikerfi með tilbúnum gögnum. Þau eru endurstillt á hverri nóttu kl. {time}. Enginn tölvupóstur er sendur og engar greiðslur fara í gegn.",
+  "demo.adminTitle": "Sýnikerfi",
+  "demo.adminBadge": "Sýnigögn",
+  "demo.adminHelp": "Þetta kerfi geymir aðeins tilbúin sýnigögn. Þau eru endurstillt á hverri nóttu og hvenær sem þú vilt. Aðgangar starfsfólks og áhugasamra haldast.",
+  "demo.lastReset": "Síðast endurstillt",
+  "demo.nextReset": "Næsta endurstilling",
+  "demo.resetNow": "Endurstilla núna",
+  "demo.resetHelp": "Setur öll gögn aftur í upphaflegt horf, eins og gert er sjálfkrafa á hverri nóttu. Vefurinn er niðri í um eina mínútu.",
+  "demo.resetButton": "Endurstilla sýnigögn",
+  "demo.resetConfirm": "Endurstilla sýnigögn núna? Allt sem hefur verið skráð, breytt eða eytt frá síðustu endurstillingu hverfur, líka hjá öðrum sem eru að skoða kerfið. Aðgangar starfsfólks og áhugasamra haldast. Þetta er ekki hægt að afturkalla.",
+  "demo.resetStarted": "Endurstilling er hafin. Vefurinn kemur aftur eftir um eina mínútu.",
+  "demo.resetFailed": "Ekki tókst að endurstilla sýnigögnin"
 }

@@ -408,6 +408,7 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
   (`connect.*`) was approved by Halli 2026-09-25; `mcp.oauth*` too (the same day); (e) no CORS on the OAuth endpoints —
   claude.ai calls them server-side; a browser-based client (MCP Inspector)
   would need it.
+- Demo instance landed 2026-09-26 ([demo-instance-2026-09-26](docs/history.d/2026-09-26-feat-demo-mode.md#demo-instance-2026-09-26)): the engine half of R2b step 3. Open: rekstrarkerfid's Glóð seed as its `server/demo/seed.js` (+ the `kynning` prospect role), its `client.demo.json` (`CLIENT_CONFIG_FILE`) so the demo shows the shop, orders and till, `deploy.yml` with a `demo` environment (the lookup gate becomes "not test"), Ský's provisioning plan with `APP_ENV=demo`, `DEMO_INSTANCE=true`, `DEMO_DATABASE_NAME`, `DEMO_KEEP_ROLES=admin,kynning`, one instance, health check `/health`; verify on TEST that the reset's exit-and-restart is not counted as a crash loop; the `demo.*` / `errors.demo.*` copy is DRAFT.
 - Signup switch landed 2026-09-24 ([signup-switch-2026-09-24](docs/HISTORY.md#signup-switch-2026-09-24)):
   the engine half of rekstrarkerfid's R2b step 1. Open: rekstrarkerfid's next
   engine sync, then its own PR (config: signup off + `navSignIn` false; the

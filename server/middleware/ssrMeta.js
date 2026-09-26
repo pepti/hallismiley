@@ -40,6 +40,7 @@ const {
   identity, htmlIdentityAttrs, identityScriptTag, composeTitle, organizationAlternateNames,
   productRoutes, organizationDescription,
 } = require('../config/identity');
+const { demoHtmlAttrs } = require('../config/demoInstance');
 const { isDeindexedRoute } = require('../config/publicSurface');
 // The module switches' hand-off (R4) — rides next to the identity one.
 const { modulesScriptTag, isDisabledRoute } = require('../config/modules');
@@ -923,7 +924,8 @@ function rewriteHead(html, { title, description, canonical, hreflang, ogLocale, 
   // record as <script id="identity"> for public/js/utils/identity.js.
   html = html.replace(
     /<html\b[^>]*\blang="[^"]*"/i,
-    () => `<html lang="${esc(ogLocale.split('_')[0])}" ${htmlIdentityAttrs()}`
+    // + data-demo-instance on a demo instance (config/demoInstance.js): the banner reads it.
+    () => `<html lang="${esc(ogLocale.split('_')[0])}" ${htmlIdentityAttrs()}${demoHtmlAttrs()}`
   );
   // The brand-bearing static tags: og:site_name is the brand, author the
   // registered company. Baked in index.html for the no-SSR case only.

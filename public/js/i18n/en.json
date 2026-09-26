@@ -3097,5 +3097,17 @@
   "meta.contact.title": "Contact",
   "meta.privacy.title": "Privacy Policy",
   "meta.terms.title": "Terms of Service",
-  "meta.party.title": "Halli's 40th Birthday Party"
+  "meta.party.title": "Halli's 40th Birthday Party",
+  "demo.banner": "This is a demo system with made-up data. The data resets every night at {time}. No email is sent and no payments go through.",
+  "demo.adminTitle": "Demo system",
+  "demo.adminBadge": "Sample data",
+  "demo.adminHelp": "This system holds made-up sample data only. It resets every night and whenever you choose. Staff and prospect logins are kept.",
+  "demo.lastReset": "Last reset",
+  "demo.nextReset": "Next reset",
+  "demo.resetNow": "Reset now",
+  "demo.resetHelp": "Puts all data back to how it started, as happens automatically every night. The site is down for about a minute.",
+  "demo.resetButton": "Reset sample data",
+  "demo.resetConfirm": "Reset the demo data now? Everything added, changed or deleted since the last reset is lost, for anyone else using the demo too. Staff and prospect logins are kept. This can't be undone.",
+  "demo.resetStarted": "The reset has started. The site is back in about a minute.",
+  "demo.resetFailed": "Could not reset the demo data"
 }
