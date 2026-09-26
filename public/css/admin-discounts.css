@@ -2,7 +2,10 @@
    shared admin-table + admin-shop__modal styles; only the page-specific bits
    live here. */
 .disc-page { max-width: 900px; }
-.disc-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+/* Wraps so the title's action button drops under it on a phone instead of
+   sticking out past the page (Roles at 375px: "Nýtt hlutverk" overflowed). */
+.disc-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.disc-head > * { min-width: 0; }
 .disc-table code { font-size: 13px; }
 .disc-title { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
 .disc-badge {
