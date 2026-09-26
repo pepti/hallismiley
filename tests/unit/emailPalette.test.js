@@ -12,7 +12,7 @@
  *     falls back to the neutral palette with a warning;
  *  3. the AA guard — an override or a theme that fails is replaced + warned;
  *  4. THIS instance: its resolved palette needs no guard, and EVERY colour in
- *     every rendered mail (all twelve senders) clears AA on the surfaces text
+ *     every rendered mail (all thirteen senders) clears AA on the surfaces text
  *     sits on — measured from the real HTML, not from a list. A colour
  *     literal outside the palette fails the suite.
  *
@@ -175,8 +175,8 @@ describe('email palette — the rendered mails', () => {
 
   const colours = (html, re) => [...html.matchAll(re)].map((m) => m[1].toUpperCase());
 
-  test('twelve senders render through the shell', () => {
-    expect(mails.map((m) => m.name)).toHaveLength(12);
+  test('thirteen senders render through the shell', () => {
+    expect(mails.map((m) => m.name)).toHaveLength(13);
     for (const { msg } of mails) expect(msg.html).toContain('<meta name="color-scheme" content="light"/>');
   });
 

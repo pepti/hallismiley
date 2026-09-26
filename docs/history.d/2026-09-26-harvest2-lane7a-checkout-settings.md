@@ -52,7 +52,10 @@ checkout settings screen, and #200 (`7196533a`), the time-limited announcement. 
    `ORDER_NOTIFY_EMAIL`, else none. The sender is a small separate function,
    `emailService.sendOrderOwnerAlert` (Icelandic, the owner's language), added on its own export
    line so lane 2's edits to that file stay apart; it goes through `deliver()`, so EMAIL_ALLOWLIST
-   and the demo instance's no-send rule hold. The list never reaches `/shop/config`.
+   and the demo instance's no-send rule hold. The list never reaches `/shop/config`. After lane 2
+   (the light, instance-driven email shell) landed on master, the alert was repainted with its
+   palette `P` (no colour literal) and added to `tests/lib/renderAllEmails.js`, so
+   `emailPalette.test.js` measures it with the other senders (thirteen now).
 5. **Storefront** — `/shop/config` now carries `checkout: { ordering_paused,
    ordering_paused_message, min_order_value_isk, fields }` and `shipping.free_over_isk`.
    `public/js/utils/checkoutSettings.js` turns it into what to show: the cart and the checkout show

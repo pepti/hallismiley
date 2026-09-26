@@ -1303,21 +1303,22 @@ async function sendOrderOwnerAlert({ order, items, to }) {
     : (order.user_email || t(locale, 'email.bookingNotification.unknownCustomer'));
   const method = order.shipping_method === 'local_pickup'
     ? t(locale, 'email.order.localPickup') : t(locale, 'email.order.shippingMethod');
+  // Painted with P (lane 2's light, AA-checked palette), never a literal.
   const rows = (items || []).map(it => `
       <tr>
-        <td style="padding:8px 0;color:#e0e0e0;font-size:14px;border-top:1px solid #1a1a1a;">${escapeHtml(it.product_name_snapshot)} × ${Number(it.quantity)}</td>
-        <td style="padding:8px 0;color:#aaa;font-size:14px;text-align:right;border-top:1px solid #1a1a1a;">${formatMoney(it.product_price_snapshot * it.quantity, order.currency, locale)}</td>
+        <td style="padding:8px 0;color:${P.heading};font-size:14px;border-top:1px solid ${P.border};">${escapeHtml(it.product_name_snapshot)} × ${Number(it.quantity)}</td>
+        <td style="padding:8px 0;color:${P.text};font-size:14px;text-align:right;border-top:1px solid ${P.border};">${formatMoney(it.product_price_snapshot * it.quantity, order.currency, locale)}</td>
       </tr>`).join('');
   const html = emailShell(subject, `
-    <h2 style="margin:0 0 8px;font-size:22px;color:#e0e0e0;">${escapeHtml(t(locale, 'email.orderAlert.heading'))}</h2>
-    <p style="margin:0 0 24px;font-size:15px;color:#aaa;line-height:1.6;">${escapeHtml(t(locale, 'email.orderAlert.body', { orderNumber: order.order_number, customer, method }))}</p>
-    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;border-bottom:1px solid #222;">${rows}</table>
-    <p style="margin:0 0 24px;font-size:14px;color:#aaa;">${escapeHtml(t(locale, 'email.order.total'))}:
-      <strong style="color:#c9a84c;">${formatMoney(order.total, order.currency, locale)}</strong></p>
-    <p style="margin:0;font-size:13px;color:#888;">${escapeHtml(`${APP_URL}/is/admin/shop/orders/${order.id}`)}</p>
+    <h2 style="margin:0 0 8px;font-size:22px;color:${P.heading};">${escapeHtml(t(locale, 'email.orderAlert.heading'))}</h2>
+    <p style="margin:0 0 24px;font-size:15px;color:${P.text};line-height:1.6;">${escapeHtml(t(locale, 'email.orderAlert.body', { orderNumber: order.order_number, customer, method }))}</p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;border-bottom:1px solid ${P.border};">${rows}</table>
+    <p style="margin:0 0 24px;font-size:14px;color:${P.text};">${escapeHtml(t(locale, 'email.order.total'))}:
+      <strong style="color:${P.accent};">${formatMoney(order.total, order.currency, locale)}</strong></p>
+    <p style="margin:0;font-size:13px;color:${P.muted};">${escapeHtml(`${APP_URL}/is/admin/shop/orders/${order.id}`)}</p>
   `, locale);
   const { data, error } = await deliver({ from: FROM, to: recipients, subject, html }, 'orderAlert');
-  if (error) throw new Error(`Resend error: ${error.message}`);
+  if (error) throw new Error(`Email send error: ${error.message}`);
   logger.info({ orderNumber: order.order_number, recipients: recipients.length, id: data && data.id }, '[EmailService] Owner order alert sent');
   return true;
 }
