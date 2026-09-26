@@ -224,6 +224,13 @@ appear in `.engine-paths`. (`publicSurface.js` and `adminSurface.js` DO sync
 since 2026-09-22: their lists come from `identity.surface.*`, so the files
 carry no product data any more.)
 
+Two engine STUBS a product replaces with its own data: `server/demo/seed.js`
+(the demo instance's sample story) and `server/demo/testStackData.js` (a TEST
+stack's invented rows, harvest2-lane9-2026-09-26). The engine's copies seed
+nothing; a downstream that fills either lists it in its `engine.json`
+`productPaths` in the same change, so a later edit to the engine's stub (its
+header, its contract) can never be resolved over the product's data.
+
 History is split (§6): `docs/history.d/` fragments DO sync (engine-owned,
 new files); a downstream's own `docs/HISTORY.md` archive does not, once it
 is listed in that downstream's `productPaths`.

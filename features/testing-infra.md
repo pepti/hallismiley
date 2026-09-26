@@ -25,6 +25,12 @@ paths:
   - e2e/lib/dbUrl.js
   - e2e/lib/featureGate.js
   - e2e/lib/locale.js
+  - e2e/lib/routes.js
+  - e2e/lib/routeSmoke.js
+  - e2e/lib/roleSession.js
+  - e2e/lib/roleMatrix.js
+  - e2e/roles/*.spec.js
+  - tests/unit/roleRoutes.test.js
   - scripts/drop-test-dbs.js
   - scripts/test-pg.js
   - scripts/features-index.js
@@ -38,7 +44,7 @@ paths:
 migrations: []
 since: 2026-08-09
 origin: null
-history: [harvest-1, harvest-2, docs-restructure, identity-seam-2026-09-22, identity-seam-2-2026-09-23, harvest-ice-f-2026-09-24, harvest2-lane0-2026-09-26, test-db-hygiene-2026-09-26, test-db-followups-2026-09-26, security-hygiene-2026-09-26]
+history: [harvest-1, harvest-2, docs-restructure, identity-seam-2026-09-22, identity-seam-2-2026-09-23, harvest-ice-f-2026-09-24, harvest2-lane0-2026-09-26, test-db-hygiene-2026-09-26, test-db-followups-2026-09-26, security-hygiene-2026-09-26, harvest2-lane9-2026-09-26]
 ---
 
 Jest tiers (unit without a DB; integration on real Postgres with one database per worker), Playwright e2e on an isolated per-branch DB, the shared helpers, and the read-the-docs parity tests: `architectureIndex.test.js` keeps `docs/ARCHITECTURE.md` honest and `featureRegistry.test.js` keeps this registry honest (`scripts/features-index.js` generates its derived files). Both resolve history slugs against one namespace, the frozen archive `docs/HISTORY.md` plus the per-branch fragments in `docs/history.d/` (`tests/lib/historyAnchors.js`); `historyFragments.test.js` checks each fragment's name and first lines. `docs/TESTING.md` also holds the deployed-environment walkthrough (quoted vs booked) run after a deploy. The **feature gate** (`tests/lib/featureGate.js`, `e2e/lib/featureGate.js`) derives from `features/local.json` and this registry which suites skip on a downstream: a spec maps to its feature through the registry's `paths`, and a feature that is `hidden`, `disabled` or `forked` there — or belongs to another product — skips with the note.
