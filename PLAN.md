@@ -153,6 +153,16 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
 
 **Open technical items**
 
+- Test-database hygiene landed 2026-09-26 on `feat/test-db-hygiene`
+  ([test-db-hygiene-2026-09-26](docs/history.d/2026-09-26-feat-test-db-hygiene.md#test-db-hygiene-2026-09-26)):
+  throwaway test server `TEST_PG_URL` (`:5433`), product-scoped names,
+  labels + a sweep on every run, loud pattern teardown, DELETE-based
+  `cleanTables()` (a full run 389 s → 49 s). Owed: each downstream picks it up
+  by engine-sync, then `npm run test:db:clean -- --legacy --sweep` (dry run,
+  then `--yes`) on `:5432` clears the old `orangesmiley_*` leftovers; the
+  branch whose test creates `demo_reset_${pid}_test` switches to
+  `createExtraTestDb('demoreset')`.
+
 - Harvest 2 started 2026-09-26 (Halli approved the scope that day): generic
   icelandicstore work up to `ice@941cf51d` ported into the engine in lanes 0–9,
   each on its own branch. Lane 0 landed on `harvest2/lane0-history`
