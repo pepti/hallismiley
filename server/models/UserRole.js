@@ -38,8 +38,10 @@ const UserRole = {
   },
 
   // Add a membership (idempotent). Returns true if a new row was inserted.
-  async add(userId, roleName, grantedBy = null) {
-    const { rowCount } = await db.query(
+  // `client` (optional): run inside the caller's transaction; the caller then
+  // invalidates again after COMMIT.
+  async add(userId, roleName, grantedBy = null, client = db) {
+    const { rowCount } = await client.query(
       `INSERT INTO user_roles (user_id, role_name, granted_by)
        VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
       [String(userId), String(roleName), grantedBy ? String(grantedBy) : null]

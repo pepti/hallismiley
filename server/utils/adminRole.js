@@ -50,19 +50,29 @@ async function userHoldsView(dbQuery, userId, viewId) {
 // hold a business-views role).
 async function userHoldsAdminPowers(dbQuery, userId) {
   const { rows } = await dbQuery(
-    `SELECT 1 FROM users WHERE id = $1 AND role = 'admin'
-      UNION ALL
-     SELECT 1 FROM user_roles WHERE user_id = $1 AND role_name = 'admin'
-      UNION ALL
-     SELECT 1
-       FROM roles r
-      WHERE (r.name = (SELECT role FROM users WHERE id = $1)
-             OR r.name IN (SELECT role_name FROM user_roles WHERE user_id = $1))
-        AND r.view_access ?| ARRAY['*', 'users', 'roles']
-     LIMIT 1`,
+    `SELECT 1 FROM users u WHERE u.id = $1 AND ${adminPowersSql('u')}`,
     [userId]
   );
   return rows.length > 0;
 }
 
-module.exports = { userIsAdminAnywhere, userHoldsView, userHoldsAdminPowers };
+// The views that make a role an admin-power role (besides `admin` itself).
+const ADMIN_POWER_VIEWS = ['*', 'users', 'roles'];
+
+/**
+ * The same predicate as a SQL boolean over a `users` row aliased `alias`, for
+ * the queries that ask it of many rows at once (the users list's
+ * `admin_powers` column; accountExpiry.clearExpiryOnPromotion). Evaluated in
+ * the caller's transaction, it sees a grant made earlier in it.
+ */
+function adminPowersSql(alias) {
+  const a = alias;
+  return `(${a}.role = 'admin'
+     OR EXISTS (SELECT 1 FROM user_roles apr WHERE apr.user_id = ${a}.id AND apr.role_name = 'admin')
+     OR EXISTS (SELECT 1 FROM roles apr_r
+                 WHERE (apr_r.name = ${a}.role
+                        OR apr_r.name IN (SELECT role_name FROM user_roles WHERE user_id = ${a}.id))
+                   AND apr_r.view_access ?| ARRAY['*', 'users', 'roles']))`;
+}
+
+module.exports = { userIsAdminAnywhere, userHoldsView, userHoldsAdminPowers, adminPowersSql, ADMIN_POWER_VIEWS };

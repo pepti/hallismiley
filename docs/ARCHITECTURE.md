@@ -230,8 +230,13 @@ company/                  gitignored: plans, decisions, logs, market-research st
   (`user.expiry_set` / `user.expiry_cleared`), and NEVER on an account with
   admin powers (`utils/adminRole.js` `userHoldsAdminPowers`: `admin` anywhere,
   or a role with `*`/`users`/`roles`; 409 `admin_account`) — every other
-  role stays time-limitable. Reviving an already-expired login revokes its
-  MCP tokens first. An expired login gets no reset or verification token.
+  role stays time-limitable. The other direction holds too: GAINING admin
+  powers (`changeRole`, `addMember`, a role's `view_access` edit, the
+  bootstrap/setup-admin scripts) clears the account's expiry in the same
+  transaction as the grant, audited `user.expiry_cleared` reason `promoted`
+  (`accountExpiry.clearExpiryOnPromotion`) — a new grant path adds the same
+  call. The users list returns `admin_powers` and hides the expiry button on
+  those rows. Reviving an already-expired login revokes its MCP tokens first. An expired login gets no reset or verification token.
   Rolling back to the previous image re-opens expired logins while it runs.
 - A typed client error carries an i18n `messageKey` and a string `reason`;
   `middleware/errorHandler.js` translates the one and passes the other

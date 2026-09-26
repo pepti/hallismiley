@@ -42,7 +42,9 @@ class Role {
   }
 
   // Only description + view_access are mutable (name is the PK / FK target).
-  static async update(name, data) {
+  // `client` (optional): run inside the caller's transaction; the caller then
+  // invalidates the cache again after COMMIT.
+  static async update(name, data, client = db) {
     const sets = [];
     const params = [];
     if (data.description !== undefined) {
@@ -55,7 +57,7 @@ class Role {
     }
     if (sets.length === 0) return Role.findByName(name);
     params.push(String(name));
-    const { rows } = await db.query(
+    const { rows } = await client.query(
       `UPDATE roles SET ${sets.join(', ')} WHERE name = $${params.length} RETURNING ${COLUMNS}`,
       params
     );

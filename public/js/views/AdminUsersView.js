@@ -195,7 +195,7 @@ export class AdminUsersView {
               <td class="users-expiry-cell">
                 <div class="users-expiry">
                   ${u.expires_at ? expiryBadgeHtml(u.expires_at) : '<span class="users-expiry__none">—</span>'}
-                  ${String(u.id) !== String(getUser()?.id) ? `
+                  ${String(u.id) !== String(getUser()?.id) && !u.admin_powers ? `
                   <button type="button" class="btn btn--sm btn--ghost expiry-user-btn"
                           data-user-id="${escHtml(String(u.id))}"
                           data-username="${escHtml(u.username)}"

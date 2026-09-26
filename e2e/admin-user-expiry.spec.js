@@ -10,7 +10,7 @@ const { Pool } = require('pg');
 const { gateSpec } = require('./lib/featureGate');
 gateSpec(test, __filename);
 const { loginAsAdmin, openSignIn } = require('./helpers');
-const { seedUser } = require('./lib/accounts');
+const { seedUser, seedAdminUser } = require('./lib/accounts');
 const { e2eDatabaseUrl } = require('./lib/dbUrl');
 const { PUBLIC_DEFAULT_LOCALE, tClient } = require('../tests/lib/locale');
 
@@ -18,6 +18,7 @@ test.use({ viewport: { width: 1400, height: 900 } });
 
 const LIVE    = { username: 'e2eexpirylive', email: 'expiry-live@e2e.test', password: 'ExpiryPass123' };
 const EXPIRED = { username: 'e2eexpiryold', email: 'expiry-old@e2e.test', password: 'ExpiryPass123' };
+const OTHER_ADMIN = { username: 'e2eexpiryadmin', email: 'expiry-admin@e2e.test', password: 'ExpiryPass123' };
 const DAY = 24 * 60 * 60 * 1000;
 
 async function sql(text, params) {
@@ -82,6 +83,15 @@ test.describe('admin users — Gildir til', () => {
     const own = row(page, 'testadmin');
     await expect(own).toBeVisible();
     await expect(own.locator('.expiry-user-btn')).toHaveCount(0);
+  });
+
+  test('no expiry button on another account with admin powers (the server refuses it)', async ({ page }) => {
+    await seedAdminUser(OTHER_ADMIN);
+    await loginAsAdmin(page);
+    await page.goto(`/${PUBLIC_DEFAULT_LOCALE}/admin/users?q=${OTHER_ADMIN.username}`);
+    const other = row(page, OTHER_ADMIN.username);
+    await expect(other).toBeVisible();
+    await expect(other.locator('.expiry-user-btn')).toHaveCount(0);
   });
 });
 

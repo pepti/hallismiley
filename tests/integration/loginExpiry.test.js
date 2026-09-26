@@ -540,3 +540,129 @@ describe('review Info-5: parseExpiresAt accepts only a zoned, anchored ISO date-
     expect(res.status).toBe(400);
   });
 });
+
+// ── The promotion gap: gaining admin powers clears the expiry ───────────────
+
+describe('gaining admin powers clears a time-limited login\'s expiry, audited', () => {
+  const { clearExpiryOnPromotion } = require('../../server/auth/accountExpiry');
+
+  const expiresOf = async (id) =>
+    (await db.query('SELECT expires_at FROM users WHERE id = $1', [id])).rows[0].expires_at;
+  const promotedAudit = async (id) =>
+    (await db.query(
+      `SELECT actor_id, summary FROM staff_audit_log
+        WHERE action = 'user.expiry_cleared' AND entity_id = $1`, [id])).rows;
+  async function makeRole(name, views) {
+    await db.query(
+      `INSERT INTO roles (name, description, view_access, is_system)
+       VALUES ($1, $1, $2::jsonb, FALSE)
+       ON CONFLICT (name) DO UPDATE SET view_access = EXCLUDED.view_access`,
+      [name, JSON.stringify(views)]
+    );
+  }
+  async function makeUser(username, role = 'user') {
+    const { rows } = await db.query(
+      `INSERT INTO users (email, username, role, email_verified) VALUES ($1, $2, $3, TRUE) RETURNING id`,
+      [`${username}@test.com`, username, role]
+    );
+    return rows[0].id;
+  }
+
+  test('promoting a time-limited user to admin (changeRole) clears the expiry', async () => {
+    await setExpiry(userId, future(5));
+    const res = await request(app).patch(`/api/v1/admin/users/${userId}/role`)
+      .set('Cookie', adminCookie).send({ role: 'admin' });
+    expect(res.status).toBe(200);
+    expect(await expiresOf(userId)).toBeNull();
+    const audit = await promotedAudit(userId);
+    expect(audit).toHaveLength(1);
+    expect(audit[0].actor_id).toBe(adminId);
+    expect(audit[0].summary).toMatchObject({ username: 'testuser', reason: 'promoted' });
+    expect(audit[0].summary.previous_expires_at).toEqual(expect.any(String));
+  });
+
+  test('a role change that does NOT give admin powers keeps the expiry', async () => {
+    await makeRole('kynning', ['handbok', 'leads']);
+    await setExpiry(userId, future(5));
+    const res = await request(app).patch(`/api/v1/admin/users/${userId}/role`)
+      .set('Cookie', adminCookie).send({ role: 'kynning' });
+    expect(res.status).toBe(200);
+    expect(await expiresOf(userId)).not.toBeNull();
+    expect(await promotedAudit(userId)).toHaveLength(0);
+  });
+
+  test('granting a time-limited user a role holding `users` clears it', async () => {
+    await makeRole('usersmgr', ['users']);
+    await setExpiry(userId, future(5));
+    const res = await request(app).post('/api/v1/admin/roles/usersmgr/members')
+      .set('Cookie', adminCookie).send({ userId });
+    expect(res.status).toBe(201);
+    expect(await expiresOf(userId)).toBeNull();
+    expect((await promotedAudit(userId))[0].summary.reason).toBe('promoted');
+  });
+
+  test('granting a business-views role keeps the expiry', async () => {
+    await makeRole('kynning', ['handbok', 'leads']);
+    await setExpiry(userId, future(5));
+    const res = await request(app).post('/api/v1/admin/roles/kynning/members')
+      .set('Cookie', adminCookie).send({ userId });
+    expect(res.status).toBe(201);
+    expect(await expiresOf(userId)).not.toBeNull();
+  });
+
+  test('editing a role\'s view_access to add `users` clears it for every member with an expiry', async () => {
+    await makeRole('kynning', ['handbok']);
+    const a = await makeUser('member_primary', 'kynning');        // primary role
+    const b = await makeUser('member_set');                       // through the set
+    await db.query('INSERT INTO user_roles (user_id, role_name) VALUES ($1, $2)', [b, 'kynning']);
+    const c = await makeUser('member_noexpiry', 'kynning');       // nothing to clear
+    const outsider = await makeUser('not_a_member');
+    for (const id of [a, b, outsider]) await setExpiry(id, future(4));
+
+    const res = await request(app).patch('/api/v1/admin/roles/kynning')
+      .set('Cookie', adminCookie).send({ view_access: ['handbok', 'users'] });
+    expect(res.status).toBe(200);
+    expect(await expiresOf(a)).toBeNull();
+    expect(await expiresOf(b)).toBeNull();
+    expect(await expiresOf(c)).toBeNull();
+    expect(await expiresOf(outsider)).not.toBeNull();
+    expect(await promotedAudit(a)).toHaveLength(1);
+    expect(await promotedAudit(b)).toHaveLength(1);
+    expect((await promotedAudit(a))[0].summary.role).toBe('kynning');
+    expect(await promotedAudit(c)).toHaveLength(0);
+  });
+
+  test('`roles` (and `*`) are not grantable through the editor at all — 400', async () => {
+    await makeRole('kynning', ['handbok']);
+    for (const views of [['roles'], ['*']]) {
+      const res = await request(app).patch('/api/v1/admin/roles/kynning')
+        .set('Cookie', adminCookie).send({ view_access: views });
+      expect(res.status).toBe(400);
+    }
+  });
+
+  test('the sweep itself covers `roles` and `*` roles (a role given them outside the editor)', async () => {
+    for (const [roleName, views] of [['rolesmgr', ['roles']], ['allviews', ['*']]]) {
+      await makeRole(roleName, views);
+      const id = await makeUser(`m_${roleName}`, roleName);
+      await setExpiry(id, future(4));
+      const client = await db.pool.connect();
+      try {
+        const cleared = await clearExpiryOnPromotion(client, { roleName }, { actorId: adminId });
+        expect(cleared.map(r => r.id)).toEqual([id]);
+      } finally { client.release(); }
+      expect(await expiresOf(id)).toBeNull();
+    }
+  });
+
+  test('the users list flags accounts with admin powers', async () => {
+    await makeRole('usersmgr', ['users']);
+    const mgr = await makeUser('listmgr', 'usersmgr');
+    const res = await request(app).get('/api/v1/admin/users?limit=100').set('Cookie', adminCookie);
+    expect(res.status).toBe(200);
+    const byId = Object.fromEntries(res.body.users.map(u => [u.id, u.admin_powers]));
+    expect(byId[adminId]).toBe(true);
+    expect(byId[mgr]).toBe(true);
+    expect(byId[userId]).toBe(false);
+  });
+});

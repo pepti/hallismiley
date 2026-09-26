@@ -13,8 +13,8 @@ const mfaService         = require('../services/mfaService');
 const McpToken           = require('../models/McpToken');
 const { Scrypt }         = require('oslo/password');
 const { generatePassword } = require('../utils/generatePassword');
-const { parseExpiresAt, isExpired, ExpiryOnAdminError } = require('../auth/accountExpiry');
-const { userHoldsAdminPowers } = require('../utils/adminRole');
+const { parseExpiresAt, isExpired, ExpiryOnAdminError, clearExpiryOnPromotion } = require('../auth/accountExpiry');
+const { userHoldsAdminPowers, adminPowersSql } = require('../utils/adminRole');
 // A name-only login's reserved <username>@noemail.invalid is never shown or
 // searched as an address (ice #397): the list reads it as NULL + no_email.
 const { isPlaceholderEmail, realEmailSql, realEmailExpr } = require('../utils/placeholderEmail');
@@ -87,7 +87,10 @@ const adminController = {
                 role, avatar, display_name,
                 email_verified, disabled, disabled_at, disabled_reason,
                 party_access, approval_status, requested_at, created_at, last_login_at,
-                totp_enabled, expires_at
+                totp_enabled, expires_at,
+                -- An account the expiry endpoint refuses (409 admin_account):
+                -- the list hides its "Gildir til" button.
+                ${adminPowersSql('users')} AS admin_powers
          FROM users
          ${whereSql}
          ORDER BY ${sortCol} ${dir}, id DESC
@@ -164,6 +167,10 @@ const adminController = {
         // Trigger added the new role membership; drop the others so the dropdown
         // stays single-role (the Members tab manages multi-role).
         await client.query('DELETE FROM user_roles WHERE user_id = $1 AND role_name <> $2', [id, role]);
+        // Promoted into admin powers: a time-limited login must not become a
+        // time-limited ADMIN (a delayed lockout) — clear its expiry, audited,
+        // in this transaction (login-expiry review follow-up).
+        await clearExpiryOnPromotion(client, { userIds: [id] }, staffAudit.actorOf(req));
         await client.query('COMMIT');
         UserRole.invalidateUser(id); // clear the cached set after the commit
         if (role !== 'admin') await revokeMcpTokens(req, id, 'role_change');

@@ -65,7 +65,7 @@ Which domains an entry touches is read from the `**History**:` footers in `docs/
 | 2026-09-24 | [Ice harvest, chunk C — inventory and the shop floor (lane 2)](#harvest-ice-c-2026-09-24) | On hand / Committed / Available with ONE audited writer (`models/Inventory.js`, migration 112 `inventory_adjustments` + `orders.stock_deducted_at`); committed = paid, unshipped; stock moves at fulfilment, never below zero; the webhook re-checks Available and refunds an oversell; lock order + 40P01 → 409 BUSY; the sold-out basket guard (ENH #25); the search box that dropped letters; bulk product edit; the till scanner (ENH #22); MCP catalogue tools behind `mcp.write.*` switches, all off |
 | 2026-09-24 | [Ice harvest, chunk D — import, export, uploads (lane 2)](#harvest-ice-d-2026-09-24) | One server-side reader for every product file (CSV, .xlsx, PDF; `POST /products/import/parse-file`, `services/productImport`); barcode as the fallback match key (migration 113 `product_variants.barcode`), ambiguous/duplicate refused, order quantities never stock; rows with a Variant cell create one Draft product with its variants, whole or not at all; the orders list as a real .xlsx; product images normalised on upload + lazy `.thumb.webp` (Buffer writes, no mozjpeg); `exceljs` / `pdf-parse` pinned, `sharp` a runtime dependency |
 | 2026-09-25 | [The legal pages name the site they are on; the images are the company's own](#legal-pages-site-host-2026-09-25) | `/terms` and `/personuvernd` took "orangesmiley.is" as a literal, so rekstrarkerfi.is would have said it was orangesmiley.is; the host now comes from the canonical origin (APP_URL) via `utils/identity.js` `siteHost()`; the terms credit the landscape images to Orange Smiley ehf. (iceland-v2), not to licensed photographers; both dated 25. september 2026; copy approved by Halli |
-| 2026-09-26 | [Time-limited logins (R2b, D-020)](#login-expiry-2026-09-26) | Migration 114 `users.expires_at` (NULL = never); `auth/accountExpiry.js`; every sign-in path refuses an expired login with `reason: account_expired` — only after the credential checked out; every session reader signs it out and deletes its sessions, no extra query; `PATCH /admin/users/:id/expiry` + `expires_at` on the customers create path (future only, never self, audited); "Gildir til" column, badge and picker; the typed-error branch in the error handler; review: never on an account with admin powers (409 `admin_account`), MCP tokens revoked on revival, no reset/verify tokens for an expired login, anchored zoned ISO parser; copy DRÖG |
+| 2026-09-26 | [Time-limited logins (R2b, D-020)](#login-expiry-2026-09-26) | Migration 114 `users.expires_at` (NULL = never); `auth/accountExpiry.js`; every sign-in path refuses an expired login with `reason: account_expired` — only after the credential checked out; every session reader signs it out and deletes its sessions, no extra query; `PATCH /admin/users/:id/expiry` + `expires_at` on the customers create path (future only, never self, audited); "Gildir til" column, badge and picker; the typed-error branch in the error handler; review: never on an account with admin powers (409 `admin_account`), and gaining admin powers clears it (reason `promoted`), MCP tokens revoked on revival, no reset/verify tokens for an expired login, anchored zoned ISO parser; copy DRÖG |
 
 ---
 
@@ -3385,7 +3385,28 @@ PASS). Folded in on the same branch:
   optional `reason` (and the existing `retryable` on 409 BUSY); the rollback
   note above.
 
-Tests: `loginExpiry.test.js` 28 → 54 (the admin-powers refusal both ways —
+- **The promotion gap** (coordinator follow-up): refusing an expiry on an
+  admin is only half — a time-limited login could still be PROMOTED into
+  admin powers and carry its expiry along. Now gaining admin powers clears
+  it, in the same transaction as the grant, audited `user.expiry_cleared`
+  with `reason: 'promoted'` (and the role, for a role edit):
+  `adminController.changeRole`, `adminRolesController.addMember` and a role's
+  `view_access` edit (every member, primary or in the set), all through
+  `accountExpiry.clearExpiryOnPromotion` (which evaluates
+  `utils/adminRole.js` `adminPowersSql` AFTER the grant). `Role.update` and
+  `UserRole.add` take an optional client for that. The `bootstrap` and
+  `setup-admin` scripts clear it too. The users list returns `admin_powers`,
+  and the "Breyta" expiry button is hidden on those rows. Note: `roles` and
+  `*` are not grantable through the role editor at all (`GRANTABLE_VIEW_IDS`),
+  so through the API the promoting edit is adding `users`; the sweep itself
+  covers all three.
+
+Tests: `loginExpiry.test.js` 28 → 54 → 62 (the promotion gap: changeRole to
+admin clears, to a business role keeps; a `users` grant clears, a business
+grant keeps; a `users` view edit clears every member with an expiry and no
+outsider; `roles`/`*` refused by the editor, covered by the sweep; the list
+flag) and `e2e/admin-user-expiry.spec.js` 4 → 5 (no button on another
+admin's row). Earlier in the review (the admin-powers refusal both ways —
 primary admin, admin through the set, `users`/`roles`/`*` roles refused;
 `kynning`, moderator and a seller role allowed; clearing an admin's expiry
 allowed — token revocation on revival and not otherwise, the two mail paths,

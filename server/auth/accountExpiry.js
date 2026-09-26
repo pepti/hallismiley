@@ -118,7 +118,51 @@ function parseExpiresAt(raw, now = Date.now()) {
   return { ok: true, value: new Date(ms) };
 }
 
+/**
+ * The other half of "never on an admin" (review follow-up, the promotion
+ * gap): when an account GAINS admin powers — `admin` as its role or in its
+ * set, or a role whose views are `*`/`users`/`roles` — any expiry it carries
+ * is cleared, in the caller's transaction and AFTER the grant (the predicate
+ * reads the post-grant state), each one audited as `user.expiry_cleared`
+ * with reason `promoted`. Candidates: `userIds`, and/or every member of
+ * `roleName` (primary or in the set). Returns the cleared rows.
+ */
+async function clearExpiryOnPromotion(client, { userIds = [], roleName = null } = {}, { actorId = null, requestId = null } = {}) {
+  // Required here, not at the top: staffAudit → database is fine, but keeping
+  // this module's top-level graph to lucia keeps it cheap for the session path.
+  const { adminPowersSql } = require('../utils/adminRole');
+  const staffAudit = require('../services/staffAudit');
+  const { rows } = await client.query(
+    `WITH hit AS (
+       SELECT u.id, u.username, u.expires_at
+         FROM users u
+        WHERE u.expires_at IS NOT NULL
+          AND (u.id = ANY($1::text[])
+               OR ($2::text IS NOT NULL
+                   AND (u.role = $2 OR u.id IN (SELECT user_id FROM user_roles WHERE role_name = $2))))
+          AND ${adminPowersSql('u')}
+     )
+     UPDATE users SET expires_at = NULL
+       FROM hit
+      WHERE users.id = hit.id
+     RETURNING hit.id, hit.username, hit.expires_at AS previous`,
+    [userIds.map(String), roleName]
+  );
+  for (const r of rows) {
+    await staffAudit.record(client, {
+      actorId, requestId, action: 'user.expiry_cleared', entityType: 'user', entityId: r.id,
+      summary: {
+        username: r.username, reason: 'promoted',
+        previous_expires_at: r.previous instanceof Date ? r.previous.toISOString() : r.previous,
+        ...(roleName ? { role: roleName } : {}),
+      },
+    });
+  }
+  return rows;
+}
+
 module.exports = {
+  clearExpiryOnPromotion,
   ACCOUNT_EXPIRED,
   AccountExpiredError,
   ExpiryOnAdminError,
