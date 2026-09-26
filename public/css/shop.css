@@ -637,22 +637,68 @@
   cursor: not-allowed;
   text-decoration: line-through;
 }
-/* Colour swatch chips — small circular swatches instead of text */
-.shop-product__variant-chip--black,
-.shop-product__variant-chip--white {
-  width: 48px; height: 48px; min-width: 48px;
-  border-radius: 50%;
+/* ── Colour swatches (ported from icelandicstore #182; harvest 2 lane 6c) ───
+   The colour axis renders as the colour itself rather than its name. The fill
+   arrives as a --swatch custom property from ProductView — garment colours are
+   fixed values, so they must NOT come from the theme tokens (the shirt is the
+   same navy whichever theme the shop wears). Everything around the disc —
+   the ring, the focus outline, the strike — is tokens. These rules replace the
+   black/white chip classes, whose fills and borders were literals. */
+.shop-product__swatches { gap: 12px; }
+.shop-product__swatch {
+  width: 40px; height: 40px;
   padding: 0;
-  font-size: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--swatch, var(--bg-surface));
+  cursor: pointer;
   position: relative;
-  overflow: hidden;
+  /* Seats the disc slightly into the page and keeps a near-white swatch from
+     dissolving into a light background. */
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.28), 0 1px 2px rgba(0, 0, 0, 0.22);
+  transition: transform var(--transition);
 }
-.shop-product__variant-chip--black { background: #0b0d11; border-color: #2a2d33; }
-.shop-product__variant-chip--white { background: #f5f5f5; border-color: #c0c0c0; }
-.shop-product__variant-chip--black.active,
-.shop-product__variant-chip--white.active {
-  outline: 2px solid var(--gold);
-  outline-offset: 3px;
+.shop-product__swatch--pale { border-color: var(--text-muted); }
+.shop-product__swatch:hover:not(:disabled) { transform: translateY(-2px); }
+/* Selected: a ring drawn OUTSIDE the disc, so it keeps its own colour on a
+   dark garment and the gap between ring and swatch stays transparent. */
+.shop-product__swatch.active::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 2px solid var(--accent-ink);
+}
+.shop-product__swatch:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 6px; }
+/* Sold out in this colour — struck through, not hidden. */
+.shop-product__swatch:disabled,
+.shop-product__swatch.disabled { cursor: not-allowed; opacity: 0.45; }
+.shop-product__swatch:disabled::before,
+.shop-product__swatch.disabled::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: linear-gradient(
+    to bottom right,
+    transparent calc(50% - 1px), var(--text-primary) calc(50% - 1px),
+    var(--text-primary) calc(50% + 1px), transparent calc(50% + 1px));
+  opacity: 0.65;
+}
+/* The chosen colour, named beside the "Colour" heading. */
+.shop-product__variant-value {
+  margin-left: 8px;
+  color: var(--text-secondary);
+  letter-spacing: 0.5px;
+  text-transform: none;
+}
+/* Cross-fade the cover when the colour changes. */
+.shop-product__cover img { transition: opacity 140ms ease; }
+.shop-product__cover img.is-swapping { opacity: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .shop-product__swatch { transition: none; }
+  .shop-product__swatch:hover:not(:disabled) { transform: none; }
+  .shop-product__cover img { transition: none; }
 }
 
 /* Cart variant subtitle */
@@ -1175,6 +1221,11 @@
 .admin-shop__var-input:focus { outline: none; border-color: var(--gold); }
 
 /* ── Inline edit (Shop + Product pages) ─────────────────────────────────── */
+/* The inline-edit controls are filled accent controls: label --on-accent,
+   hover fill --accent-hover (harvest 2 lane 6c, the lane 4a leftover). The
+   light --gold-light fill under a near-white --bg-nav label failed contrast
+   on Bjart; --on-accent/--accent-hover are the per-theme pair built for it
+   (tests/unit/themeTokenContrast.test.js measures them on every theme). */
 .shop-view__edit-btn {
   position: fixed;
   top: 80px;
@@ -1183,7 +1234,7 @@
   padding: 10px 16px;
   background: var(--gold);
   border: 1px solid var(--gold);
-  color: var(--bg-nav);
+  color: var(--on-accent);
   font-family: var(--font-sans);
   font-size: 0.72rem;
   font-weight: 700;
@@ -1194,7 +1245,8 @@
   transition: background var(--transition), transform var(--transition);
 }
 .shop-view__edit-btn:hover {
-  background: var(--gold-light);
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
   transform: translateY(-1px);
 }
 .shop-view__edit-btn--hidden { display: none; }
@@ -1220,7 +1272,7 @@
 }
 .shop-view__add-btn:hover {
   background: var(--gold);
-  color: var(--bg-nav);
+  color: var(--on-accent);
   transform: translateY(-1px);
 }
 /* Hide Add Product while in copy-edit mode so it doesn't compete with the
@@ -1258,9 +1310,9 @@
 }
 .shop-view__save-btn {
   background: var(--gold);
-  color: var(--bg-nav);
+  color: var(--on-accent);
 }
-.shop-view__save-btn:hover  { background: var(--gold-light); }
+.shop-view__save-btn:hover  { background: var(--accent-hover); border-color: var(--accent-hover); }
 .shop-view__cancel-btn:hover { background: rgba(200, 170, 110, 0.1); }
 .shop-view__edit-status {
   font-family: var(--font-sans);
@@ -1282,7 +1334,7 @@
 .shop-view--editing [data-product-field]:focus,
 .shop-view--editing [data-chrome-field]:focus {
   outline-style: solid;
-  outline-color: var(--gold-light);
+  outline-color: var(--accent-ink);
   background: rgba(200, 170, 110, 0.06);
 }
 
