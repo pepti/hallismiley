@@ -306,6 +306,23 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
   (e) the merge itself is **admin-only** (default taken: tighten, never loosen —
   Halli may loosen it to the `products` view); the suggestions and the preview
   stay on the `products` view.
+- Harvest 2, lane 1a (security; branch `harvest2/lane1a-security`; from
+  icelandicstore `941cf51d`; [harvest2-lane1a](docs/history.d/2026-09-26-harvest2-lane1a-security.md#harvest2-lane1a-2026-09-26)): the shared destructive-script guard
+  (`server/scripts/targetGuard.js`) and a `seed:books --wipe` that deletes only
+  its own rows and refuses on real books; no `bin`/`sku`/`barcode` in the public
+  catalogue; non-production instances noindexed (robots, meta, empty sitemap);
+  one upload wrapper (`ensureDestination`, translated `errors.upload.*`, 499 on
+  hang-up, product resolved before the write); pino redacts top-level
+  credentials; the customer order list is an allow-list; the staff route matrix
+  test (223 routes, no leak found). Open: (a) **the nine new `errors.upload.*`
+  strings are DRAFT** (Halli); (b) behaviour changes to know: `npm run
+  seed:books` / `seed-shop --reset` / `cleanup-duplicates` now need
+  `--allow-dev-db` against the dev database, and any stack whose request Host is
+  `*.azurewebsites.net` (a pre-cutover production, LedgerLink's demo) is now
+  noindex; (c) ice #427 and #370 are still OPEN PRs there — this port does not
+  depend on them merging; (d) the news and project upload routes still hand-roll
+  their multer wrapper (hidden surfaces; the builders already use
+  `ensureDestination`).
 - Upward harvest from icelandicstore `4694289`, lane 1 (chunks A then B, branch
   `harvest/ice-2026-09-24-ab`, not merged). Chunk A landed on the branch
   ([harvest-ice-a-2026-09-24](docs/HISTORY.md#harvest-ice-a-2026-09-24)): admin

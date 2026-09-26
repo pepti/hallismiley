@@ -43,6 +43,7 @@ const {
 } = require('../config/identity');
 const { demoHtmlAttrs } = require('../config/demoInstance');
 const { isDeindexedRoute } = require('../config/publicSurface');
+const { isIndexableRequest } = require('../utils/indexability');
 // The module switches' hand-off (R4) — rides next to the identity one.
 const { modulesScriptTag, isDisabledRoute } = require('../config/modules');
 // Release identity + release-stamped asset URLs + the SPA route list
@@ -1169,8 +1170,12 @@ module.exports = async function ssrMetaMiddleware(req, res, next) {
     title, description, canonical, hreflang, ogLocale, ogImage,
     jsonLd: jsonLdHtml,
     // Hidden surfaces (by prefix) and the product's own noindex routes
-    // (identity.routes[*].noindex) are de-indexed; everything else is indexable.
-    robots: (notFound || isDeindexedRoute(route)) ? 'noindex, nofollow' : 'index, follow',
+    // (identity.routes[*].noindex) are de-indexed; everything else is indexable
+    // — but only on an indexable instance: a non-production stack, or any stack
+    // reached on an infrastructure host, is noindex on every route
+    // (utils/indexability.js, ported from icelandicstore #123; robots.txt and
+    // the sitemap apply the same rule).
+    robots: (notFound || isDeindexedRoute(route) || !isIndexableRequest(req)) ? 'noindex, nofollow' : 'index, follow',
     scenePreload: scenePreloadTag(route),
   });
   html = injectCrawlerContent(html, crawlerHtml);
@@ -1184,7 +1189,8 @@ module.exports = async function ssrMetaMiddleware(req, res, next) {
   // detail URL that found no row is never cached: the row may be published a
   // minute later (icelandicstore #332).
   res.setHeader('Cache-Control', missedDetail ? 'no-store' : 'public, no-cache');
-  res.setHeader('Vary', 'Accept-Language, Cookie');
+  // Host: the robots meta tag depends on it (utils/indexability.js).
+  res.setHeader('Vary', 'Accept-Language, Cookie, Host');
   res.send(html);
 };
 

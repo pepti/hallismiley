@@ -23,6 +23,7 @@ const {
   PRODUCT, workerDbUrl, resolveTestBaseUrl, templateDbName, adminDbUrl, setupLockKeys,
   fileEnvValue,
 } = require('./workerDb');
+const { checkTarget } = require('../server/scripts/targetGuard');
 const sweep = require('./lib/testDbSweep');
 const { ensureTestServer, assertNotSharedPort } = require('./lib/testPg');
 
@@ -66,6 +67,14 @@ module.exports = async function globalSetup(globalConfig) {
     throw new Error(
       `Refusing to drop DB "${dbName}" — name must end in _test for safety.`
     );
+  }
+  // The name rule above plus the shared destructive-script guard (harvest 2,
+  // 2026-09-26, server/scripts/targetGuard.js): this run DROPs databases, so a
+  // TEST_DATABASE_URL on a non-local host (an Azure server that happens to
+  // hold a `…_test` database) or a shell inside a deployed container is refused.
+  const target = checkTarget({ databaseUrl: baseUrl, env: process.env });
+  if (!target.ok) {
+    throw new Error(`Refusing to provision test databases: ${target.reason}.`);
   }
 
   // One DB per worker. Under --runInBand maxWorkers is 1 → just <base>_w1_test.

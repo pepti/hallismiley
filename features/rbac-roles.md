@@ -22,10 +22,11 @@ paths:
   - public/js/utils/roleLabel.js
   - tests/unit/roleName.test.js
   - e2e/admin-roles-grid.spec.js
+  - tests/integration/adminRouteMatrix.test.js
 migrations: [056_dynamic_roles, 061_user_roles, 116_role_label]
 since: 2026-08-09
 origin: null
-history: [accounts-commission, review-099, login-expiry-2026-09-26, harvest2-lane1b-2026-09-26, harvest2-lane3-2026-09-26]
+history: [accounts-commission, review-099, login-expiry-2026-09-26, harvest2-lane1b-2026-09-26, harvest2-lane3-2026-09-26, harvest2-lane1a-2026-09-26]
 ---
 
 Dynamic roles (056) with per-user role sets (061) and per-view grants: `ADMIN_VIEW_IDS` in `adminViews.js` are the grantable admin screens, `requireView(id)` is the server gate, and `/admin/roles` edits them. Seeded roles: `solufolk`, `solumadur`, `verktaki`. `PERMISSION_VIEW_IDS` (`allaccounts`) are grantable without a sidebar line.
@@ -39,4 +40,5 @@ Dynamic roles (056) with per-user role sets (061) and per-view grants: `ADMIN_VI
 - `/admin/roles` is ONE grid: rows = offered grantable views grouped by sidebar group, columns = roles; `admin` all-on + locked, `user` all-off + locked (the server refuses any view ADDED to `user`, which every account holds), `roles` never a row. One PATCH per changed role from the save bar, which counts the DISTINCT people reached.
 - Deleting a role someone holds is 409 `roleInUse` with `count` (`UserRole.holderCount`).
 - Every surface names a role through `public/js/utils/roleLabel.js` — never the slug.
+- `adminRouteMatrix.test.js` reads every `/api/v1/admin…` and `/api/v1/system` mount from `app.js` and every method + path from each router, and asserts a plain `user` gets 403 and an anonymous caller 401/403 on all of them; an exemption is an entry in its `EXEMPT` map with the reason, a switched-off module's 404 is the only automatic one ([harvest2-lane1a](../docs/history.d/2026-09-26-harvest2-lane1a-security.md#harvest2-lane1a-2026-09-26); icelandicstore #416 G6).
 - Full rules: [../docs/ARCHITECTURE.md#1-auth-users-rbac-2fa](../docs/ARCHITECTURE.md#1-auth-users-rbac-2fa).
