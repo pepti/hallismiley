@@ -6,7 +6,7 @@
   "upstreamBranch": "master",
   "rev": "3e9d903d9faa7f4506a945c490a1011c09bfd662",
   "syncedAt": "2026-09-26T17:30:25.912Z",
-  "syncedPr": null,
+  "syncedPr": 174,
   "grafted": {
     "at": "2026-09-22",
     "legacyBase": "pepti/hallismiley@562c6376ccb7c01c6098407ffd98914bcf5c60ce",
@@ -57,7 +57,7 @@
       "date": "2026-09-26",
       "upstreamCommits": 125,
       "conflicts": 5,
-      "note": "sync",
+      "note": "sync — test-DB hygiene (hs_ prefix, TEST_PG_URL, sweep); docs-only conflicts; open: 3 theme-contrast cases (glacier/moss text-muted, aurora on-accent) for Halli",
       "regenerated": [
         ".engine-paths",
         ".gitattributes"
