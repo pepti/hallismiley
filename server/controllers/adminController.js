@@ -13,6 +13,7 @@ const mfaService         = require('../services/mfaService');
 const McpToken           = require('../models/McpToken');
 const { Scrypt }         = require('oslo/password');
 const { generatePassword } = require('../utils/generatePassword');
+const { parseExpiresAt } = require('../auth/accountExpiry');
 // A name-only login's reserved <username>@noemail.invalid is never shown or
 // searched as an address (ice #397): the list reads it as NULL + no_email.
 const { isPlaceholderEmail, realEmailSql, realEmailExpr } = require('../utils/placeholderEmail');
@@ -85,7 +86,7 @@ const adminController = {
                 role, avatar, display_name,
                 email_verified, disabled, disabled_at, disabled_reason,
                 party_access, approval_status, requested_at, created_at, last_login_at,
-                totp_enabled
+                totp_enabled, expires_at
          FROM users
          ${whereSql}
          ORDER BY ${sortCol} ${dir}, id DESC
@@ -380,6 +381,47 @@ const adminController = {
         entityType: 'user', entityId: id, summary: { username: rows[0].username },
       });
 
+      return res.json(rows[0]);
+    } catch (err) { next(err); }
+  },
+
+  // PATCH /api/v1/admin/users/:id/expiry  { expires_at }
+  //
+  // Time-limited logins (login-expiry-2026-09-26, migration 114): set when
+  // another account's login stops working — an ISO date-time, a bare
+  // YYYY-MM-DD (the end of that day, UTC), or null to clear it. A new value
+  // must lie in the future (auth/accountExpiry.js parseExpiresAt); ending a
+  // login NOW is what `disable` is for. Never your own account: an admin who
+  // time-limits themself locks the instance's door behind them.
+  async setExpiry(req, res, next) {
+    try {
+      const { id } = req.params;
+      if (!req.body || !Object.prototype.hasOwnProperty.call(req.body, 'expires_at')) {
+        return res.status(400).json({ error: t(req.locale, 'errors.admin.expiresAtInvalid'), code: 400 });
+      }
+      if (id === req.user.id) {
+        return res.status(400).json({ error: t(req.locale, 'errors.admin.cannotExpireSelf'), code: 400 });
+      }
+      const parsed = parseExpiresAt(req.body.expires_at);
+      if (!parsed.ok) {
+        return res.status(400).json({ error: t(req.locale, parsed.messageKey), code: 400 });
+      }
+
+      const { rows } = await dbQuery(
+        `UPDATE users SET expires_at = $1 WHERE id = $2
+         RETURNING id, username, expires_at`,
+        [parsed.value, id]
+      );
+      if (rows.length === 0) {
+        return res.status(404).json({ error: t(req.locale, 'errors.admin.userNotFound'), code: 404 });
+      }
+
+      await staffAudit.recordSafe({
+        ...staffAudit.actorOf(req),
+        action: parsed.value ? 'user.expiry_set' : 'user.expiry_cleared',
+        entityType: 'user', entityId: id,
+        summary: { username: rows[0].username, expires_at: parsed.value ? parsed.value.toISOString() : null },
+      });
       return res.json(rows[0]);
     } catch (err) { next(err); }
   },

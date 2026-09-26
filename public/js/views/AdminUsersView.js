@@ -11,6 +11,7 @@ import { sortableTh, cycleSort, bindSortable } from '../components/adminTable.js
 import { pagerHtml, bindPager } from '../components/adminPager.js';
 import { readListState, syncListState, readPageSize, writePageSize } from '../utils/listState.js';
 import { debounce } from '../utils/debounce.js';
+import { expiryBadgeHtml, expiryFieldHtml, wireExpiryField, readExpiryField } from '../components/ExpiryPicker.js';
 
 // Was a fixed 20 — a size the picker does not offer. The list remembers the
 // admin's own choice now, defaulting to the nearest offered value.
@@ -151,6 +152,7 @@ export class AdminUsersView {
             ${sortableTh(t('adminUsers.role'), 'role', this._sort)}
             ${sortableTh(t('adminUsers.verified'), 'verified', this._sort)}
             ${sortableTh(t('adminUsers.status'), 'status', this._sort)}
+            <th>${t('adminUsers.validUntil')}</th>
             ${sortableTh(t('adminUsers.party'), 'party', this._sort)}
             ${sortableTh(t('orders.date'), 'created_at', this._sort)}
             <th class="admin-table__actions-col">${t('adminUsers.actions')}</th>
@@ -189,6 +191,18 @@ export class AdminUsersView {
                   <span class="toggle-track"></span>
                   <span class="toggle-text">${u.disabled ? t('adminUsers.disabled') : t('adminUsers.active')}</span>
                 </label>
+              </td>
+              <td class="users-expiry-cell">
+                <div class="users-expiry">
+                  ${u.expires_at ? expiryBadgeHtml(u.expires_at) : '<span class="users-expiry__none">—</span>'}
+                  ${String(u.id) !== String(getUser()?.id) ? `
+                  <button type="button" class="btn btn--sm btn--ghost expiry-user-btn"
+                          data-user-id="${escHtml(String(u.id))}"
+                          data-username="${escHtml(u.username)}"
+                          data-expires-at="${escHtml(u.expires_at || '')}"
+                          aria-label="${escHtml(t('adminUsers.expiryEdit', { name: u.username }))}"
+                          title="${escHtml(t('adminUsers.expiryEdit', { name: u.username }))}">${t('admin.edit')}</button>` : ''}
+                </div>
               </td>
               <td>
                 <label class="toggle-label" title="${u.party_access ? t('adminUsers.revokePartyAccess') : t('adminUsers.grantPartyAccess')}">
@@ -256,6 +270,10 @@ export class AdminUsersView {
 
     wrap.querySelectorAll('.reset-totp-btn').forEach(btn => {
       btn.addEventListener('click', () => this._onResetTotp(btn));
+    });
+
+    wrap.querySelectorAll('.expiry-user-btn').forEach(btn => {
+      btn.addEventListener('click', () => this._onEditExpiry(btn));
     });
 
   }
@@ -424,6 +442,57 @@ export class AdminUsersView {
       document.body.appendChild(overlay);
       overlay.querySelector('#users-totp-pw').focus();
     });
+  }
+
+  // "Gildir til" for another account (migration 114): 7 / 14 / 30 days, a
+  // date, or none. The server refuses your own account and a past date; the
+  // modal shows its message and stays open.
+  _onEditExpiry(btn) {
+    const userId   = btn.dataset.userId;
+    const username = btn.dataset.username;
+    const prefix   = 'users-expiry';
+    const overlay  = document.createElement('div');
+    overlay.className = 'modal-overlay open';
+    overlay.innerHTML = `
+      <form class="modal users-expiry-modal" role="dialog" aria-modal="true" aria-labelledby="users-expiry-title">
+        <h2 class="modal__title" id="users-expiry-title">${t('adminUsers.expiryTitle')}</h2>
+        <p class="modal__desc"><strong>${escHtml(username)}</strong> — ${escHtml(t('adminUsers.expiryHint'))}</p>
+        ${expiryFieldHtml({ idPrefix: prefix, current: btn.dataset.expiresAt || null })}
+        <p class="users-expiry-modal__error" role="alert" data-expiry-error></p>
+        <div class="users-expiry-modal__actions">
+          <button type="button" class="btn btn--ghost" data-cancel>${t('form.cancel')}</button>
+          <button type="submit" class="btn btn--primary">${t('form.save')}</button>
+        </div>
+      </form>`;
+    const close = () => {
+      document.removeEventListener('keydown', onKey);
+      overlay.remove();
+    };
+    const onKey = (e) => { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', onKey);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+    overlay.querySelector('[data-cancel]').addEventListener('click', close);
+    wireExpiryField(overlay, prefix);
+    const errorEl = overlay.querySelector('[data-expiry-error]');
+    overlay.querySelector('form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errorEl.textContent = '';
+      const picked = readExpiryField(overlay, prefix);
+      if (!picked.ok) { errorEl.textContent = picked.message; return; }
+      const submit = overlay.querySelector('button[type=submit]');
+      submit.disabled = true;
+      try {
+        await adminUpdateUser(userId, { expires_at: picked.value });
+        close();
+        showToast(t('form.success'), 'success');
+        await this._load();
+      } catch (err) {
+        errorEl.textContent = err.message;
+        submit.disabled = false;
+      }
+    });
+    document.body.appendChild(overlay);
+    overlay.querySelector(`input[name="${prefix}-choice"]:checked`)?.focus();
   }
 
   async _onToggleDisabled(checkbox) {

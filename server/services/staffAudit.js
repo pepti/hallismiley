@@ -22,6 +22,11 @@ const ACTIONS = [
   'provision.requested',
   'role.granted', 'role.revoked', 'role.updated',
   'user.invited', 'user.disabled', 'user.enabled',
+  // A name-only login (ice #397): the Customers "add" form already recorded
+  // this, but it was missing here, so every such write threw and was lost.
+  'user.created_no_email',
+  // Time-limited logins (migration 114): the admin set or cleared an expiry.
+  'user.expiry_set', 'user.expiry_cleared',
   'commission.recorded',
   // Settlement (migration 102 / D-019): issuing a statement, recording that it
   // was paid, and any manual move of a balance. All three move real money.

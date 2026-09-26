@@ -65,6 +65,7 @@ Which domains an entry touches is read from the `**History**:` footers in `docs/
 | 2026-09-24 | [Ice harvest, chunk C — inventory and the shop floor (lane 2)](#harvest-ice-c-2026-09-24) | On hand / Committed / Available with ONE audited writer (`models/Inventory.js`, migration 112 `inventory_adjustments` + `orders.stock_deducted_at`); committed = paid, unshipped; stock moves at fulfilment, never below zero; the webhook re-checks Available and refunds an oversell; lock order + 40P01 → 409 BUSY; the sold-out basket guard (ENH #25); the search box that dropped letters; bulk product edit; the till scanner (ENH #22); MCP catalogue tools behind `mcp.write.*` switches, all off |
 | 2026-09-24 | [Ice harvest, chunk D — import, export, uploads (lane 2)](#harvest-ice-d-2026-09-24) | One server-side reader for every product file (CSV, .xlsx, PDF; `POST /products/import/parse-file`, `services/productImport`); barcode as the fallback match key (migration 113 `product_variants.barcode`), ambiguous/duplicate refused, order quantities never stock; rows with a Variant cell create one Draft product with its variants, whole or not at all; the orders list as a real .xlsx; product images normalised on upload + lazy `.thumb.webp` (Buffer writes, no mozjpeg); `exceljs` / `pdf-parse` pinned, `sharp` a runtime dependency |
 | 2026-09-25 | [The legal pages name the site they are on; the images are the company's own](#legal-pages-site-host-2026-09-25) | `/terms` and `/personuvernd` took "orangesmiley.is" as a literal, so rekstrarkerfi.is would have said it was orangesmiley.is; the host now comes from the canonical origin (APP_URL) via `utils/identity.js` `siteHost()`; the terms credit the landscape images to Orange Smiley ehf. (iceland-v2), not to licensed photographers; both dated 25. september 2026; copy approved by Halli |
+| 2026-09-26 | [Time-limited logins (R2b, D-020)](#login-expiry-2026-09-26) | Migration 114 `users.expires_at` (NULL = never); `auth/accountExpiry.js`; every sign-in path refuses an expired login with `reason: account_expired` — only after the credential checked out; every session reader signs it out and deletes its sessions, no extra query; `PATCH /admin/users/:id/expiry` + `expires_at` on the customers create path (future only, never self, audited); "Gildir til" column, badge and picker; the typed-error branch in the error handler; copy DRÖG |
 
 ---
 
@@ -3265,3 +3266,90 @@ Everything else in both pages was checked against both sites and still holds
 (company identity, prices indicative + a separate service agreement, the
 IP/contact/disclaimer/liability sections, Icelandic law, Héraðsdómur
 Reykjaness). No migration.
+
+<a id="login-expiry-2026-09-26"></a>
+## 2026-09-26 — Time-limited logins (R2b, D-020)
+
+On the demo instance (`demo.rekstrarkerfi.is`, D-020) a seller gives a
+prospect their own login after a guided demo, and that login must stop
+working after N days. Built generically in the engine, so every product and
+customer instance has it.
+
+**What changed:**
+- **Migration 114 `114_user_expires_at`** (engine array): `users.expires_at
+  TIMESTAMPTZ NULL`, NULL = never expires. Expand-only (invariant 14): the
+  previous release neither reads nor writes it. No index — it is only ever
+  read off a row already loaded by primary key.
+- **`server/auth/accountExpiry.js`** is the one place the rule lives:
+  `isExpired(user)` (fails closed on a non-date), `AccountExpiredError` (the
+  typed refusal: 403 on a sign-in, 401 when a live session dies, `reason:
+  'account_expired'`, message key `errors.auth.accountExpired`),
+  `validateSession()` (Lucia's, plus the rule) and `parseExpiresAt()` (the
+  admin input).
+- **The central error handler** (`middleware/errorHandler.js`) now renders a
+  TYPED client error — one carrying an i18n `messageKey` — translated for the
+  request's locale, with its string `reason` next to `error`/`code`. Untyped
+  errors keep the old shape exactly.
+- **Every sign-in path refuses an expired login:** the password login, the
+  2FA step (the login can run out between the two), the party magic link,
+  the Google and Facebook callbacks (`?error=account_expired`, a toast via
+  `main.js`; the Google by-email branch refuses BEFORE linking the Google id)
+  and the MCP owner check (`mcp/owner.js`, so a connector token dies with its
+  login). **Only after the credential checked out** (Halli's copy review): a
+  wrong password on an expired account gets the ordinary invalid-credentials
+  answer, byte-for-byte, so the refusal never tells a guesser that the
+  account exists. The same holds for an unknown magic-link token.
+- **A live session dies:** every session reader — `requireAuth`,
+  `optionalAuth`, `softAuth`, the shop's private `requireAuth` and
+  `GET /auth/session` — calls `accountExpiry.validateSession` instead of
+  `lucia.validateSession`. The expiry costs no extra query on the hot path:
+  Lucia's session join already selects `users.*`, and `expires_at` now rides
+  in `getUserAttributes`. Once expired, all the user's sessions are deleted
+  (one DELETE) and the request is answered as signed out: `requireAuth` says
+  401 `account_expired` (the SPA's session guard shows the expiry message
+  instead of "session expired"), `/auth/session` says `{ authenticated: false,
+  reason: 'account_expired' }` (the SPA shows the message on page load).
+  Extending the login later does not revive the deleted sessions.
+- **Admin API:** `PATCH /api/v1/admin/users/:id/expiry { expires_at }` (admin +
+  CSRF) sets or clears it — an ISO date-time, a bare `YYYY-MM-DD` (the end of
+  that day, UTC = Iceland), or `null`. A value must lie in the future and
+  within ten years; never on your own account; audited as `user.expiry_set` /
+  `user.expiry_cleared`. `POST /api/v1/admin/customers` (the create path,
+  emailed invite and name-only login alike) takes the same optional
+  `expires_at`. The users list returns `expires_at`.
+- **Admin UI:** the Users list has a "Gildir til" column with the badge
+  "rennur út eftir N daga" (Icelandic plural rule through `plural()`) or
+  "útrunninn", and a "Breyta" button (not on your own row) opening a modal:
+  7 / 14 / 30 days, a date, or "Ótímabundinn". The Customers "add" form has
+  the same picker (`components/ExpiryPicker.js`). Status tokens only
+  (`--warning`/`--error` + their `-dim` washes), so all three themes re-hue it.
+- **Found on the way:** the staff audit's closed vocabulary lacked
+  `user.created_no_email`, which the Customers "add" form has recorded since
+  harvest chunk A — every such write threw inside `recordSafe` and was lost.
+  Added with the two expiry actions.
+
+**Copy (DRÖG — Halli approves):**
+- Refusal: IS "Þessi aðgangur er útrunninn. Hafðu samband við þann sem sýndi
+  þér kerfið." / EN "This login has expired. Contact the person who showed
+  you the system." (`errors.auth.accountExpired` on the server,
+  `auth.errors.accountExpired` in the SPA — the same text.)
+- Admin: "Gildir til" / "Valid until", "rennur út eftir {n} dag|daga" /
+  "expires in {n} day|days", "útrunninn" / "expired", "Ótímabundinn" / "No
+  expiry", "{n} dagur|dagar" / "{n} day|days", "Dagsetning" / "Date",
+  "Gildistími innskráningar" / "Login validity", the modal hint, and the three
+  admin errors (`errors.admin.cannotExpireSelf`, `expiresAtInvalid`,
+  `expiresAtPast`).
+
+**Tests:** `tests/integration/loginExpiry.test.js` (new, 28): the helpers;
+the password login refused only with the right password (a wrong one is
+indistinguishable from a live account's), translated per locale; not-yet-
+expired and NULL sign in; the 2FA step; the magic link; a live session dying
+(401 `account_expired`, every session row gone, not revived by an
+extension), `/auth/session`, an admin route; the MCP owner check; the admin
+API (set, bare date, clear + audit, past/garbage/missing/self/unknown/non-
+admin refused) and the customers create path. `auth.google.test.js` +3 (an
+expired login refused, by id and by email before linking; a live one signs
+in), `auth.facebook.test.js` +2. `e2e/admin-user-expiry.spec.js` (new, 4):
+set 7 days → the badge, clear → no badge, the expired badge, no button on
+your own row, and the sign-in modal showing the expiry message only for the
+right password.

@@ -15,6 +15,8 @@ const staffAudit   = require('../services/staffAudit');
 // harvested 2026-09-24.
 const { sendWelcomeInvite } = require('../utils/inviteSend');
 const { isPlaceholderEmail, realEmailSql } = require('../utils/placeholderEmail');
+// Time-limited logins (migration 114): the optional `expires_at` on create.
+const { parseExpiresAt } = require('../auth/accountExpiry');
 
 const MAX_IMPORT_ROWS = 1000;
 // Bulk delete is bounded so one request can't fan out across the whole base.
@@ -136,10 +138,19 @@ const adminCustomerController = {
   // password, approved at once. The password is in this response ONCE
   // (no-store) and nowhere else: not stored in the clear, not logged, not in
   // the audit line. A lost one is replaced (POST /admin/users/:id/new-password).
+  //
+  // `expires_at` (optional, migration 114): a time-limited login — the demo
+  // login a seller makes for a prospect. ISO date-time or YYYY-MM-DD, in the
+  // future; absent/null = never expires (auth/accountExpiry.js).
   async createCustomer(req, res, next) {
     try {
       const c = cleanRow(req.body || {});
       const noEmail = req.body?.no_email === true || req.body?.no_email === 'true';
+      const expiry = parseExpiresAt(req.body?.expires_at);
+      if (!expiry.ok) {
+        return res.status(400).json({ error: t(req.locale, expiry.messageKey), code: 400 });
+      }
+      const expiresAt = expiry.value;
 
       if (noEmail) {
         if (!c.display_name) {
@@ -147,7 +158,7 @@ const adminCustomerController = {
         }
         let created;
         try {
-          created = await Customer.create({ display_name: c.display_name, phone: c.phone, nameOnly: true });
+          created = await Customer.create({ display_name: c.display_name, phone: c.phone, nameOnly: true, expiresAt });
         } catch (err) {
           if (err && err.code === '23505') {
             return res.status(409).json({ error: t(req.locale, 'errors.admin.usernameTaken'), code: 409, reason: 'username_taken' });
@@ -157,7 +168,7 @@ const adminCustomerController = {
         const { user, password } = created;
         await staffAudit.recordSafe({
           ...staffAudit.actorOf(req), action: 'user.created_no_email', entityType: 'user', entityId: user.id,
-          summary: { username: user.username },
+          summary: { username: user.username, ...(expiresAt ? { expires_at: expiresAt.toISOString() } : {}) },
         });
         res.set('Cache-Control', 'no-store');
         return res.status(201).json({
@@ -173,10 +184,10 @@ const adminCustomerController = {
       if (existing.has(c.email)) {
         return res.status(409).json({ error: t(req.locale, 'errors.auth.emailRegistered'), code: 409 });
       }
-      const { user, resetToken } = await Customer.create(c);
+      const { user, resetToken } = await Customer.create({ ...c, expiresAt });
       await staffAudit.recordSafe({
         ...staffAudit.actorOf(req), action: 'user.invited', entityType: 'user', entityId: user.id,
-        summary: { username: user.username },
+        summary: { username: user.username, ...(expiresAt ? { expires_at: expiresAt.toISOString() } : {}) },
       });
 
       // invited_at is stamped by sendWelcomeInvite only on a confirmed,

@@ -5559,6 +5559,25 @@ END; $$ LANGUAGE plpgsql`,
          ON product_variants (barcode) WHERE barcode IS NOT NULL`,
     ],
   },
+  {
+    // Time-limited logins (login-expiry-2026-09-26, roadmap R2b, D-020): on
+    // the demo instance a seller makes a login for a prospect after a guided
+    // demo, and it must stop working after N days. NULL = never expires, so
+    // every existing account keeps working unchanged.
+    //
+    // No index: the column is only ever read off a row already fetched by
+    // primary key (Lucia's session join, the sign-in lookups), never searched.
+    //
+    // Additive (invariant 14): the previous release neither reads nor writes
+    // the column, and its user SELECTs that use `users.*` just carry one more
+    // attribute it ignores. Rollback: ALTER TABLE users DROP COLUMN expires_at
+    // once no release reads it.
+    // Reference copy: server/migrations/114_user_expires_at.sql
+    name: '114_user_expires_at',
+    statements: [
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

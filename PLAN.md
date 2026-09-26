@@ -361,6 +361,14 @@ chunk lands; add a HISTORY entry for the story.
   footer line) — merged 2026-09-24 (orange-smiley/rekstrarkerfid#53); the
   deploy is Halli's go; `auth.errors.signupClosed` copy was approved by Halli
   2026-09-25.
+- Time-limited logins landed 2026-09-26 on `feat/login-expiry`, not merged
+  ([login-expiry-2026-09-26](docs/HISTORY.md#login-expiry-2026-09-26)):
+  engine migration `114_user_expires_at`; every sign-in path and session
+  reader refuse an expired login; "Gildir til" in Admin → Users and the
+  Customers "add" form. Open: Halli approves the DRÖG copy (the refusal and the
+  admin strings); rekstrarkerfid's next engine sync brings it to the demo
+  instance; nothing sweeps expired rows yet (they stay, refused — a cleanup
+  job or "delete after N days expired" is a later decision).
 - Books: a button to issue a statutory invoice from an order
   (`issueInvoiceForOrder` has no caller — hard blocker for 2026-P5, due 7.12);
   Peppol inbound; the 6-month commission tail (contract 4.3) has no code —

@@ -73,7 +73,13 @@ limiter), which sets the cookie and answers
 
 **Errors:** `400` missing fields · `401` invalid credentials · `401` account
 temporarily locked (after 5 failed attempts) · `403` account disabled ·
-`403` party-guest approval pending · `403` party-guest request declined
+`403` party-guest approval pending · `403` party-guest request declined ·
+`403` `reason: account_expired` — a time-limited login whose `users.expires_at`
+has passed (migration 114; only AFTER the password checked out, so it never
+tells a guesser the account exists). The 2FA step, the party magic link and the
+Google/Facebook callbacks (`?error=account_expired`) refuse it the same way; a
+live session of such a login dies on its next request (`401`
+`reason: account_expired`) — [HISTORY](HISTORY.md#login-expiry-2026-09-26).
 
 ---
 
@@ -99,7 +105,9 @@ Return the current session/user info without requiring auth.
 { "authenticated": true, "user": { "id": "uuid", "username": "admin", "email": "admin@example.com", "role": "admin" } }
 ```
 
-**Response `200 OK`** (not logged in): `{ "authenticated": false }`
+**Response `200 OK`** (not logged in): `{ "authenticated": false }` — plus
+`"reason": "account_expired"` when the cookie belonged to a time-limited login
+that has run out (its sessions are deleted on the spot).
 
 Use this on page load to restore session state.
 
@@ -296,7 +304,7 @@ router's own gate still applies behind it.
 | `/api/v1/admin/nav-config` | `adminNavRoutes.js` | admin (`requireRole`) | — |
 | `/api/v1/admin/roles` | `adminRolesRoutes.js` | admin | — |
 | `/api/v1/admin/bins` | `adminBinsRoutes.js` | admin views (hidden) | — |
-| `/api/v1/admin/customers` | `adminCustomerRoutes.js` | `customers` view; `POST /` admin + CSRF — `{ email }` → welcome invite, `invited` only when it reached the customer, else `resetUrl` (+ `emailError`); `{ no_email: true, display_name }` → a name-only login, `{ username, password }` once (`no-store`) | `docs/SALES-STAFF.md` · [HISTORY](HISTORY.md#harvest-ice-a-2026-09-24) |
+| `/api/v1/admin/customers` | `adminCustomerRoutes.js` | `customers` view; `POST /` admin + CSRF — `{ email }` → welcome invite, `invited` only when it reached the customer, else `resetUrl` (+ `emailError`); `{ no_email: true, display_name }` → a name-only login, `{ username, password }` once (`no-store`); either takes an optional future `expires_at` (a time-limited login, migration 114) | `docs/SALES-STAFF.md` · [HISTORY](HISTORY.md#harvest-ice-a-2026-09-24) |
 | `/api/v1/admin/customer-notes` | `adminCustomerNotesRoutes.js` | `customers` view | — |
 | `/api/v1/admin/bookkeeping` | `adminBookkeepingRoutes.js` (76 routes) | `books`/`invoices`/`expenses`/`ar`/`vat`/`bank`/`ledger`/`payroll`/`pos` views; admin for issuing | `docs/BOOKKEEPING-SYSTEM.md` |
 | `/api/v1/admin/handbok` | `salesGuidesRoutes.js` | `handbok` view; admin/moderator edit | `docs/SALES-STAFF.md` |
@@ -305,7 +313,7 @@ router's own gate still applies behind it.
 | `/api/v1/admin/accounts` | `adminAccountRoutes.js` | `accounts` view + `accountScope` | [ARCHITECTURE §8](ARCHITECTURE.md#8-customer-accounts-commission-staff-audit) · [HISTORY](HISTORY.md#accounts-commission) |
 | `/api/v1/admin/commission` | `adminCommissionRoutes.js` | `commission` view + `commissionScope`; writes admin | [ARCHITECTURE §8](ARCHITECTURE.md#8-customer-accounts-commission-staff-audit) · [HISTORY](HISTORY.md#migrations-100-102) |
 | `/api/v1/admin/audit` | `adminAuditRoutes.js` | admin | [ARCHITECTURE §8](ARCHITECTURE.md#8-customer-accounts-commission-staff-audit) · [HISTORY](HISTORY.md#accounts-commission) |
-| `/api/v1/admin` | `adminRoutes.js` | admin views (catch-all); `POST /users/:id/totp/reset` admin + CSRF (never self; a staff target needs the acting admin's `{ password }`, else 400 `reason: password_required` / 403); `POST /users/:id/new-password` admin + CSRF (placeholder-address, non-staff logins only, else 409; answers once, `no-store`) | [HISTORY](HISTORY.md#harvest-ice-a-2026-09-24) |
+| `/api/v1/admin` | `adminRoutes.js` | admin views (catch-all); `POST /users/:id/totp/reset` admin + CSRF (never self; a staff target needs the acting admin's `{ password }`, else 400 `reason: password_required` / 403); `POST /users/:id/new-password` admin + CSRF (placeholder-address, non-staff logins only, else 409; answers once, `no-store`); `PATCH /users/:id/expiry` admin + CSRF `{ expires_at }` — ISO date-time, `YYYY-MM-DD` (end of day UTC) or `null`; future only, never self (400) | [HISTORY](HISTORY.md#harvest-ice-a-2026-09-24) · [HISTORY](HISTORY.md#login-expiry-2026-09-26) |
 | `/api/v1/content` | `contentRoutes.js` | public reads; admin writes | — |
 | `/api/v1/seller` | `sellerRoutes.js` | GET only; `INSTANCE_ROLE=public` else 404; session; published seller (proven email) else 404; 2FA except `/me` only under `security.mfa.enrolment = required` (mfa-reminder-2026-09-23); per-section view else 403 | [ARCHITECTURE §21](ARCHITECTURE.md#21-seller-area--the-published-copy-on-the-public-instance) · [HISTORY](HISTORY.md#seller-area) |
 | `/api/v1/mcp` | `mcpRoutes.js` | `MCP_ENABLED` + bearer token | `docs/mcp.md` |
