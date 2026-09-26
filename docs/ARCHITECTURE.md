@@ -1620,9 +1620,9 @@ company/                  gitignored: plans, decisions, logs, market-research st
 
 | | |
 |---|---|
-| Services | `server/services/emailService.js` (`emailShell`), `outboundAllowlist.js`; `server/utils/inviteSend.js` (the invite reporting contract); templates use `server/i18n/` |
+| Services | `server/services/emailService.js` (`emailShell`, `deliver`), `mailTransport.js` (`EMAIL_TRANSPORT`: Resend or Microsoft Graph), `outboundAllowlist.js`; `server/utils/emailPalette.js` (the light palette, derived from the theme tokens); `server/utils/inviteSend.js` (the invite reporting contract); templates use `server/i18n/`; header logo in `public/assets/brand/` (`identity.email`) |
 | Routes | `GET /api/v1/admin/email-health` in `server/routes/adminRoutes.js` |
-| Jest | `tests/unit/outboundAllowlist.test.js`, `emailReplyTo.test.js`, `emailNameOnlyRecipient.test.js`; `tests/integration/inviteFeedback.test.js`; exercised by `tests/integration/auth.test.js`, `party.test.js`, `contact.test.js` |
+| Jest | `tests/unit/outboundAllowlist.test.js`, `emailReplyTo.test.js`, `emailNameOnlyRecipient.test.js`, `emailPalette.test.js`, `emailShell.test.js`, `emailGraphTransport.test.js`; `tests/integration/inviteFeedback.test.js`, `emailLogoAsset.test.js`; exercised by `tests/integration/auth.test.js`, `party.test.js`, `contact.test.js`; `tests/lib/renderAllEmails.js` drives every sender |
 | Migrations | 062 |
 | Features | [email](../features/email.md) |
 | Feature doc | `RUNBOOK.md`, `docs/DEPLOYMENT.md` (env) |
@@ -1633,7 +1633,8 @@ company/                  gitignored: plans, decisions, logs, market-research st
   `EMAIL_REPLY_TO` pointing at a real mailbox, added to every message that
   sets no replyTo of its own ([go-live](HISTORY.md#go-live)). Mail failures are loud; `EMAIL_ALLOWLIST` limits recipients outside
   prod ([harvest-1](HISTORY.md#harvest-1)).
-- The 7 server email strings carry the company brand ([r1](HISTORY.md#r1));
+- The server email strings carry the brand ([r1](HISTORY.md#r1)) through
+  `{siteName}` / `{legalName}` / `{siteHost}` since the identity seam;
   `emailShell` escapes its `<title>` (base-sync 2026-09-13).
 - **"Sent" means accepted for THE recipient**: the senders return the
   provider id or `false` (muted, or only placeholder recipients), never
@@ -1642,8 +1643,34 @@ company/                  gitignored: plans, decisions, logs, market-research st
   `EMAIL_ALLOWLIST` (`isRedirecting()`), otherwise the set-password link
   comes back (`no-store`), with `emailError` for staff eyes. `invited_at` is
   stamped only on a confirmed, un-redirected send ([harvest-ice-a](HISTORY.md#harvest-ice-a-2026-09-24)).
+- **The shell is the instance's own**: no brand, host or colour literal in
+  `emailService.js`. Name, host, legal line and From display name come from
+  `identity.brand` / `APP_URL` (`EMAIL_FROM` falls back to
+  `identity.organization.email`); the logo is `identity.email.logo`, a file in
+  `public/assets/brand/` (PNG/JPEG — not SVG) linked absolute under `APP_URL`,
+  alt text = the brand name. Senders paint with the palette roles `P.*` only
+  ([harvest2-lane2](history.d/2026-09-26-harvest2-lane2-email.md#harvest2-lane2-2026-09-26)).
+- **The palette is light and AA**: `utils/emailPalette.js` derives it at boot
+  from the first LIGHT theme (root, default, picker; a dark one is skipped),
+  resolved to literal hex, with `identity.email.palette` overrides; every text
+  colour is held to 4.5:1 on each surface it is painted on (a failure is
+  replaced and logged, never shipped). `emailPalette.test.js` measures every
+  colour in every rendered mail; translated `email.*` strings carry no colour
+  (the footer link's style is handed in as `{linkStyle}`).
+- **One transport switch**: `EMAIL_TRANSPORT=resend|graph` (default resend;
+  `services/mailTransport.js`). The `GRAPH_*` (or ice's `M365_*`) variables
+  alone never switch it. Every transport answers Resend's
+  `{ data: { id }, error }` behind `deliver()`, which stays the only way out
+  (placeholder drop, `EMAIL_ALLOWLIST` incl. dropping cc/bcc, ONE deadline
+  signal per message covering every call the transport makes, loud failure)
+  — no sender calls a transport directly, and a fan-out (the party
+  announcement) is bounded. Graph's id is the minted `client-request-id`;
+  `saveToSentItems` is false unless `GRAPH_SAVE_TO_SENT_ITEMS=true`.
+  Production's boot requires the selected transport's settings.
+- The email font stack is the theme's face plus the bare `sans-serif` tail —
+  no named system face (design rules).
 
-**History**: [harvest-1](HISTORY.md#harvest-1) · [r1](HISTORY.md#r1) · [go-live](HISTORY.md#go-live) · [harvest-ice-a-2026-09-24](HISTORY.md#harvest-ice-a-2026-09-24)
+**History**: [harvest-1](HISTORY.md#harvest-1) · [r1](HISTORY.md#r1) · [go-live](HISTORY.md#go-live) · [harvest-ice-a-2026-09-24](HISTORY.md#harvest-ice-a-2026-09-24) · [harvest2-lane2-2026-09-26](history.d/2026-09-26-harvest2-lane2-email.md#harvest2-lane2-2026-09-26)
 
 ## 20. Infrastructure and cross-cutting
 

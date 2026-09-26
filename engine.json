@@ -523,6 +523,37 @@
         "#306/#314 single-row create path of the import (engine import creates only products with variants), cost_isk/pack_qty/vat_rate columns in the import",
         "#314 uploadSingle client-abort 499 for multer (waits for lane 1a's uploadSingle)"
       ]
+    },
+    {
+      "rev": null,
+      "date": "2026-09-26",
+      "upstreamCommits": 0,
+      "conflicts": 0,
+      "note": "harvest",
+      "harvestedFrom": "ice@941cf51d",
+      "chunk": "harvest2 lane 2 (email)",
+      "commits": [
+        "cb684bbf (#179 light email palette → derived from the theme tokens: 7b8a408)",
+        "a5f50ffb (#190 logo in the header → identity.email: 7b8a408)",
+        "a61c1fb1 (#173 Graph sendMail transport → optional, EMAIL_TRANSPORT=graph: 909b639)",
+        "review fixes: 66eb000 (font tail, M365_* fallback, Sent Items opt-in, one deadline per send, bounded fan-out, shared token)"
+      ],
+      "branch": "harvest2/lane2-email",
+      "features": [
+        "email",
+        "client-config"
+      ],
+      "migrations": {},
+      "trimmed": [
+        "ice #173 removal of Resend (the engine keeps it as the default transport)",
+        "ice #173 saveToSentItems:true as the default (an opt-in here: GRAPH_SAVE_TO_SENT_ITEMS=true)",
+        "ice #173 invite-customers.js pacing (ice-only script)",
+        "ice #190 logo.png artwork (the engine ships favicon.svg rasterised as orangesmiley-emblem.png)",
+        "ice #179 per-hex palette (derived from the instance theme tokens by utils/emailPalette.js)"
+      ],
+      "syncPreconditions": {
+        "ice": "Before icelandicstore takes the sync carrying this lane: set EMAIL_TRANSPORT=graph on its TEST and PROD App Services (its M365_* settings are read as a fallback) and GRAPH_SAVE_TO_SENT_ITEMS=true to keep Sent Items copies; without the switch the engine selects Resend and a production boot refuses to start (no RESEND_API_KEY). Take the engine emailService.js on the conflict and set identity.email to logo.png (logoWordmark true, 150x52)."
+      }
     }
   ]
 }

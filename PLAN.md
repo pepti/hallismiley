@@ -200,6 +200,25 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
   `docs/HISTORY.md` is the frozen archive; every chunk gets a review pass
   before it merges; `docs/TESTING.md` gained the deployed-environment
   walkthrough. This settles chunk F's open item (d) below.
+  - 2026-09-26 — lane 2 (email) on `harvest2/lane2-email`, not merged
+    ([harvest2-lane2-2026-09-26](docs/history.d/2026-09-26-harvest2-lane2-email.md#harvest2-lane2-2026-09-26)):
+    the email shell is the instance's own (light palette from its theme
+    tokens, AA-checked; name, host, legal line and logo from `identity.*`),
+    and an optional Microsoft Graph transport behind `EMAIL_TRANSPORT=graph`.
+    For Halli: (a) **downstreams' emails change look on their next engine
+    sync** — light, their theme's colours, and the Orange Smiley emblem until
+    each sets `identity.email.logo` to its own file in `public/assets/brand/`
+    (icelandicstore: its `logo.png` as a wordmark); (b) the Graph transport
+    needs an **Entra app registration per tenant** (`Mail.Send` + an Exchange
+    application access policy) if ever used — nothing turns it on; (c) the
+    admin email-health readers (`adminController`, `PartyAdminView`) still use
+    the old `resendConfigured` name, kept meaning "the selected transport is
+    configured" — rename them in a follow-up; (d) **icelandicstore sync
+    precondition**: set `EMAIL_TRANSPORT=graph` (and
+    `GRAPH_SAVE_TO_SENT_ITEMS=true` to keep Sent Items copies) on its TEST and
+    PROD App Services BEFORE it takes this sync — its `M365_*` settings are
+    read as they are, but without the switch a production boot refuses to
+    start (also in `engine.json`). No new DRAFT strings.
 - Harvest 2 lane 1b (branch `harvest2/lane1b-defects`; from ice `941cf51d`;
   [harvest2-lane1b-2026-09-26](docs/history.d/2026-09-26-harvest2-lane1b-defects.md#harvest2-lane1b-2026-09-26)):
   one nav menu closer (#379), `auth_login_attempts_total` wired (#55), signup
