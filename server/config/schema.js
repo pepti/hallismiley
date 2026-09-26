@@ -5842,6 +5842,61 @@ END; $$ LANGUAGE plpgsql`,
       `CREATE INDEX IF NOT EXISTS idx_product_merges_sku ON product_merges (lower(merged_sku)) WHERE merged_sku IS NOT NULL`,
     ],
   },
+  {
+    // ── 122: the pass-through service invoice (D-022, 2026-09-26) ─────────
+    // D-022 bills hosting beyond the tier's pattern at Azure cost + 15 % and
+    // AI above a 2.000 kr./mán allowance at cost + 15 %, with NO seller
+    // commission. Until now the only way to bill it was a `recurring` invoice
+    // with amount_net_isk overridden, which paid the seller 10 % of it (about
+    // 77 % of our markup). createServiceInvoice now has a fourth kind,
+    // `passthrough`; this entry gives it the same database guarantee the
+    // recurring month has (099): ONE per account per period, so the monthly
+    // AI allowance cannot be granted twice by two invoices for one month.
+    //
+    // Unlike 099's indexes this one frees the slot when the invoice is fully
+    // CREDITED as well as cancelled: a metered cost can be corrected (an
+    // Azure bill adjusted after the fact), and a full credit note plus a
+    // corrected invoice is how that is done without billing the month twice —
+    // the credited invoice nets to zero. A partial credit leaves the status
+    // 'issued', so the slot stays taken.
+    //
+    // The CHECK names the service_kind vocabulary for the first time (099 left
+    // it free text). NOT VALID on purpose: it does not scan existing rows, so a
+    // downstream holding some other value cannot fail its boot on this entry.
+    // It DOES bind every row written from now on, UPDATEs of old rows included:
+    // an old row with a value outside the list could no longer change status
+    // (a credit note). Only this engine and rekstrarkerfid write service_kind,
+    // both with exactly these values; check a new downstream with
+    // SELECT DISTINCT service_kind FROM invoices before it syncs 122. A later
+    // kind widens the list in the same release that starts writing the kind.
+    //
+    // Pure expand (invariant 14): the previous release writes only the four
+    // older values, never `passthrough`, so neither the index nor the CHECK
+    // can refuse anything it does. Rollback: DROP INDEX
+    // uniq_invoices_account_passthrough_period; ALTER TABLE invoices DROP
+    // CONSTRAINT invoices_service_kind_check.
+    // Reference copy: server/migrations/122_passthrough_invoice.sql
+    name: '122_passthrough_invoice',
+    statements: [
+      `SET LOCAL lock_timeout = '5s'`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS uniq_invoices_account_passthrough_period
+         ON invoices (account_id, service_period)
+         WHERE account_id IS NOT NULL
+           AND service_kind = 'passthrough'
+           AND service_period IS NOT NULL
+           AND status NOT IN ('cancelled', 'credited')`,
+      `DO $$ BEGIN
+         IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                         WHERE conname = 'invoices_service_kind_check'
+                           AND conrelid = 'invoices'::regclass) THEN
+           ALTER TABLE invoices ADD CONSTRAINT invoices_service_kind_check
+             CHECK (service_kind IS NULL OR service_kind IN
+               ('build_deposit', 'build_final', 'recurring', 'overage', 'passthrough'))
+             NOT VALID;
+         END IF;
+       END $$`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

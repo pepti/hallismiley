@@ -541,6 +541,14 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
   admin strings); rekstrarkerfid's next engine sync brings it to the demo
   instance; nothing sweeps expired rows yet (they stay, refused — a cleanup
   job or "delete after N days expired" is a later decision).
+- Pass-through invoice (D-022) landed 2026-09-26 on `feat/passthrough-invoice`, not merged
+  ([passthrough-invoice-2026-09-26](docs/history.d/2026-09-26-feat-passthrough-invoice.md#passthrough-invoice-2026-09-26)):
+  service kind `passthrough` (hosting at cost + markup, AI above the monthly
+  allowance at cost + markup, no commission), engine migration
+  `122_passthrough_invoice`, terms in `billing.passthrough`. Open: Halli
+  approves the DRAFT invoice-line texts and admin strings; the accountant
+  answers ACCOUNTANT-QUESTIONS §12 (own sale vs disbursement; a separate
+  revenue account before the first posting).
 - Books: a button to issue a statutory invoice from an order
   (`issueInvoiceForOrder` has no caller — hard blocker for 2026-P5, due 7.12);
   Peppol inbound; the 6-month commission tail (contract 4.3) has no code —
