@@ -6,6 +6,7 @@ import { getUser } from '../services/auth.js';
 import { getCsrfHeaders } from '../utils/api.js';
 import { isValidPhone, isValidZip } from '../utils/contactFormat.js';
 import { vatBreakdown, isExport } from '../utils/vat.js';
+import { translateVariantLabel } from '../utils/colorLabels.js';
 import { t, href } from '../i18n/i18n.js';
 
 function _esc(s) {
@@ -92,7 +93,7 @@ export class CheckoutView {
     const itemsHtml = items.map(it => {
       const price = cur === 'ISK' ? it.priceIsk : it.priceEur;
       const title = it.variantLabel
-        ? `${_esc(it.name)} — ${_esc(it.variantLabel)}`
+        ? `${_esc(it.name)} — ${_esc(translateVariantLabel(it.variantLabel, t))}`
         : _esc(it.name);
       return `
         <li class="shop-checkout__item">
@@ -105,8 +106,8 @@ export class CheckoutView {
       <div class="shop-checkout__inner">
         <a href="${href('/cart')}" class="shop-checkout__back">← ${t('checkout.backToCart')}</a>
         <h1 class="shop-checkout__title">${t('checkout.title')}</h1>
-        ${this._stockShort.length ? `<div class="shop-checkout__notice shop-checkout__notice--warn" role="alert" data-testid="checkout-stock-notice">${_esc(t('checkout.stockNotice'))} ${this._stockShort.map(it => _esc(it.variantLabel ? `${it.name} — ${it.variantLabel}` : it.name)).join(', ')}. <a href="${href('/cart')}">${_esc(t('checkout.backToCart'))}</a></div>` : ''}
-        ${this._repriced.length ? `<div class="shop-checkout__notice shop-checkout__notice--info" role="status" data-testid="checkout-repriced">${_esc(t('cart.pricesUpdated', { names: this._repriced.map(it => it.variantLabel ? `${it.name} — ${it.variantLabel}` : it.name).join(', ') }))}</div>` : ''}
+        ${this._stockShort.length ? `<div class="shop-checkout__notice shop-checkout__notice--warn" role="alert" data-testid="checkout-stock-notice">${_esc(t('checkout.stockNotice'))} ${this._stockShort.map(it => _esc(it.variantLabel ? `${it.name} — ${translateVariantLabel(it.variantLabel, t)}` : it.name)).join(', ')}. <a href="${href('/cart')}">${_esc(t('checkout.backToCart'))}</a></div>` : ''}
+        ${this._repriced.length ? `<div class="shop-checkout__notice shop-checkout__notice--info" role="status" data-testid="checkout-repriced">${_esc(t('cart.pricesUpdated', { names: this._repriced.map(it => it.variantLabel ? `${it.name} — ${translateVariantLabel(it.variantLabel, t)}` : it.name).join(', ') }))}</div>` : ''}
 
         <div class="shop-checkout__grid">
           <form class="shop-checkout__form" id="shop-checkout-form" novalidate>

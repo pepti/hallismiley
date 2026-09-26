@@ -37,6 +37,14 @@ describe('isValidPhone (server == client)', () => {
     expect(client.isValidPhone(phone)).toBe(want);
   });
 
+  test('"Iceland" is the same set of spellings as the VAT export rule', () => {
+    const { isExport } = require('../../public/js/utils/vat.js');
+    for (const c of ['', 'IS', 'is', 'ISL', 'Iceland', 'ÍSLAND', 'DK', 'GB', 'US', 'FO']) {
+      expect(server.isIcelandic(c)).toBe(!isExport(c || 'IS'));
+      expect(client.isIcelandic(c)).toBe(server.isIcelandic(c));
+    }
+  });
+
   test('the two twins carry the same regular expressions', () => {
     expect(client.PHONE_RE.source).toBe(server.PHONE_RE.source);
     expect(client.IS_ZIP_RE.source).toBe(server.IS_ZIP_RE.source);

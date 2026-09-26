@@ -59,6 +59,17 @@ describe('colour names on the product page', () => {
   });
 });
 
+describe('translateVariantLabel (cart and checkout lines)', () => {
+  const { translateVariantLabel } = require('../../public/js/utils/colorLabels.js');
+  const tIs = (k) => is[k];
+  test('a stored "Black / M" reads in the page language; sizes and unknown values stay', () => {
+    expect(translateVariantLabel('Black / M', tIs)).toBe('Svartur / M');
+    expect(translateVariantLabel('M / Sage green (sag)', tIs)).toBe('M / Salvíugrænn');
+    expect(translateVariantLabel('Chartreuse / XL', tIs)).toBe('Chartreuse / XL');
+    expect(translateVariantLabel(null, tIs)).toBeNull();
+  });
+});
+
 describe('variant picker aria-label', () => {
   test('colour and size have whole sentences, in the accusative', () => {
     expect(chooseAxisKey('Color')).toBe('shop.chooseColor');

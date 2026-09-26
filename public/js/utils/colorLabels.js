@@ -80,6 +80,20 @@ export function colorLabelKey(value) {
   return known ? COLOR_LABEL_KEYS[known] : null;
 }
 
+// A basket line's stored variant label ("Black / M", built from the raw
+// catalogue values when the line was added) in the reader's language: each
+// " / " part that names a known colour is swapped for its label; sizes and
+// unlisted values stay as stored. `t` is the i18n function (passed in so this
+// module stays pure). Used by the cart and checkout at render time, so a
+// locale switch re-labels an existing basket.
+export function translateVariantLabel(label, t) {
+  if (!label) return label;
+  return String(label).split(' / ').map((part) => {
+    const key = colorLabelKey(part);
+    return key ? t(key) : part;
+  }).join(' / ');
+}
+
 // "Veldu {axis}" put the axis in the nominative ("Veldu litur"); Icelandic wants
 // the accusative after velja ("Veldu lit"), and the case differs per word — so
 // the known axes get a whole sentence each. An unknown axis keeps the template.

@@ -10,9 +10,11 @@ export function isValidPhone(v) {
   return typeof v === 'string' && PHONE_RE.test(v);
 }
 
+// The spellings invoiceService.isExport (and utils/vat.js) read as domestic.
+const ICELAND = new Set(['', 'IS', 'ISL', 'ICELAND', 'ÍSLAND']);
 export function isIcelandic(country) {
   const c = typeof country === 'string' ? country.trim().toUpperCase() : '';
-  return c === '' || c === 'IS';
+  return ICELAND.has(c);
 }
 
 export function isValidZip(zip, country) {

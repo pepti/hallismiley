@@ -23,10 +23,13 @@ function isValidPhone(v) {
   return typeof v === 'string' && PHONE_RE.test(v);
 }
 
-// Blank country means Iceland: the forms default to IS.
+// Blank country means Iceland: the forms default to IS. The spellings are the
+// ones bookkeeping/invoiceService.isExport reads as domestic, so the postcode
+// rule and the VAT export rule can never disagree about where "Iceland" is.
+const ICELAND = new Set(['', 'IS', 'ISL', 'ICELAND', 'ÍSLAND']);
 function isIcelandic(country) {
   const c = typeof country === 'string' ? country.trim().toUpperCase() : '';
-  return c === '' || c === 'IS';
+  return ICELAND.has(c);
 }
 
 // True unless the address is in Iceland and the postcode is not three digits.

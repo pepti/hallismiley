@@ -58,8 +58,8 @@ lane brings the generic part up.
 7. **Checkout autofill** (#213, part). A signed-in buyer's delivery name starts as the account's
    display name (else username) and the phone as the account's phone; both stay editable.
 
-**Measured.** Unit tier 2 063 passed / 1 skipped (was 2 004 + the new suites); new suites
-`colorLabels.client` (26), `contactFormat` (28), `duplicateNames.client` (7),
+**Measured.** Unit tier 2 065 passed / 1 skipped; new suites
+`colorLabels.client` (27), `contactFormat` (29), `duplicateNames.client` (7),
 `vatDisplay.client` (14), `cartPriceSync.client` (7). Integration: `contact.test.js` (+1: shape
 400s and passes) and `shop.test.js` (+5: `vat_rate` on the public catalogue in both locales and
 on `listItems`, the postcode/phone 400s in the envelope, foreign postcodes and pickup untouched)
@@ -95,6 +95,17 @@ notice, VAT rows at 11 % plus 24 % shipping, export 0 %, the IS postcode stop. C
   the two `publicCols` strings, nothing else), `shopRoutes.js` (one middleware in the checkout
   chain; `shopController.js` untouched), `AdminOrderDetailView.js` (the totals block only; lane
   4a sweeps its date format and title).
+
+**Review pass** (`invariant-reviewer` on `git diff master...HEAD`): no blocking findings. Fixed on
+the branch: (A1) the cart and checkout printed a line's stored variant label ("Black / M") inside
+Icelandic sentences — `colorLabels.translateVariantLabel` now re-labels known colours at render;
+(A3) the cart's VAT label is escaped like the others; (A4) the postcode rule's "Iceland" is now the
+same set of spellings as the VAT export rule (`IS`, `ISL`, `ICELAND`, `ÍSLAND`, blank), pinned by a
+test. Deliberate won't-fixes: (A2) `cart.syncPrices` sees the first 100 products the catalogue
+endpoint returns, so a basket line past that cap keeps its stored display price — the charge is
+still the server's, and a catalogue that size is a later concern (an `?ids=` filter on the
+catalogue would close it); (nit) a malformed postcode on an instance without Stripe now answers 400
+before the controller's 503 — harmless.
 
 **New strings (all DRAFT, Halli approves).** Public table, IS / EN:
 `nav.mainNavigation` Aðalvalmynd / Main navigation ·
