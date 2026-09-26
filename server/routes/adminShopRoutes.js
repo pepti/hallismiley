@@ -91,6 +91,10 @@ router.put('/products/:id/collections', csrfProtect, adminShop.setProductCollect
 
 // ── Reports ───────────────────────────────────────────────────────────────────
 router.get('/reports',            adminShop.salesReport);
+// Harvest 2 lane 5: the analyses under the sales block, and the marketing
+// overview. Both behind the `sales` view above; each narrows further inside.
+router.get('/reports/insights',   adminShop.salesInsights);
+router.get('/reports/marketing',  adminShop.marketingReport);
 
 // ── Orders ──────────────────────────────────────────────────────────────────
 router.get('/orders',             adminShop.listOrders);

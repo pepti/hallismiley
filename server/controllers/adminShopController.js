@@ -16,6 +16,12 @@ const { t }           = require('../i18n');
 const { autoTranslateFields } = require('../services/autoTranslateFields');
 const { submitLocalized }     = require('../services/indexNow');
 const logger                  = require('../logger');
+// Harvest 2 lane 5 (reports): the window parser, the per-view check the
+// insights/marketing blocks make, and their queries.
+const { parseReportWindow }   = require('../utils/reportWindow');
+const { resolveViews }        = require('../auth/requireView');
+const SalesReports            = require('../models/SalesReports');
+const StockOut                = require('../models/StockOut');
 
 // EN → IS pairs for auto-translation on admin save.
 // Shop-redesign section fields (category, subcategory, duration_minutes,
@@ -376,7 +382,19 @@ const adminShopController = {
 
   async listProducts(req, res, next) {
     try {
-      const products = await Product.findAll({ activeOnly: false, limit: 200 });
+      // ?stock=out — the sold-out products (models/StockOut.js), the list the
+      // "Í dag" card links to; the card counts with the same definition.
+      let products;
+      if (req.query.stock === 'out') {
+        const ids = await StockOut.productIds();
+        const order = new Map(ids.map((id, i) => [String(id), i]));
+        products = ids.length
+          ? (await Product.findByIds(ids, { activeOnly: false }))
+            .sort((a, b) => order.get(String(a.id)) - order.get(String(b.id)))
+          : [];
+      } else {
+        products = await Product.findAll({ activeOnly: false, limit: 200 });
+      }
       if (products.length === 0) return res.json({ products: [] });
       const productIds = products.map(p => p.id);
       // Admin needs to see inactive variants too, so activeOnly: false.
@@ -686,12 +704,14 @@ const adminShopController = {
 
   async listOrders(req, res, next) {
     try {
-      const { status, paymentStatus, fulfillmentStatus, q, sort, dir } = req.query;
+      const { status, paymentStatus, fulfillmentStatus, q, view, sort, dir } = req.query;
       const filter = {
         status:            status            ? String(status) : null,
         paymentStatus:     paymentStatus     ? String(paymentStatus) : null,
         fulfillmentStatus: fulfillmentStatus ? String(fulfillmentStatus) : null,
         q:                 q                 ? String(q) : null,
+        // A named list view (Order.ORDER_VIEWS: ?view=open) — the "Í dag" card links here.
+        view:              view              ? String(view) : null,
       };
       const [orders, total] = await Promise.all([
         Order.listAll({ ...filter, sort: sort ? String(sort) : 'date', dir: dir === 'asc' ? 'asc' : 'desc', limit: 200 }),
@@ -825,11 +845,54 @@ const adminShopController = {
 
   // ── Reports ─────────────────────────────────────────────────────────────────
 
+  // GET /reports?from&to[&compare_from&compare_to][&bucket] — the sales report
+  // (harvest 2 lane 5; icelandicstore #414): per-currency KPIs with net sales,
+  // the comparison window's KPIs, the chart series. `?days=` (the previous
+  // release's call) still answers the trailing window — the old client runs
+  // during a self-update swap. An unparsable, empty or backwards window (either
+  // one) is a 400 in the envelope.
   async salesReport(req, res, next) {
     try {
-      const days = Number(req.query.days) || 30;
-      const report = await Order.salesReport({ days });
+      const q = req.query;
+      const windowed = ['from', 'to', 'compare_from', 'compare_to'].some(k => q[k] !== undefined);
+      if (!windowed) {
+        const days = Number(q.days) || 30;
+        return res.json({ report: await Order.salesReport({ days }) });
+      }
+      const w = parseReportWindow(q);
+      if (!w.ok) return res.status(400).json({ error: t(req.locale, 'errors.admin.invalidDateRange'), code: 400 });
+      const report = await Order.salesReport({ from: w.from, to: w.to, compare: w.compare, bucket: w.bucket });
       return res.json({ report });
+    } catch (err) { next(err); }
+  },
+
+  // GET /reports/insights?from&to — the analyses under the sales block
+  // (icelandicstore #419): fulfilment time, new customers, dormant customers.
+  // Fetched on its own so the sales block never waits for it. Customer names
+  // are sent only to a viewer who may see customers or orders; the counts go
+  // to every holder of the `sales` view.
+  async salesInsights(req, res, next) {
+    try {
+      const w = parseReportWindow(req.query);
+      if (!w.ok) return res.status(400).json({ error: t(req.locale, 'errors.admin.invalidDateRange'), code: 400 });
+      const views = await resolveViews(req);
+      const named = views.includes('*') || views.includes('customers') || views.includes('orders');
+      const insights = await SalesReports.insights({ from: w.from, to: w.to, named });
+      return res.json({ insights });
+    } catch (err) { next(err); }
+  },
+
+  // GET /reports/marketing?from&to — sessions by channel, sales that used a
+  // discount, and the campaigns (discounts) table. The traffic block needs the
+  // `analytics` view as well; without it the key is absent.
+  async marketingReport(req, res, next) {
+    try {
+      const w = parseReportWindow(req.query);
+      if (!w.ok) return res.status(400).json({ error: t(req.locale, 'errors.admin.invalidDateRange'), code: 400 });
+      const views = await resolveViews(req);
+      const traffic = views.includes('*') || views.includes('analytics');
+      const marketing = await SalesReports.marketing({ from: w.from, to: w.to, traffic });
+      return res.json({ marketing });
     } catch (err) { next(err); }
   },
 
@@ -978,12 +1041,14 @@ const adminShopController = {
   // past the cap is refused (413), never truncated.
   async exportOrders(req, res, next) {
     try {
-      const { status, paymentStatus, fulfillmentStatus, q, sort, dir } = req.query;
+      const { status, paymentStatus, fulfillmentStatus, q, view, sort, dir } = req.query;
       const filter = {
         status:            status            ? String(status) : null,
         paymentStatus:     paymentStatus     ? String(paymentStatus) : null,
         fulfillmentStatus: fulfillmentStatus ? String(fulfillmentStatus) : null,
         q:                 q                 ? String(q) : null,
+        // A named list view (Order.ORDER_VIEWS: ?view=open) — the "Í dag" card links here.
+        view:              view              ? String(view) : null,
       };
       const cap = orderExport.limits.maxRows;
       const orders = await Order.listAll({ ...filter, sort: sort ? String(sort) : 'date', dir: dir === 'asc' ? 'asc' : 'desc', limit: cap + 1 });

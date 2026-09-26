@@ -396,6 +396,7 @@
   "errors.admin.slugAlreadyTaken": "Slug already taken",
   "errors.admin.imageNotFound": "Image not found",
   "errors.admin.orderNotFound": "Order not found",
+  "errors.admin.invalidDateRange": "Invalid period — the start date must come before the end date.",
   "errors.admin.bulkIdsInvalid": "Select at least one order to print",
   "errors.admin.emailInvalid": "A valid email address is required",
   "errors.admin.nameRequired": "A name is required for a login without email",
