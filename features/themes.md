@@ -19,6 +19,8 @@ paths:
   - tests/unit/themePrefsAccount.client.test.js
   - tests/unit/themePrefsEnv.client.test.js
   - tests/unit/themeTokenDefined.test.js
+  - tests/themeTokens.js
+  - tests/unit/themeTokenContrast.test.js
 migrations: [083_user_theme, 084_user_theme_widen, 094_theme_set_three, 106_user_theme_check_drop]
 since: 2026-08-09
 origin: null

@@ -458,7 +458,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Client | `public/js/theme-boot.js`, `public/js/services/themePrefs.js`, `ambiencePrefs.js`; `public/js/utils/chartTheme.js`, `motion.js` |
 | CSS | `public/css/themes.css`, `theme-switcher.css`, `iceland-scene.css`, `test-env.css` |
 | Scripts | `scripts/build-iceland-scenes.js`, `scripts/audit-text-contrast.js`, `scripts/self-host-fonts.js`, `scripts/recompress-images.js` |
-| Jest | `tests/integration/ambience.test.js`; `tests/unit/themePrefsAccount.client.test.js`, `themePrefsEnv.client.test.js`, `themeTokenDefined.test.js` (every `var(--x)` names a defined token) |
+| Jest | `tests/integration/ambience.test.js`; `tests/unit/themePrefsAccount.client.test.js`, `themePrefsEnv.client.test.js`, `themeTokenDefined.test.js` (every `var(--x)` names a defined token), `themeTokenContrast.test.js` (WCAG pairs on every theme; reader in `tests/themeTokens.js`) |
 | e2e | `e2e/iceland-scene.spec.js` |
 | Migrations | 083, 084 (user theme), 086, 089 (landing background scene/video), 094 (three-theme set), 106 (theme CHECK dropped so a product may add ids) |
 | Features | [ambience](../features/ambience.md), [scene-engine](../features/scene-engine.md), [themes](../features/themes.md) |
