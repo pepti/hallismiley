@@ -13,6 +13,9 @@
 // the env it needs (the honest simulation: a switch is part of the instance
 // contract, so changing it is a redeploy).
 const request = require('supertest');
+// The public host (APP_URL's, pinned in tests/env.js): indexability is gated on
+// the request Host (server/utils/indexability.js) and supertest sends 127.0.0.1.
+const PUBLIC_HOST = new URL(process.env.APP_URL).host;
 const {
   createTestAdminUser, getTestSessionCookie, cleanTables,
 } = require('../helpers');
@@ -83,7 +86,7 @@ describe('preset vefur — the core + news', () => {
       expect((await request(app).get('/health')).status).toBe(200);
       // News is in every tier (Halli, 2026-09-24).
       expect((await request(app).get('/api/v1/news')).status).toBe(200);
-      const page = await request(app).get('/is/thjonusta');
+      const page = await request(app).get('/is/thjonusta').set('Host', PUBLIC_HOST);
       expect(page.status).toBe(200);
       // hallismiley (engine-sync-4): a product that hides /thjonusta
       // (identity.surface.hiddenRoutes) serves it noindex — still a 200, which
@@ -150,14 +153,14 @@ describe('preset vefur — the core + news', () => {
       CLIENT_CONFIG_IDENTITY_SURFACE_HIDDEN_ROUTES: '[]',
     };
     await withEnv(env, async (app) => {
-      const res = await request(app).get('/sitemap.xml');
+      const res = await request(app).get('/sitemap.xml').set('Host', PUBLIC_HOST);
       expect(res.status).toBe(200);
       expect(res.text).toContain('/thjonusta');
       expect(res.text).not.toMatch(/\/verkefni</);
     });
     // Control: the same identity with the module on does list it.
     await withEnv({ ...env, CLIENT_CONFIG_MODULES_PROJECTS_ENABLED: 'true' }, async (app) => {
-      expect((await request(app).get('/sitemap.xml')).text).toMatch(/\/verkefni</);
+      expect((await request(app).get('/sitemap.xml').set('Host', PUBLIC_HOST)).text).toMatch(/\/verkefni</);
     });
   });
 

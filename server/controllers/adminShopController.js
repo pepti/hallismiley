@@ -232,6 +232,10 @@ async function classifyImportRows(rows, { create = false } = {}) {
       const name = r?.name == null ? '' : String(r.name).trim();
       return defer(null, { ...norm.values, ...(name ? { name } : {}), ...(barcode ? { barcode } : {}) });
     }
+    // A row read from a PDF by AI (aiExtract marks it __ai) may only CREATE:
+    // its codes were checked when the PDF was read, but a code can become ours
+    // before Apply, and Apply re-runs this. Never an update (ice #306).
+    if (r && r.__ai === true) return { sku: label, status: 'error', reason: 'aiCreateOnly', kind: match.kind };
     const norm = normalizeImportRow(r);
     if (norm.error) return { sku: label, status: 'error', reason: norm.error, errorField: norm.errorField, kind: match.kind };
     const changes = importChanges(norm.values, match.current);
@@ -621,9 +625,11 @@ const adminShopController = {
   // ── Product images ────────────────────────────────────────────────────────
 
   async uploadImage(req, res, next) {
+    // Resolved by adminShopRoutes' requireProduct BEFORE multer wrote anything
+    // (icelandicstore #150, harvest 2). Re-querying here would straddle the
+    // disk write: a product deleted mid-upload would 404 and strand the file.
+    const product = req.product;
     try {
-      const product = await Product.findById(req.params.id);
-      if (!product) return res.status(404).json({ error: t(req.locale, 'errors.admin.productNotFound'), code: 404 });
       if (!req.file) return res.status(400).json({ error: t(req.locale, 'errors.admin.noFileUploaded'), code: 400 });
 
       // Auto-orient, cap the long edge, strip metadata — and prove the bytes
@@ -644,7 +650,16 @@ const adminShopController = {
         alt_text: req.body.alt_text || null,
       });
       return res.status(201).json({ image });
-    } catch (err) { next(err); }
+    } catch (err) {
+      // The bytes are already on disk; without this an FK failure (the product
+      // deleted mid-upload) leaves an orphan on the uploads share.
+      if (req.file && req.file.path) fs.unlink(req.file.path, () => {});
+      // …and that FK failure is the product being gone, not a server fault.
+      if (err && err.code === '23503') {
+        return res.status(404).json({ error: t(req.locale, 'errors.admin.productNotFound'), code: 404 });
+      }
+      return next(err);
+    }
   },
 
   async deleteImage(req, res, next) {

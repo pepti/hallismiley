@@ -22,6 +22,7 @@ const multer = require('multer');
 const logger = require('../../logger');
 const audit = require('./auditLog');
 const { BOOKS_UPLOAD_ROOT, booksDocumentDir } = require('../../config/paths');
+const { ensureDestination } = require('../../middleware/upload');
 
 // A receipt is a photo or a PDF. Nothing else is a document in this sense, and
 // keeping the list this short keeps the archive readable in seven years.
@@ -60,14 +61,14 @@ class DocumentError extends Error {
  */
 function createDocumentUpload() {
   const storage = multer.diskStorage({
-    destination(req, file, cb) {
-      // Shard by year-month so seven years of receipts is not one flat directory.
+    // Shard by year-month so seven years of receipts is not one flat directory.
+    // ensureDestination hands an mkdir failure (a full or read-only mount) to
+    // multer instead of throwing out of busboy's handler — an uncaught throw
+    // there exits the process (icelandicstore #150, harvest 2).
+    destination: ensureDestination(() => {
       const now = new Date();
-      const bucket = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-      const dir = booksDocumentDir(bucket);
-      fs.mkdirSync(dir, { recursive: true });
-      cb(null, dir);
-    },
+      return booksDocumentDir(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
+    }),
     filename(req, file, cb) {
       const ext = ALLOWED_MIME[file.mimetype] || '.bin';
       cb(null, `${Date.now()}-${crypto.randomBytes(6).toString('hex')}${ext}`);

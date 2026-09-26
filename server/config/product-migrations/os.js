@@ -25,7 +25,7 @@
 //               executes; recorded as applied with the reason. Empty here.
 //
 // Reference copies: server/migrations/091_*.sql, 092_*.sql, 104_*.sql,
-// product/os_001_*.sql.
+// product/os_*.sql.
 
 // One exact passage of one seeded sales guide, old text -> new text: the 104
 // pattern as a helper. The UPDATE touches a row only where no person has saved
@@ -156,6 +156,150 @@ const OS_001_EDITS = [
     to: '<li><strong>Uppsetningargjald</strong> er fast verð eftir þrepi (390 / 580 / 690 þ.kr., DRÖG) og <strong>þjónustusamningur</strong> fylgir öllum þrepum.</li>' },
 ];
 
+// os_002: the contact page's hero subtitle and "What we take on" cards, per
+// locale. Must equal DEFAULT_HERO.subtitle / DEFAULT_AVAILABILITY in
+// public/js/views/ContactView.js (contactContentOs002.test.js pins it).
+// DRAFT (2026-09-26, Efnishöfundur) — awaiting Halli.
+const OS_002_CONTACT = {
+  hero_subtitle: {
+    en: 'A new website, a system built around the way you work, a move off an old system, or just a question about what is possible. We read every message and reply within one business day.',
+    is: 'Nýr vefur, kerfi smíðað utan um verklagið, flutningur af gömlu kerfi eða bara spurning um hvað er hægt. Við lesum öll skilaboð og svörum innan eins virks dags.',
+  },
+  availability: {
+    en: {
+      eyebrow: 'Right now',
+      title: 'What we take on',
+      cards: [
+        { status: 'open',    label: 'Custom systems and integrations', body: 'Systems built around the way you work, links to accounting and payment gateways, and automation that takes repetitive manual work off the table.' },
+        { status: 'open',    label: 'Websites, stores and migrations', body: 'A new website or online store, or a move off an older system without the business stopping. We host it and keep it maintained.' },
+        { status: 'limited', label: 'Larger projects',                 body: 'Work that takes months to build. We take it on when it fits what we are building.' },
+      ],
+    },
+    is: {
+      eyebrow: 'Núna',
+      title: 'Hvað við tökum að okkur',
+      cards: [
+        { status: 'open',    label: 'Sérsmíðuð kerfi og tengingar',   body: 'Kerfi utan um verklagið, tengingar við bókhald og greiðslugáttir og sjálfvirkni sem tekur endurtekna handavinnu af borðinu.' },
+        { status: 'open',    label: 'Vefir, verslanir og flutningur', body: 'Nýr vefur eða vefverslun, eða flutningur af eldra kerfi án þess að reksturinn stöðvist. Við hýsum og höldum því við.' },
+        { status: 'limited', label: 'Stærri verkefni',                body: 'Verkefni sem taka marga mánuði í smíði. Við tökum þau að okkur þegar þau falla að því sem við erum að byggja.' },
+      ],
+    },
+  },
+};
+
+// os_003 — D-022 (Halli, 2026-09-26) re-prices the service contract and adds a
+// fourth tier. Build fees stay 390/580/690 þ.kr. and verk sizes 1/5/20; the
+// contract becomes 29/59/89 þ.kr./mán with 2/3/5 verkeiningar (was 19/29/39
+// with 5/10/20), einingaverð 6.000 kr. above the quota, hosting beyond the
+// tier's pattern at Azure cost + 15 %, AI inside the system included up to
+// 2.000 kr./mán then cost + 15 %. The fourth tier, Samstarf, has no listed
+// price: it is agreed after a free assessment, for customers who need a system
+// built around their own business. The guides that quoted D-001 (and the ones
+// that name the three tiers) learn the new figures, where Samstarf fits and
+// when a seller offers the free assessment instead of quoting a tier. Same
+// helper, same guard as os_001; applied on top of os_001's text. The seed
+// script carries the result; tests/integration/salesGuidesD022.test.js checks
+// that D-001 text + these edits == seed text. Every figure and all Samstarf
+// copy stay DRÖG until Halli approves; the guides stay unpublished.
+const OS_003_EDITS = [
+  { slug: 'velkomin-i-soluteymid', field: 'body',
+    from: 'keyrir í skýinu (þ.e. á netþjónum sem við sjáum um, viðskiptavinurinn þarf engan búnað) og er í boði í þremur þjónustuleiðum.</p>',
+    to: 'keyrir í skýinu (þ.e. á netþjónum sem við sjáum um, viðskiptavinurinn þarf engan búnað) og er í boði í þremur þjónustuleiðum með föstu verði. Fjórða leiðin, <strong>Samstarf</strong>, er fyrir fyrirtæki sem þurfa kerfi smíðað utan um eigin rekstur: þar er verðið samið eftir ókeypis úttekt (sjá <em>Þrepin þrjú</em>).</p>' },
+  { slug: 'ordalisti', field: 'body',
+    from: '<li><strong>Einingaverð</strong> — fast verð fyrir hverja verkeiningu umfram þær sem fylgja þjónustusamningnum. Upphæðin er ekki ákveðin (DRÖG — Halli staðfestir).</li>',
+    to: '<li><strong>Einingaverð</strong> — fast verð fyrir hverja verkeiningu umfram þær sem fylgja þjónustusamningnum: 6.000 kr. án VSK (DRÖG — Halli staðfestir).</li>\n<li><strong>Samstarf</strong> — fjórða leiðin, fyrir fyrirtæki sem þurfa kerfi smíðað utan um eigin rekstur. Samstarf hefur ekkert listaverð: verðið er samið eftir <em>ókeypis úttekt</em>.</li>\n<li><strong>Ókeypis úttekt</strong> — við förum yfir rekstur fyrirtækisins og hvað við leggjum til að smíða fyrir það. Úttektin kostar viðskiptavininn ekkert, og út úr því kemur tilboð í Samstarf.</li>' },
+  { slug: 'ordalisti', field: 'body',
+    from: '<li><strong>Hýsing</strong> — að geyma og keyra vef eða kerfi á netþjóni. Innifalin í þjónustusamningnum.</li>',
+    to: '<li><strong>Hýsing</strong> — að geyma og keyra vef eða kerfi á netþjóni. Innifalin í þjónustusamningnum, í þeirri stærð sem fylgir þrepinu. Þurfi viðskiptavinurinn meira er það sem umfram er rukkað á kostnaðarverði skýjaþjónustunnar (Azure) að viðbættum 15 %.</li>' },
+  { slug: 'kerfid-i-stuttu-mali', field: 'body',
+    from: '<p>Þjónustuleiðirnar þrjár (sjá <em>Þrepin þrjú</em>) eru einfaldlega mismunandi stórir skammtar af þessu sama kerfi — ekki þrjár ólíkar vörur.</p>',
+    to: '<p>Þjónustuleiðirnar þrjár (sjá <em>Þrepin þrjú</em>) eru einfaldlega mismunandi stórir skammtar af þessu sama kerfi — ekki þrjár ólíkar vörur. Fyrirtæki sem þarf kerfi smíðað utan um eigin rekstur fer í fjórðu leiðina, <strong>Samstarf</strong>: þar er verðið samið eftir ókeypis úttekt.</p>' },
+  { slug: 'fyrsta-samtalid', field: 'body',
+    from: 'Nefndu þrepið sem þér sýnist passa og af hverju. Ef verð ber á góma:',
+    to: 'Nefndu þrepið sem þér sýnist passa og af hverju — eða, ef reksturinn þarf kerfi smíðað utan um sig, bjóddu ókeypis úttekt í stað þreps (sjá <em>Þrepin þrjú</em>, kaflann um Samstarf). Ef verð ber á góma:' },
+  { slug: 'threpin-thrju', field: 'title',
+    from: 'Þrepin þrjú og hverjum þau henta',
+    to: 'Þrepin þrjú, Samstarf og hverjum þau henta' },
+  { slug: 'threpin-thrju', field: 'summary',
+    from: 'Vefur, Verslun og Rekstur: uppsetningargjald 390 / 580 / 690 þ.kr. og þjónustusamningur 19 / 29 / 39 þ.kr./mán með 5 / 10 / 20 verkeiningum á mánuði — öll verð DRÖG þar til Halli staðfestir, öll án VSK. Aldrei tímagjald. Hér lærirðu verðmódelið, hvað verkeining er og hvernig þú parar fyrirtæki við rétt þrep.',
+    to: 'Vefur, Verslun og Rekstur: uppsetningargjald 390 / 580 / 690 þ.kr. og þjónustusamningur 29 / 59 / 89 þ.kr./mán með 2 / 3 / 5 verkeiningum á mánuði, einingaverð 6.000 kr. umfram það — öll verð DRÖG þar til Halli staðfestir, öll án VSK. Fjórða leiðin, Samstarf, hefur ekkert listaverð: verðið er samið eftir ókeypis úttekt. Aldrei tímagjald. Hér lærirðu verðmódelið, hvað verkeining er, hvernig þú parar fyrirtæki við rétt þrep og hvenær þú býður ókeypis úttekt í staðinn.' },
+  { slug: 'threpin-thrju', field: 'body',
+    from: '<p>Rekstrarkerfið er selt í þremur þjónustuleiðum — þrepum. Þau eru ekki þrjár vörur heldur mismunandi stórir skammtar af sama kerfinu; viðskiptavinur getur alltaf fært sig upp síðar.',
+    to: '<p>Rekstrarkerfið er selt í þremur þjónustuleiðum með föstu verði — þrepum. Þau eru ekki þrjár vörur heldur mismunandi stórir skammtar af sama kerfinu; viðskiptavinur getur alltaf fært sig upp síðar. Fjórða leiðin, <strong>Samstarf</strong>, er fyrir fyrirtæki sem þurfa kerfi smíðað utan um eigin rekstur; hún hefur ekkert listaverð og henni er lýst neðst í þessari leið.' },
+  { slug: 'threpin-thrju', field: 'body',
+    from: '<h2>Vefur — 390 þ.kr. uppsetning + 19 þ.kr./mán með 5 verkeiningum (DRÖG)</h2>',
+    to: '<h2>Vefur — 390 þ.kr. uppsetning + 29 þ.kr./mán með 2 verkeiningum (DRÖG)</h2>' },
+  { slug: 'threpin-thrju', field: 'body',
+    from: '<h2>Verslun — 580 þ.kr. uppsetning + 29 þ.kr./mán með 10 verkeiningum (DRÖG)</h2>',
+    to: '<h2>Verslun — 580 þ.kr. uppsetning + 59 þ.kr./mán með 3 verkeiningum (DRÖG)</h2>' },
+  { slug: 'threpin-thrju', field: 'body',
+    from: '<h2>Rekstur — 690 þ.kr. uppsetning + 39 þ.kr./mán með 20 verkeiningum (DRÖG)</h2>',
+    to: '<h2>Rekstur — 690 þ.kr. uppsetning + 89 þ.kr./mán með 5 verkeiningum (DRÖG)</h2>' },
+  { slug: 'threpin-thrju', field: 'body',
+    from: '<li><strong>Þjónustusamningur</strong> — fylgir öllum þrepum, enginn kaupir kerfið án hans: 19 / 29 / 39 þ.kr. á mánuði. Hann innifelur hýsingu, vöktun, öryggisuppfærslur og <strong>5 / 10 / 20 verkeiningar á mánuði</strong> fyrir breytingar og sérsmíði. Hann er rukkaður mánaðarlega fyrir fram, frá þeim mánuði sem kerfið fer í loftið.</li>',
+    to: '<li><strong>Þjónustusamningur</strong> — fylgir öllum þrepum, enginn kaupir kerfið án hans: 29 / 59 / 89 þ.kr. á mánuði. Hann innifelur hýsingu, vöktun, öryggisuppfærslur og <strong>2 / 3 / 5 verkeiningar á mánuði</strong> fyrir breytingar og sérsmíði. Hann er rukkaður mánaðarlega fyrir fram, frá þeim mánuði sem kerfið fer í loftið.</li>\n<li><strong>Hýsing umfram þrepið</strong> — hverju þrepi fylgir hýsing í ákveðinni stærð. Þurfi viðskiptavinurinn meira, t.d. fast prófunarumhverfi eða stærri gagnagrunn, er það sem umfram er rukkað á kostnaðarverði Azure að viðbættum 15 %. Lofaðu aldrei aukahýsingu innifalinni.</li>\n<li><strong>Gervigreind í kerfinu</strong> — gervigreind sem vinnur inni í kerfi viðskiptavinarins, t.d. við innlestur pantana, er innifalin upp að 2.000 kr. á mánuði. Umfram það er hún rukkuð á kostnaðarverði að viðbættum 15 %.</li>' },
+  { slug: 'threpin-thrju', field: 'body',
+    from: '<p>Til að gera þetta áþreifanlegt: 5 einingar í Vef duga fyrir fimm litlum verkum eða einu meðalstóru á mánuði; 20 einingar í Rekstri duga fyrir einu stóru verki eða fjórum meðalstórum.</p>',
+    to: '<p>Til að gera þetta áþreifanlegt: 2 einingar í Vef duga fyrir tveimur litlum verkum á mánuði; 5 einingar í Rekstri duga fyrir fimm litlum verkum eða einu meðalstóru. Stórt verk (20 einingar) er stærra en mánaðarskammtur nokkurs þreps, svo það sem umfram er greiðist á einingaverði — og viðskiptavinurinn sér upphæðina áður en hann samþykkir verkið.</p>' },
+  { slug: 'threpin-thrju', field: 'body',
+    from: 'fyrir það sem umfram er — og fær verðið alltaf gefið upp áður en verkið hefst. Upphæð einingaverðsins er ekki ákveðin: DRÖG — Halli staðfestir. Nefndu enga tölu.</li>',
+    to: 'fyrir það sem umfram er: <strong>6.000 kr. á einingu án VSK</strong> (DRÖG — Halli staðfestir). Hann fær upphæðina alltaf gefna upp áður en verkið hefst.</li>' },
+  { slug: 'threpin-thrju', field: 'body',
+    from: '<p>Einföld regla: <strong>engin vefverslun → Vefur; vefverslun eða búð → Verslun; vill líka losna við sérstakt bókhaldskerfi → Rekstur.</strong> Ef þú ert í vafa, veldu lægra þrepið — það er auðvelt að færa sig upp og enginn upplifir sig plataðan. Hvað það kostar að færa sig upp um þrep síðar er ekki ákveðið: DRÖG — Halli staðfestir.</p>',
+    to: '<p>Einföld regla: <strong>engin vefverslun → Vefur; vefverslun eða búð → Verslun; vill líka losna við sérstakt bókhaldskerfi → Rekstur; þarf kerfi smíðað utan um eigin rekstur → Samstarf.</strong> Ef þú ert í vafa milli tveggja þrepa, veldu lægra þrepið — það er auðvelt að færa sig upp og enginn upplifir sig plataðan. Hvað það kostar að færa sig upp um þrep síðar er ekki ákveðið: DRÖG — Halli staðfestir. Ef þú ert í vafa um hvort nokkurt þrep passi, bjóddu ókeypis úttekt (sjá hér að neðan).</p>\n<h2>Samstarf — fjórða leiðin, verð eftir ókeypis úttekt (DRÖG)</h2>\n<p><em>Fyrir fyrirtæki sem þurfa kerfi smíðað utan um eigin rekstur.</em></p>\n<p>Sum fyrirtæki passa ekki í neitt þrepanna. Þau vantar ekki stærri skammt af sama kerfinu heldur kerfi sem er smíðað utan um verklagið þeirra: sérstaka vöruflokka og verðlagningu, tengingar við kerfi birgja og viðskiptavina, ferla sem ekkert staðlað kerfi kann. Fyrsti viðskiptavinurinn okkar er einmitt slíkt fyrirtæki. Fyrir þau er <strong>Samstarf</strong>.</p>\n<p>Samstarf hefur <strong>ekkert listaverð</strong>. Verðið er samið eftir <strong>ókeypis úttekt</strong>: við förum yfir rekstur fyrirtækisins og hvað við leggjum til að smíða fyrir það, og út úr því kemur tilboð sem Halli sendir. Úttektin kostar viðskiptavininn ekkert. Hvernig samningurinn er byggður upp — uppsetning, mánaðargjald, verkeiningar — kemur fram í tilboðinu, ekki frá þér.</p>\n<h2>Hvenær þú býður ókeypis úttekt í stað þreps</h2>\n<p>Bjóddu ókeypis úttekt, og nefndu ekkert verð, þegar þú heyrir eitthvað af þessu:</p>\n<ul>\n<li>Reksturinn byggist á verklagi sem staðlað kerfi styður ekki — „við gerum þetta öðruvísi en allir aðrir“.</li>\n<li>Kerfið þarf að tala við mörg önnur kerfi: birgja, heildsala, bókhald, sérhæfðan búnað.</li>\n<li>Sérþarfirnar eru margar eða stórar strax í upphafi — ekki ein eða tvær sérsniðnar einingar heldur mörg stór verk.</li>\n<li>Fyrirtækið er á leið af eldra kerfi sem hefur verið lagað að því árum saman, og gögnin eða ferlarnir eru flóknir.</li>\n<li>Þú getur ekki sagt með vissu hvaða þrep passar, jafnvel eftir fyrsta samtalið.</li>\n</ul>\n<p>Þá segirðu: <em>„Það sem þið lýsið þarf að smíða utan um ykkar rekstur. Við bjóðum ókeypis úttekt: við förum yfir reksturinn og hvað við myndum smíða, og þið fáið tilboð út frá því. Úttektin kostar ykkur ekkert.“</em> Skráðu það sem þú heyrðir eins og fyrir tilboð (sjá <em>Tilboðsferlið</em>) og láttu Halla vita. Þú framkvæmir ekki úttektina sjálf(ur) og nefnir aldrei verð í Samstarfi, ekki heldur „svona í kringum“. Nefndu heldur aldrei fyrsta viðskiptavininn á nafn eða tölur úr því verkefni.</p>' },
+  { slug: 'hvad-er-i-hverju-threpi', field: 'summary',
+    from: 'hvað bætist við í Verslun og hvað er aðeins í Rekstri. Þetta er heimildin',
+    to: 'hvað bætist við í Verslun og hvað er aðeins í Rekstri. Samstarf er utan töflunnar: þar ræður ókeypis úttektin. Þetta er heimildin' },
+  { slug: 'hvad-er-i-hverju-threpi', field: 'body',
+    from: 'Vefur 390 þ.kr. uppsetning + 19 þ.kr./mán með 5 verkeiningum, Verslun 580 þ.kr. + 29 þ.kr./mán með 10, Rekstur 690 þ.kr. + 39 þ.kr./mán með 20. Hvert þrep inniheldur allt úr þrepinu á undan.</p>',
+    to: 'Vefur 390 þ.kr. uppsetning + 29 þ.kr./mán með 2 verkeiningum, Verslun 580 þ.kr. + 59 þ.kr./mán með 3, Rekstur 690 þ.kr. + 89 þ.kr./mán með 5; einingaverð umfram það 6.000 kr. Hvert þrep inniheldur allt úr þrepinu á undan. Samstarf, fjórða leiðin, er ekki í töflunni: þar er kerfið smíðað utan um rekstur viðskiptavinarins og innihaldið ákveðið eftir ókeypis úttekt.</p>' },
+  { slug: 'hvad-er-i-hverju-threpi', field: 'body',
+    from: '(5, 10 eða 20 á mánuði eftir þrepi)',
+    to: '(2, 3 eða 5 á mánuði eftir þrepi)' },
+  { slug: 'hvad-er-i-hverju-threpi', field: 'body',
+    from: '<p>Í öllum þrepum er líka innifalið það sem fylgir þjónustusamningnum sjálfum: hýsing í skýinu, vöktun og öryggisuppfærslur — viðskiptavinurinn kaupir aldrei neitt af þessu sérstaklega.</p>',
+    to: '<p>Í öllum þrepum er líka innifalið það sem fylgir þjónustusamningnum sjálfum: hýsing í skýinu í þeirri stærð sem fylgir þrepinu, vöktun, öryggisuppfærslur og gervigreind inni í kerfinu upp að 2.000 kr. á mánuði. Aðeins það sem fer umfram — meiri hýsing en þrepinu fylgir, eða gervigreind yfir 2.000 kr. á mánuði — er rukkað sérstaklega, á kostnaðarverði að viðbættum 15 %.</p>' },
+  { slug: 'hvad-er-i-hverju-threpi', field: 'body',
+    from: '<li><strong>Uppsetningargjald</strong> er fast verð eftir þrepi (390 / 580 / 690 þ.kr., DRÖG) og <strong>þjónustusamningur</strong> fylgir öllum þrepum.</li>',
+    to: '<li><strong>Uppsetningargjald</strong> er fast verð eftir þrepi (390 / 580 / 690 þ.kr., DRÖG) og <strong>þjónustusamningur</strong> fylgir öllum þrepum.</li>\n<li><strong>Samstarf</strong> er utan þrepanna: hvað er smíðað og hvað það kostar ræðst af ókeypis úttekt (sjá <em>Þrepin þrjú</em>). Lofaðu engum eiginleika í Samstarfi fyrr en úttektin liggur fyrir.</li>' },
+  { slug: 'tilbodsferlid', field: 'body',
+    from: '<li><strong>Líklegt þrep:</strong> Vefur, Verslun eða Rekstur, með rökstuðningi í einni setningu.</li>',
+    to: '<li><strong>Líklegt þrep:</strong> Vefur, Verslun eða Rekstur, með rökstuðningi í einni setningu — eða <strong>Samstarf</strong>, ef reksturinn þarf kerfi smíðað utan um sig (sjá <em>Þrepin þrjú</em>). Þá er næsta skref ókeypis úttekt, ekki tilboð beint.</li>' },
+  { slug: 'tilbodsferlid', field: 'body',
+    from: '<li>Uppsetningargjaldið og þjónustusamningurinn: mánaðargjaldið og hve margar verkeiningar fylgja, öll verð án VSK.',
+    to: '<li>Uppsetningargjaldið og þjónustusamningurinn: mánaðargjaldið, hve margar verkeiningar fylgja og einingaverðið umfram þær, öll verð án VSK. Þurfi viðskiptavinurinn meiri hýsingu en þrepinu fylgir kemur hún fram sér, á kostnaðarverði að viðbættum 15 %.' },
+  { slug: 'tilbodsferlid', field: 'body',
+    from: '<li>Næstu skref: hvað gerist ef tilboðinu er tekið.</li>\n</ol>',
+    to: '<li>Næstu skref: hvað gerist ef tilboðinu er tekið.</li>\n</ol>\n<p><strong>Í Samstarfi kemur ókeypis úttektin á undan tilboðinu.</strong> Við förum yfir reksturinn með viðskiptavininum og hvað við leggjum til að smíða, og tilboðið byggist á úttektinni. Þú safnar sömu upplýsingum og í skrefi 1 — þær eru grunnurinn að úttektinni — en nefnir ekkert verð, hvorki fyrir úttektina (hún er ókeypis) né fyrir samstarfið sjálft.</p>' },
+  { slug: 'hvad-thu-lofar-aldrei', field: 'body',
+    from: 'þjónustusamningur 19 / 29 / 39 þ.kr./mán með 5 / 10 / 20 verkeiningum — eru',
+    to: 'þjónustusamningur 29 / 59 / 89 þ.kr./mán með 2 / 3 / 5 verkeiningum og einingaverð 6.000 kr. — eru' },
+  { slug: 'hvad-thu-lofar-aldrei', field: 'body',
+    from: '<li>Einingaverðið, það sem greitt er fyrir verkeiningar umfram samninginn, er ekki ákveðið — þú nefnir enga tölu. Hvort ónotaðar einingar flytjist milli mánaða er heldur ekki ákveðið — þú lofar engu um það.</li>',
+    to: '<li>Hvort ónotaðar einingar flytjist milli mánaða er ekki ákveðið — þú lofar engu um það.</li>\n<li><strong>Samstarf hefur ekkert verð fyrr en eftir ókeypis úttektina.</strong> Þú nefnir enga tölu, ekki heldur „svona í kringum“, og lofar hvorki hvað verður smíðað né hvenær.</li>' },
+];
+
+// os_004 — follow-up to os_003 (Halli, 2026-09-26). Verk sizes stay 1/5/20 but
+// the D-022 monthly quotas are 2/3/5, so the queue promise "a verk nobody is
+// waiting for can wait for next month and take its units, at no extra cost"
+// cannot hold for a verk bigger than one month's units. It now says such a verk
+// is paid with the units of the coming months, spread over several if one month
+// cannot hold it, the "Stórt verk" sentence above the list names both paths
+// (spread, or start now and pay the rest), and a worked example follows (a stórt verk of 20 einingar on
+// Rekstur, 5/mán: four months, or start now and pay the rest at the einingaverð
+// 6.000 kr.; the customer chooses, agreed before work starts). Same helper and
+// guard as os_001/os_003; the seed carries the result;
+// tests/integration/salesGuidesQueueSpread.test.js checks os_003 text + this
+// edit == seed text. DRÖG; the guides stay unpublished.
+const OS_004_EDITS = [
+  { slug: 'threpin-thrju', field: 'body',
+    from: '<li><strong>Verk sem ekkert liggur á</strong> má geyma til næsta mánaðar og taka af einingum hans, án aukakostnaðar. Nýjar einingar bætast við um mánaðamót.</li>',
+    to: '<li><strong>Verk sem ekkert liggur á</strong> má geyma og greiða með einingum næstu mánaða — stærra verk en einn mánuður rúmar má dreifa á fleiri mánuði, án aukakostnaðar. Nýjar einingar bætast við um mánaðamót.</li>\n<li><strong>Dæmi:</strong> viðskiptavinur í Rekstri (5 einingar á mánuði) vill stórt verk (20 einingar). Annaðhvort dreifist verkið á fjóra mánuði og einingar þeirra mánaða fara í það, eða það hefst strax og hann greiðir það sem er umfram einingar mánaðarins á einingaverði: 15 × 6.000 kr. = 90.000 kr. án VSK. Viðskiptavinurinn velur, og samið er um valið áður en vinnan hefst.</li>' },
+  { slug: 'threpin-thrju', field: 'body',
+    from: 'Stórt verk (20 einingar) er stærra en mánaðarskammtur nokkurs þreps, svo það sem umfram er greiðist á einingaverði — og viðskiptavinurinn sér upphæðina áður en hann samþykkir verkið.</p>',
+    to: 'Stórt verk (20 einingar) er stærra en mánaðarskammtur nokkurs þreps, svo viðskiptavinurinn velur: að dreifa því á einingar næstu mánaða án aukakostnaðar, eða að hefja það strax og greiða það sem umfram er á einingaverði — og hann sér upphæðina áður en hann samþykkir verkið.</p>' },
+];
+
 module.exports = {
   product: 'os',
   legacy: [
@@ -257,6 +401,45 @@ module.exports = {
     name: 'os_001_sales_guides_d001_pricing',
     edits: OS_001_EDITS,
     statements: OS_001_EDITS.map(guideEdit),
+  },
+  {
+    // The contact page speaks for the whole company, not Rekstrarkerfið alone,
+    // and names no software it replaces (Halli, 2026-09-26). 092 seeded the
+    // hero and availability rows with "Shopify, Wix or WordPress" and a
+    // migrate-onto-Rekstrarkerfið card, and seeded rows win over the
+    // ContactView defaults, so the new copy (OS_002_CONTACT, identical to the
+    // defaults) lands here. The 091/092 guard: updated_by IS NULL, so copy a
+    // person saved is kept. The hero keeps its other fields (subtitle only).
+    // The contact_built_with rows are left in place, inert: the view no longer
+    // reads them (the "Undir húddinu" section left the page). Pure data.
+    // DRAFT copy — Halli approves.
+    // Reference copy: server/migrations/product/os_002_contact_content_offering.sql
+    name: 'os_002_contact_content_offering',
+    content: OS_002_CONTACT,
+    statements: ['en', 'is'].flatMap(lang => [
+      `UPDATE site_content SET value = jsonb_set(value, '{subtitle}', to_jsonb(${sqlText(OS_002_CONTACT.hero_subtitle[lang])}::text)), updated_at = NOW()
+         WHERE key = 'contact_hero' AND locale = ${sqlText(lang)} AND updated_by IS NULL`,
+      `UPDATE site_content SET value = ${sqlText(JSON.stringify(OS_002_CONTACT.availability[lang]))}::jsonb, updated_at = NOW()
+         WHERE key = 'contact_availability' AND locale = ${sqlText(lang)} AND updated_by IS NULL`,
+    ]),
+  },
+  {
+    // The handbook moves to D-022 pricing and learns the fourth tier, Samstarf
+    // (see OS_003_EDITS above). Pure data, no schema, expand-only: text in
+    // rows nobody saved, `published` untouched. `edits` is carried for the test.
+    // Reference copy: server/migrations/product/os_003_sales_guides_d022_pricing.sql
+    name: 'os_003_sales_guides_d022_pricing',
+    edits: OS_003_EDITS,
+    statements: OS_003_EDITS.map(guideEdit),
+  },
+  {
+    // The queue promise spreads a verk over several months (see OS_004_EDITS
+    // above). Pure data, no schema, expand-only: text in rows nobody saved,
+    // `published` untouched. `edits` is carried for the test.
+    // Reference copy: server/migrations/product/os_004_sales_guides_queue_spread.sql
+    name: 'os_004_sales_guides_queue_spread',
+    edits: OS_004_EDITS,
+    statements: OS_004_EDITS.map(guideEdit),
   },
   ],
   aliases: {},

@@ -10,7 +10,7 @@ _Introduced 2026-08-24 (Halli's ask: a 1-line prod fix must not cost a full-suit
 | `npm run test:smoke` | Critical-path integration specs: auth, security (CSRF/RBAC/headers/envelope), shop, contact (lead capture) | 112 tests at runtime (110 declared), **~28 s** | yes |
 | `npm run test:hotfix` | unit + smoke, in that order | **~36 s** | yes |
 | `npm run test:related -- <files…>` | Jest picks every test that (statically) depends on the named source files | varies — see caveat below | maybe |
-| `npm test` | Everything (unit + all integration) in **4 parallel Jest workers, one database each** (`jest.config.js` `maxWorkers: 4`; `npm test -- --runInBand` for serial) | 2647 declared tests in 139 files; not re-timed since the 2026-09-02 parallel split (6 min 37 s serial on 2026-08-24) | yes |
+| `npm test` | Everything (unit + all integration) in **4 parallel Jest workers, one database each** (`jest.config.js` `maxWorkers: 4`; `npm test -- --runInBand` for serial) | 4251 tests at runtime in 213 suites, **~45 s** on the local test cluster with DELETE-based cleanup (2026-09-26; ~6.5 min with TRUNCATE — see "TRUNCATE vs DELETE" below) | yes |
 | `npm run test:e2e:smoke` | Playwright: auth, navigation, business-routes | 33 of the 178 | yes |
 | `npm run test:e2e` | Full Playwright suite (one `chromium` project) | 178 declared tests in 26 spec files | yes |
 
@@ -140,17 +140,20 @@ worktrees (or a run plus an orphaned Jest child) never share one.
 
 **Naming** (`tests/workerDb.js`, unit-tested in `tests/unit/workerDb.test.js`):
 
-| Database | Example on branch `feat/harvest-h2` |
+| Database | Example on branch `feat/harvest-h2` (product `os`) |
 |---|---|
-| Base (never created, only derived from) | `orangesmiley_feat_harvest_h2_test` |
-| Migrated template | `orangesmiley_feat_harvest_h2_tmpl_test` |
-| Worker N | `orangesmiley_feat_harvest_h2_w<N>_test` |
+| Base (never created, only derived from) | `os_feat_harvest_h2_test` |
+| Migrated template | `os_feat_harvest_h2_tmpl_test` |
+| Worker N | `os_feat_harvest_h2_w<N>_test` |
+
+The prefix is `engine.json`'s `product` since 2026-09-26 (it was the literal
+`orangesmiley` in every repo — see the next section).
 
 The branch name is lower-cased, every non-alphanumeric run becomes `_`, and the
 slug is trimmed so the longest derived name fits Postgres's 63-byte identifier
 cap (Postgres would otherwise truncate silently). Detached HEAD falls back to
 the worktree directory name; no git at all falls back to the unscoped
-`orangesmiley_test`. Every derived name keeps the `_test` suffix — the
+`<product>_test`. Every derived name keeps the `_test` suffix — the
 infixes go BEFORE it — because globalSetup/globalTeardown refuse to drop
 anything else.
 
@@ -160,15 +163,16 @@ anything else.
    `…/orangesmiley_test` (a fresh service container per job, so no scoping
    needed). Use it locally when you want a fixed name, e.g. two runs of the
    same branch at once.
-2. Otherwise host/port/credentials come from `DATABASE_URL` (process env, then
-   `.env`, read without loading it into the env), else
+2. Otherwise host/port/credentials come from `TEST_PG_URL` (the throwaway test
+   server, next section), else `DATABASE_URL` — each from the process env, then
+   `.env`, read without loading it into the env — else
    `postgres:postgres@localhost:5432`, and the database NAME is replaced with
    the per-branch one.
 
 `npm test` prints the resolved base as its first line:
 
 ```
-[jest] test database base: orangesmiley_feat_harvest_h2_test on localhost:5432 (from branch) — template …, workers …
+[jest] test database base: os_feat_harvest_h2_test on localhost:5433 (from branch, server from TEST_PG_URL) — template …, workers …
 ```
 
 **Lifecycle.** `tests/globalSetup.js` resolves the base, pins it into
@@ -179,25 +183,17 @@ then `CREATE DATABASE … TEMPLATE` clones it per worker
 exactly the old semantics, so the ordering rules above are unchanged. Serial
 fallback: `npm test -- --runInBand` (uses `_w1_test` only).
 
-**Cleanup.** `tests/globalTeardown.js` drops the template and worker databases
-at the end of every run (they are rebuilt from scratch next time anyway).
-`KEEP_TEST_DB=1 npm test` keeps them so you can inspect a worker DB after a
-failure. A run that is killed before teardown — stopping a shell does NOT stop
-its Jest child — leaves its set behind, one per branch:
-
-```bash
-npm run test:db:clean              # drop every *_w<N>_test / *_tmpl_test (+ legacy orangesmiley_test)
-npm run test:db:clean -- --dry-run # list only
-npm run test:db:clean -- --e2e     # also the Playwright orangesmiley_e2e_*_test databases
-```
-
-Databases with an active session are skipped, never terminated — the script
-cleans orphans, it does not stop someone else's run.
+**Cleanup.** `tests/globalTeardown.js` drops the run's databases at the end of
+every run (they are rebuilt from scratch next time anyway); `KEEP_TEST_DB=1
+npm test` keeps them so you can inspect a worker DB after a failure. Since
+2026-09-26 a killed run no longer leaves its set behind for good: Ctrl-C hands
+the drop to a detached cleaner, and the next run's sweep drops what a hard
+kill left. The details, and `npm run test:db:clean`, are in the next section.
 
 **Still unsafe:** two concurrent runs of the SAME branch (or pinned to the same
 `TEST_DATABASE_URL`) still race in globalSetup's DROP; the advisory lock there
-only serialises the drop/create step. Give one of them its own
-`TEST_DATABASE_URL`.
+(one per base since 2026-09-26) only serialises the drop/create step. Give one
+of them its own `TEST_DATABASE_URL`.
 
 Two rules the port carries: never add an `afterAll` that ends the app pool
 (fire-and-forget analytics/event-log writes land after the last test; the 1 s
@@ -208,6 +204,200 @@ while any session holds the template).
 This is engine work, and since D-021 (2026-09-22) this repo IS the engine, so
 it is home: ice #225/#233 built it first and it reaches every downstream by
 engine-sync merge (`docs/ENGINE-SYNC.md`). The BASE-SYNC queue entry is history.
+
+## The local test cluster and test-database hygiene (2026-09-26)
+
+Why ([test-db-hygiene-2026-09-26](history.d/2026-09-26-feat-test-db-hygiene.md#test-db-hygiene-2026-09-26)):
+the shared cluster on `:5432` (the real books DB `orangesmiley_books` + the
+dev DBs) had collected **746 leftover test databases**, and a checkpoint there
+took ~8 minutes, so every Jest globalSetup in every repo stalled. Four causes,
+four fixes: a separate throwaway server, product-scoped names, labels + a
+sweep on every run, and a teardown that cannot fail quietly.
+
+### The test server — `TEST_PG_URL`
+
+A second, local PostgreSQL cluster holds nothing but test databases. It runs
+with `fsync=off`, `full_page_writes=off`, `synchronous_commit=off`,
+`wal_level=minimal`, `max_wal_senders=0`, `checkpoint_timeout=30min`,
+`max_wal_size=8GB`, `shared_buffers=512MB`, `max_connections=300`, UTF8
+(locale `English_United Kingdom.1252` on Windows) — **throwaway data only: a
+crash can corrupt it, by design. Never put a real database on it, and never
+point `TEST_PG_URL` at `:5432`.**
+
+```bash
+npm run test:pg:init     # initdb into TEST_PG_DATA (default ~/pgtest17/data), port from TEST_PG_URL (default 5433)
+npm run test:pg:start    # pg_ctl start, waits until it answers
+npm run test:pg:status   # pg_ctl status, the live settings, how many *_test DBs it holds
+npm run test:pg:stop
+```
+
+`.env` (read by the test tooling without loading it into the env):
+
+```
+TEST_PG_URL=postgres://postgres:postgres@localhost:5433
+TEST_PG_DATA=C:/Users/<you>/pgtest17/data     # optional: npm test / e2e start the cluster if it is down
+TEST_PG_BIN=C:/Program Files/PostgreSQL/17/bin # optional: where pg_ctl/initdb live (that path is the Windows default)
+```
+
+| Variable | Effect |
+|---|---|
+| `TEST_DATABASE_URL` | Explicit pin, used verbatim (CI). Wins over everything. Only the **process** env counts — the Jest main process never loads `.env`, so one written there is ignored (globalSetup now says so). |
+| `TEST_PG_URL` | The SERVER for Jest and e2e test databases (process env, then `.env`). The name is still derived. |
+| `DATABASE_URL` | The fallback server when `TEST_PG_URL` is unset — the behaviour before 2026-09-26. |
+| `E2E_DATABASE_URL` | Playwright's explicit pin (CI). |
+| `TEST_PG_DATA` / `TEST_PG_BIN` | Auto-start: when `TEST_PG_URL` refuses connections, globalSetup (and `e2e/global-setup.js`) runs `pg_ctl -D $TEST_PG_DATA -l <data>/../pg_ctl.log start` detached and waits up to 30 s. |
+
+Unset `TEST_PG_URL` = the old server choice (`DATABASE_URL`'s host); the
+names, labels, sweep, teardown and DELETE cleanup below apply either way. A
+`TEST_PG_URL` on `:5432` is refused, and the auto-start/`test:pg:start`/`stop`
+refuse a data directory whose config is not `fsync = off` on another port. CI
+is unchanged: it pins `TEST_DATABASE_URL`/`E2E_DATABASE_URL` against its own
+`postgres:16` container.
+
+### Names are per product
+
+The prefix is `engine.json`'s `product` (`os` here; `rk`, `hs`, `ll`, `ice`
+downstream), falling back to `package.json`'s name. Until 2026-09-26 it was the
+literal `orangesmiley`, and every downstream carries these files unchanged — so
+all of them derived the engine's names (`orangesmiley_master_w1_test`,
+`orangesmiley_engine_sync_<date>_…`) and one repo's teardown could drop
+another repo's live run.
+
+| Database | Example (product `os`, branch `feat/harvest-h2`) |
+|---|---|
+| Jest base (never created) | `os_feat_harvest_h2_test` |
+| Template | `os_feat_harvest_h2_tmpl_test` |
+| Worker N | `os_feat_harvest_h2_w<N>_test` |
+| A test's extra DB (`createExtraTestDb('demoreset')`) | `os_feat_harvest_h2_w2_demoreset_test` |
+| Playwright | `os_e2e_feat_harvest_h2_test` |
+
+The slug is trimmed so the longest name — a worker extra, `_w99_` + 12
+characters — fits Postgres's 63 bytes. A slug that ends like a run infix
+(`feat/x-w2`, `…-tmpl`) gets `_b` appended (`os_feat_x_w2_b_test`), or branch
+`feat/x`'s run pattern would match its workers. A test that needs its own database uses
+`createExtraTestDb(suffix)` / `extraTestDbUrl(suffix)` from `tests/workerDb.js`
+(suffix: 1–12 of `[a-z0-9]`): the run's teardown and the sweep own the name,
+so a test that dies before its `afterAll` does not leak it.
+
+### Labels
+
+Every test database gets a label at creation (`COMMENT ON DATABASE`):
+`{kind: "jest"|"e2e", product, repo: <git toplevel>, branch, pid, host,
+createdAt}`; e2e databases also get `lastUsedAt`, refreshed on every run.
+`pid` is the Jest main process's. `KEEP_TEST_DB` adds `keep: true`.
+
+### The sweep — every `npm test`, before provisioning
+
+Inside its advisory lock, globalSetup sweeps THIS product's databases
+(`tests/lib/testDbSweep.js`):
+
+| Kind | Dropped when (and it has **no** session) |
+|---|---|
+| Jest, labelled | its pid is dead (on this host), or it is over 6 h old; a `keep` one only by age |
+| e2e, labelled | its branch no longer exists AND its worktree path is gone, or `lastUsedAt` is over 14 days old |
+| unlabelled, Jest-shaped | over 24 h old (age of `base/<oid>/PG_VERSION` via `pg_stat_file` — needs superuser; skipped otherwise) |
+| unlabelled, e2e-shaped | over 14 days old |
+
+Never touched: a database with a session (the sweep's DROP has no FORCE, so
+one that gains a session mid-sweep makes the DROP fail instead), a template
+whose sibling workers are busy, a name that is not a derived test name of this
+product (strict regexes), a database carrying any other comment, a label for
+another product. A sweep error never fails the run. Caveat: a `--watch` session
+idle for over 6 h can lose its databases to another run's sweep.
+
+### Teardown and interrupts
+
+- `globalTeardown` drops by pattern (`^<base root>_(w<N>|tmpl)(_<extra>)?_test$`),
+  not by counting workers, with `DROP DATABASE … WITH (FORCE)` — except a
+  match labelled on another host or by a different LIVE pid here, which it
+  reports and leaves. A failed drop fails the run with the retry command — no
+  more stderr-only leaks.
+- `KEEP_TEST_DB=1` keeps them and prints the exact drop command.
+- Ctrl-C / SIGTERM / SIGHUP during a run: globalSetup's handler spawns a
+  detached `node scripts/drop-test-dbs.js --base <base> --owner-pid <pid>
+  --wait --yes` and exits 130/143/129. A hard kill runs nothing, and a
+  terminal that kills its whole process tree on close (a kill-on-close job
+  object: some IDE terminals, CI runners) takes the detached cleaner with it;
+  either way the next run's sweep finds the dead pid.
+- A migration that fails in globalSetup drops its half-built template before
+  the error surfaces.
+- The advisory lock is per base (`pg_advisory_lock(<"hall">, hash(base))`), so
+  different repos and branches no longer queue behind one global key; two runs
+  of the same base still serialise their DROP/CREATE.
+
+### By hand — `npm run test:db:clean`
+
+```bash
+npm run test:db:clean                      # today's scope: every idle Jest DB of this product (drops)
+npm run test:db:clean -- --e2e             # … and the e2e ones
+npm run test:db:clean -- --dry-run         # list only
+npm run test:db:clean -- --sweep [--yes]   # the per-run rules (dry run without --yes)
+npm run test:db:clean -- --gone  [--yes]   # branch AND worktree gone (labels first, then slugs)
+npm run test:db:clean -- --legacy …        # also the old orangesmiley_* names — shared by
+                                           # downstreams that have not synced yet: read the plan first
+npm run test:db:clean -- --base os_x_test --yes   # one run's set (add --owner-pid <pid> to take
+                                                  # only that run's labels; without it, every idle match goes)
+```
+
+The wider modes are a dry run until `--yes`. To clean another server, point
+`TEST_PG_URL` at it for that one command
+(`TEST_PG_URL=postgres://postgres:…@localhost:5432 npm run test:db:clean -- --legacy --sweep`)
+— and read the plan before adding `--yes`.
+
+### After merging a chunk
+
+```bash
+cmd //c rmdir <worktree>\node_modules          # unlink the junction FIRST — rm -rf follows it and empties the source
+git worktree remove <worktree>
+git branch -d <branch>
+npm run test:db:clean -- --gone --yes          # its Jest + e2e databases
+```
+
+### TRUNCATE vs DELETE in `cleanTables()` — measured
+
+The brief was: keep TRUNCATE unless the measurement shows a clear win for
+DELETE on BOTH durability modes. Each row below is one full `npm test` (213
+suites, 4251 tests) on the dev machine (Windows 11, PostgreSQL 17.9). The
+`:5434` cluster was a throwaway copy with default durability, the mode `:5432`
+runs in; the shared `:5432` itself was never touched. Checkpoint numbers are
+`pg_stat_checkpointer` / `pg_stat_wal` deltas.
+
+| Cluster | `cleanTables()` | Wall | Jest `Time` | WAL written | Checkpoint `sync_time` |
+|---|---|---|---|---|---|
+| `:5433` fsync off | TRUNCATE (old infra) | ≈ 445 s | 310 s | — | — (the teardown checkpoint alone took 121 s) |
+| `:5433` fsync off | TRUNCATE (new infra) | 389 s | 382 s | 4.4 GB | 0.08 s |
+| `:5433` fsync off | **DELETE** | **49 s** | 43 s | 0.27 GB | 0.03 s |
+| `:5434` fsync on | TRUNCATE | 347 s | 342 s | 0.66 GB | 252 s |
+| `:5434` fsync on | **DELETE** | **49 s** | 42 s | 0.16 GB | 10 s |
+
+DELETE is about 7× faster in both modes, so `cleanTables()` switched to it.
+The cost was not fsync. Every `TRUNCATE … RESTART IDENTITY CASCADE` gives each
+table in the users FK closure, with its indexes, toast and sequences, new files.
+Each statement took 0.4–0.9 s. The old files wait for the next checkpoint to be
+unlinked, and every `DROP DATABASE` forces one immediately. With fsync off, one
+such checkpoint took 121 s: write 1.9 s, sync 0.04 s, the rest unlinks. The
+second TRUNCATE row ran slower than the first because its sweep integration
+test DROPs databases mid-run, and each drop waited on that backlog. The same
+row had 16 failures (a TRUNCATE deadlock, the sweep suite timing out, two
+registry entries fixed since). With DELETE every row was green.
+`wal_level=minimal` made TRUNCATE worse still: a relation created in the same
+transaction is WAL-logged whole at commit.
+
+The DELETE form keeps TRUNCATE's semantics in one transaction:
+- It empties the FK closure that `CASCADE` would. The closure is re-read from
+  the catalog on every call, so a table created mid-suite is covered.
+- It deletes roots first. A late fire-and-forget insert into a child then
+  fails its own FK check or is caught by the child's DELETE. This stands in
+  for TRUNCATE's lock.
+- It runs with `session_replication_role = replica`: FK and ordinary triggers
+  are off, as with TRUNCATE.
+- It resets every sequence those tables own to its start, which is what
+  `RESTART IDENTITY` did.
+
+A trigger set `ENABLE ALWAYS` on one of these tables would still fire. None
+exists today.
+`TEST_CLEAN_MODE=truncate` brings back the old statement. So does a test role
+that may not set `session_replication_role`, which means a non-superuser.
 
 ## What CI actually runs (`.github/workflows/ci.yml`, re-read 2026-09-24)
 
@@ -248,6 +438,66 @@ Locally nothing changed: `npm test` is still one run.
 The jobs are otherwise not gated on each other. A shard has a 45-minute ceiling
 because a contended 2-vCPU runner showed a 3.7× run-to-run spread on an
 identical tree.
+
+## After a deploy — the deployed-environment walkthrough (2026-09-26)
+
+Everything above verifies the **code**. After a deploy (or a self-update, or a
+new customer instance) the question is different: does *this box, with this
+data and this configuration* behave? Ported from icelandicstore #128
+([harvest2-lane0](history.d/2026-09-26-harvest2-lane0-history.md#harvest2-lane0-2026-09-26)),
+whose release gate passed 46 routes, zero console errors and four matching
+data counts, and still missed a checkout that **quoted 4,421 kr. and booked
+4,039 kr.** The stored order was internally consistent; only comparing what
+the UI *quoted* with what was *booked* showed it.
+
+**The rule: exercise each write path and read back what was stored — quoted
+vs booked.** A read-only sweep tests the reader, not the producer. Note what
+the UI shows before you submit, then read the stored record back (admin view
+or API) and compare field by field. Label every test record obviously
+(`PRÓFUN — <date>`), and remove it the way the product allows (delete a lead,
+cancel an order) — never by SQL.
+
+Where writing is acceptable depends on the instance: a canary, the demo or a
+fresh customer instance before hand-over take the full list; the live public
+site and the ops books take only the reversible writes (a lead, a setting). **A
+statutory invoice is never a test on a live ledger** — the invoice series is
+gapless and a posted entry is only ever reversed, so that check runs on a
+non-production instance.
+
+| Write path | Do | Read back and compare |
+|---|---|---|
+| Contact form → Fyrirspurnir | send one enquiry from the public contact page | the lead in Admin → Fyrirspurnir (name, email, message, locale); the notification email arrived, from `EMAIL_FROM` with the right Reply-To |
+| Signup / sign-in (when the module is on) | create an account, verify, sign in | the verification email's link host is `APP_URL`; the user row's role |
+| Invoice (non-production only) | issue one invoice in Bókhald | PDF total = invoice record = the journal lines (balanced) = the VSK report line; the number is the next in the series |
+| Accounts + commission | record a service invoice on a test account | the commission event = rate × base, and the statement shows the same amount |
+| Seller area | `npm run publish:sellers` on ops | the public instance's `/solusvaedi` shows exactly the ops numbers for that seller |
+| Change request / MCP write tool | file one through the widget, and one `file_feature_request` through the connector | both rows in the `/admin/feedback` inbox with the text as sent; the MCP write's security-log line (who and what) |
+| Uploads | upload one image | it is served at its URL at full size (proves the `UPLOAD_ROOT` mount) |
+| Settings / theme | change one setting and the theme | both survive a reload and a new session |
+| Shop (hidden surface, Stripe test mode only) | one order with a plain product and a variant | cart / checkout / button totals vs the stored order's subtotal, VAT and total, and each line's VAT rate |
+
+**Judge each page on three things, not one.** Admin views swallow a failed
+data load into an in-page `.admin-error` banner **without a console error**,
+so shell-plus-clean-console is a false green. Per route: the URL reached the
+intended route, the view's content rendered, and the `.admin-error` count is 0.
+
+**Deployment checks a local suite cannot make:**
+- `/ready` answers 200, its `uptime` is younger than the swap, and the
+  `X-App-Build` header names the build that was deployed (a restart answers
+  from the OLD process first — poll until `uptime` drops).
+- The environment is this instance's: `APP_URL`, `EMAIL_FROM`/`EMAIL_REPLY_TO`,
+  `INSTANCE_ROLE` (`public` vs `ops`), the release channel. Read them with
+  `az` (prefix `MSYS_NO_PATHCONV=1` in Git Bash when an argument is a
+  `/unix/path`), not through the UI.
+- No served page or request names another instance's host, registry or storage.
+- Indexability per host: `robots.txt`, the page's `<meta name="robots">` and
+  `sitemap.xml` refuse on any host that is not the real public site.
+- Hidden surfaces stay hidden (nav, sitemap, SSR), and a module that is off
+  answers 404.
+
+**Harness traps:** a backgrounded browser tab never loads `loading="lazy"`
+images (check `document.visibilityState` before believing "images broken");
+heavy admin browsing spends the rate-limit budget, so pace the walk.
 
 ## Measuring the suite
 

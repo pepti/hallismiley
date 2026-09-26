@@ -18,6 +18,19 @@
 
 import { isDisabledRoute } from './modules.js';
 
+// The site's own host, without a leading "www." — "orangesmiley.is",
+// "rekstrarkerfi.is". Read from the canonical link ssrMeta bakes from APP_URL
+// (the same origin server/i18n's {siteHost} uses), so a legal page names the
+// site it is on; the address bar is the fallback (no SSR, local dev). No host
+// literal: every product serves the legal views. Callers substitute it with a
+// replacer function, never a replacement string ($-patterns).
+export function siteHost() {
+  let host = '';
+  try { host = new URL(document.getElementById('ssr-canonical')?.href || '').hostname; } catch { /* no canonical */ }
+  if (!host && typeof location !== 'undefined') host = location.hostname;
+  return host.replace(/^www\./, '');
+}
+
 export const IDENTITY_DEFAULTS = Object.freeze({
   brand: Object.freeze({
     name: 'Orange Smiley',
@@ -45,7 +58,7 @@ export const IDENTITY_DEFAULTS = Object.freeze({
       Object.freeze({ route: '/hafa-samband', labelKey: 'nav.hafaSamband' }),
     ]),
     hiddenRoutes: Object.freeze(['/party', '/halli', '/about', '/news', '/shop', '/projects', '/contact', '/privacy', '/verkefni']),
-    hiddenAdminViews: Object.freeze(['products', 'collections', 'bins', 'orders', 'discounts', 'sales', 'pos', 'background']),
+    hiddenAdminViews: Object.freeze(['products', 'collections', 'bins', 'inventory', 'receiving', 'orders', 'discounts', 'sales', 'pos', 'background', 'projects']),
     navSignIn: true,
   }),
   // The product's OWN routes' meta (identity-seam-3): route → { titleKey,
@@ -63,6 +76,15 @@ export const IDENTITY_DEFAULTS = Object.freeze({
     areaServed: 'Iceland',
     knowsAbout: Object.freeze(['Web Development', 'E-commerce', 'Inventory Management', 'Invoicing', 'VAT Accounting', 'Shopify Migration', 'Node.js', 'PostgreSQL']),
     sameAs: Object.freeze([]),
+  }),
+  // Transactional email (harvest 2 lane 2): read server-side only
+  // (services/emailService.js); mirrored so the two copies stay equal.
+  email: Object.freeze({
+    logo: 'orangesmiley-emblem.png',
+    logoWidth: 48,
+    logoHeight: 48,
+    logoWordmark: false,
+    palette: Object.freeze({}),
   }),
 });
 

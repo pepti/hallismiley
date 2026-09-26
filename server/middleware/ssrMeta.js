@@ -30,6 +30,7 @@ const fs   = require('fs');
 const path = require('path');
 const db   = require('../config/database');
 const Inventory = require('../models/Inventory');
+const ProductMerge = require('../models/ProductMerge');
 const { DEFAULT_LOCALE, PUBLIC_DEFAULT_LOCALE, SUPPORTED_LOCALES, forcedLocaleFor } = require('../config/i18n');
 const { isHiddenRoute } = require('../config/publicSurface');
 const { clientAppEnv }  = require('../config/appEnv');
@@ -40,7 +41,9 @@ const {
   identity, htmlIdentityAttrs, identityScriptTag, composeTitle, organizationAlternateNames,
   productRoutes, organizationDescription,
 } = require('../config/identity');
+const { demoHtmlAttrs } = require('../config/demoInstance');
 const { isDeindexedRoute } = require('../config/publicSurface');
+const { isIndexableRequest } = require('../utils/indexability');
 // The module switches' hand-off (R4) — rides next to the identity one.
 const { modulesScriptTag, isDisabledRoute } = require('../config/modules');
 // Release identity + release-stamped asset URLs + the SPA route list
@@ -923,7 +926,8 @@ function rewriteHead(html, { title, description, canonical, hreflang, ogLocale, 
   // record as <script id="identity"> for public/js/utils/identity.js.
   html = html.replace(
     /<html\b[^>]*\blang="[^"]*"/i,
-    () => `<html lang="${esc(ogLocale.split('_')[0])}" ${htmlIdentityAttrs()}`
+    // + data-demo-instance on a demo instance (config/demoInstance.js): the banner reads it.
+    () => `<html lang="${esc(ogLocale.split('_')[0])}" ${htmlIdentityAttrs()}${demoHtmlAttrs()}`
   );
   // The brand-bearing static tags: og:site_name is the brand, author the
   // registered company. Baked in index.html for the no-SSR case only.
@@ -993,6 +997,17 @@ module.exports = async function ssrMetaMiddleware(req, res, next) {
     // ── Detail page (news article / product / project) ─────────────────
     detailRow = await fetchDetailRow(detail);
     if (detailRow === LOOKUP_FAILED) { lookupFailed = true; detailRow = null; }
+    // A product merged into another (migration 120) moves permanently to the
+    // survivor's page: 301, never cached (the survivor may be switched off or
+    // merged again). The locale prefix and query string are kept.
+    if (!detailRow && !lookupFailed && detail.type === 'product') {
+      const moved = await ProductMerge.movedTo(detail.param).catch(() => null);
+      if (moved) {
+        const qs = req.originalUrl.includes('?') ? req.originalUrl.slice(req.originalUrl.indexOf('?')) : '';
+        res.setHeader('Cache-Control', 'no-store');
+        return res.redirect(301, req.path.replace(/\/shop\/[^/]+\/?$/, `/shop/${encodeURIComponent(moved.slug)}`) + qs);
+      }
+    }
     if (!detailRow) {
       // Not found — fall back to section defaults so the SPA can render
       // its own 404 and we still serve *something* sensible to crawlers.
@@ -1155,8 +1170,12 @@ module.exports = async function ssrMetaMiddleware(req, res, next) {
     title, description, canonical, hreflang, ogLocale, ogImage,
     jsonLd: jsonLdHtml,
     // Hidden surfaces (by prefix) and the product's own noindex routes
-    // (identity.routes[*].noindex) are de-indexed; everything else is indexable.
-    robots: (notFound || isDeindexedRoute(route)) ? 'noindex, nofollow' : 'index, follow',
+    // (identity.routes[*].noindex) are de-indexed; everything else is indexable
+    // — but only on an indexable instance: a non-production stack, or any stack
+    // reached on an infrastructure host, is noindex on every route
+    // (utils/indexability.js, ported from icelandicstore #123; robots.txt and
+    // the sitemap apply the same rule).
+    robots: (notFound || isDeindexedRoute(route) || !isIndexableRequest(req)) ? 'noindex, nofollow' : 'index, follow',
     scenePreload: scenePreloadTag(route),
   });
   html = injectCrawlerContent(html, crawlerHtml);
@@ -1170,7 +1189,8 @@ module.exports = async function ssrMetaMiddleware(req, res, next) {
   // detail URL that found no row is never cached: the row may be published a
   // minute later (icelandicstore #332).
   res.setHeader('Cache-Control', missedDetail ? 'no-store' : 'public, no-cache');
-  res.setHeader('Vary', 'Accept-Language, Cookie');
+  // Host: the robots meta tag depends on it (utils/indexability.js).
+  res.setHeader('Vary', 'Accept-Language, Cookie, Host');
   res.send(html);
 };
 

@@ -47,7 +47,7 @@
    Contrast on base #1A1410 / surface #221B16:
      --text-primary   #F2E8DA  15.05 / 14.02
      --text-secondary #C9B9A4   9.52 /  8.86
-     --text-muted     #9A8B78   5.50 /  5.13
+     --text-muted     #A3927E   6.05 /  5.64   (4.66 on --bg-hover)
      --gold           #C9A277   7.74 /  7.21   (the accent — tan)
      --gold-light     #E6CDA8  11.87 / 11.05   (also --accent-ink here)
    --gold-dark #A67C4E (4.88 / 4.54) is the gradient tail and border colour;
@@ -93,7 +93,10 @@ html[data-theme="ember"] {
 
   --text-primary:   #F2E8DA;
   --text-secondary: #C9B9A4;
-  --text-muted:     #9A8B78;
+  /* #A3927E since 2026-09-26 (harvest 2 lane 4a): #9A8B78 was 4.24 : 1 on
+     --bg-hover (#332A22), i.e. muted text in a hovered row or a combobox
+     option; tests/unit/themeTokenContrast.test.js measures it now. */
+  --text-muted:     #A3927E;
 
   --on-accent:       #1A1410;
   --accent-ink:      #E6CDA8;
@@ -264,7 +267,16 @@ body {
   background-attachment: fixed;
 }
 .btn--primary { background: var(--accent-gradient, var(--gold)); color: var(--on-accent); }
-.btn--primary:hover { box-shadow: 0 0 24px var(--gold-glow); }
+/* The hover FILL is --accent-hover, not components.css's --gold-light: on
+   Bjart --on-accent (white) on #9C7149 is 4.31 : 1, under AA (measured by
+   tests/unit/themeTokenContrast.test.js, harvest 2 lane 4a). --accent-hover is
+   the contract token for exactly this (see .lol-nav__cta:hover below); on Glóð
+   and Miðnætti it IS --gold-light, so only Bjart's hover changes (it darkens). */
+.btn--primary:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  box-shadow: 0 0 24px var(--gold-glow);
+}
 
 /* Hover fill for filled controls. layout.css brightens to --gold-light, which
    is the DECORATIVE end of the ramp — white on #EA580C is 3.56 : 1, under AA

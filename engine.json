@@ -4,9 +4,9 @@
   "role": "personal",
   "upstream": "https://github.com/orange-smiley/orangesmiley.git",
   "upstreamBranch": "master",
-  "rev": "702af0f26caaa3965aeb353131f6f637d0b44a2c",
-  "syncedAt": "2026-09-24T19:35:11.711Z",
-  "syncedPr": 173,
+  "rev": "3e9d903d9faa7f4506a945c490a1011c09bfd662",
+  "syncedAt": "2026-09-26T17:30:25.912Z",
+  "syncedPr": null,
   "grafted": {
     "at": "2026-09-22",
     "legacyBase": "pepti/hallismiley@562c6376ccb7c01c6098407ffd98914bcf5c60ce",
@@ -50,6 +50,17 @@
       "note": "sync — the icelandicstore harvest (ice A–F), 2FA reminder, R4 module switches, MCP OAuth, signup module; Aron13View into the lazy VIEWS table (router.js stays the one hook), its stylesheet resolved next to the stamped main.css, aron13.css custom-property defaults; deploy.yml ported the X-App-Build post-deploy check by hand, promote.yml the stable canary gate (inert, no channel); moduleFlags.test.js /thjonusta robots line gated on isHiddenRoute; clientConfig.test.js gate taken back by the engine; migrations 109–113 run",
       "regenerated": [
         "features/README.md"
+      ]
+    },
+    {
+      "rev": "3e9d903d9faa7f4506a945c490a1011c09bfd662",
+      "date": "2026-09-26",
+      "upstreamCommits": 125,
+      "conflicts": 5,
+      "note": "sync",
+      "regenerated": [
+        ".engine-paths",
+        ".gitattributes"
       ]
     }
   ]

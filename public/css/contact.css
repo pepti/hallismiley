@@ -331,69 +331,6 @@
   border-radius: 2px;
 }
 
-/* ── Built-with section ──────────────────────────────────── */
-.built-with {
-  padding: 100px 24px;
-  background: var(--bg-nav);
-  border-top: 1px solid var(--border-light);
-}
-
-.built-with__inner {
-  max-width: 820px; margin: 0 auto;
-  text-align: center;
-}
-
-.built-with__eyebrow {
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: 0.85rem; font-weight: 700; font-style: italic;
-  letter-spacing: 0.3em; text-transform: uppercase;
-  color: var(--gold); margin-bottom: 0.75rem;
-}
-
-.built-with__title {
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: clamp(1.9rem, 4vw, 3rem);
-  font-weight: 900; font-style: italic; text-transform: uppercase;
-  color: var(--text-primary);
-  line-height: 1; margin: 0 0 2rem;
-}
-
-.built-with__body {
-  font-family: 'Barlow', sans-serif;
-  font-size: 1rem; line-height: 1.75;
-  color: var(--text-secondary);
-  margin: 0 auto 1.25rem;
-  max-width: 680px;
-  text-align: left;
-}
-
-.built-with__stack {
-  display: flex; flex-wrap: wrap; justify-content: center;
-  gap: 10px;
-  margin: 2rem 0 2.5rem;
-}
-
-.built-with__pill {
-  padding: 8px 14px;
-  background: rgba(200,170,110,0.08);
-  border: 1px solid var(--border-light);
-  color: var(--accent-ink);
-  font-family: 'Barlow', sans-serif;
-  font-size: 0.8rem; font-weight: 600;
-  letter-spacing: 0.04em;
-  white-space: nowrap;
-}
-
-.built-with__actions {
-  display: flex; flex-wrap: wrap; justify-content: center;
-  gap: 14px;
-}
-
-.built-with__btn {
-  padding: 16px 36px;
-  font-size: 0.78rem;
-}
-
 /* ── Responsive ───────────────────────────────────────────── */
 @media (max-width: 900px) {
   .contact-card {
@@ -409,8 +346,7 @@
   .contact-card { grid-template-columns: 1fr; }
   .contact-card-section,
   .contact-form-section,
-  .availability,
-  .built-with { padding-left: 20px; padding-right: 20px; }
+  .availability { padding-left: 20px; padding-right: 20px; }
   .availability__edit-btn,
   .availability__edit-controls { top: 12px; right: 12px; }
   .contact-view__edit-btn { top: 12px; right: 12px; }

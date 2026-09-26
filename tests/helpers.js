@@ -180,19 +180,120 @@ async function getTestSessionCookie(userId) {
   }
 }
 
-/** Truncate all mutable tables and reset sequences between tests. */
-async function cleanTables() {
-  // event_logs is truncated via CASCADE (it references users); a fire-and-forget
-  // EventLog.record() from the previous test (errorHandler, eventLogOn5xx) can
-  // still be inserting, and TRUNCATE + that INSERT deadlock. Let the writes land
-  // first (icelandicstore #254).
-  await EventLog.flush();
-  await db.query(
-    'TRUNCATE TABLE page_views, analytics_events, news_media, party_photos, party_guestbook, party_rsvps, party_logistics_items, party_logistics_categories, party_plan_tasks, party_plan_phases, party_todo_subtasks, party_todos, news_articles, projects, user_sessions, users RESTART IDENTITY CASCADE'
+const CLEAN_ROOTS = [
+  'page_views', 'analytics_events', 'news_media', 'party_photos', 'party_guestbook', 'party_rsvps',
+  'party_logistics_items', 'party_logistics_categories', 'party_plan_tasks', 'party_plan_phases',
+  'party_todo_subtasks', 'party_todos', 'news_articles', 'projects', 'user_sessions', 'users',
+];
+
+// cleanTables() empties the tables with DELETE, not TRUNCATE (measured
+// 2026-09-26, docs/TESTING.md → "TRUNCATE vs DELETE"): a full run took 347 s
+// with TRUNCATE and 49 s with DELETE on an fsync=on cluster, 389 s and 49 s on
+// the fsync=off test cluster. Every TRUNCATE gives each table of the users FK
+// closure (and its indexes, toast and sequences) new files; the old ones are
+// unlinked at the next checkpoint, and every DROP DATABASE forces one —
+// minutes of it on Windows, fsync or not.
+//
+// This is the DELETE equivalent of `TRUNCATE <roots> RESTART IDENTITY
+// CASCADE`, in one transaction:
+//   • the tables: every table an FK chain leads back to a root (what CASCADE
+//     empties), read from the catalog on EVERY call — a suite that creates a
+//     table referencing `users` mid-suite is covered, as CASCADE would cover it;
+//   • deleted ROOTS FIRST (breadth-first from the roots), so a late
+//     fire-and-forget insert into a child either fails its own FK check against
+//     the deleted parent or is caught by the child's DELETE, which takes a fresh
+//     snapshot — TRUNCATE's lock blocked such writers; this order stands in for
+//     it;
+//   • with session_replication_role = replica: FK triggers and ordinary
+//     triggers off (as with TRUNCATE), so cycles and self-references are moot;
+//   • then every sequence those tables own reset to its start (what RESTART
+//     IDENTITY does), inside the same transaction.
+// TEST_CLEAN_MODE=truncate restores the old statement; so does a test role that
+// may not set session_replication_role (not a superuser).
+let deleteRefused = false;
+
+async function deletePlanFor(client) {
+  const { rows: roots } = await client.query(
+    `SELECT c.oid::text AS oid FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = current_schema() AND c.relname = ANY($1::text[])`,
+    [CLEAN_ROOTS]
   );
+  const { rows: edges } = await client.query(
+    "SELECT conrelid::text AS child, confrelid::text AS parent FROM pg_constraint WHERE contype = 'f'"
+  );
+  const children = new Map();
+  for (const { child, parent } of edges) {
+    if (!children.has(parent)) children.set(parent, []);
+    children.get(parent).push(child);
+  }
+  // Breadth-first from the roots: each table at its shallowest depth.
+  const order = roots.map((r) => r.oid);
+  const seen = new Set(order);
+  for (let i = 0; i < order.length; i++) {
+    for (const child of children.get(order[i]) || []) {
+      if (!seen.has(child)) { seen.add(child); order.push(child); }
+    }
+  }
+  const { rows: rels } = await client.query(
+    `SELECT x.oid::oid::regclass::text AS rel
+       FROM unnest($1::text[]) WITH ORDINALITY AS x(oid, ord) ORDER BY x.ord`,
+    [order]
+  );
+  const { rows: seqs } = await client.query(
+    `SELECT DISTINCT s.seqrelid::regclass::text AS seq, s.seqstart::text AS start
+       FROM pg_sequence s
+       JOIN pg_depend d ON d.objid = s.seqrelid AND d.classid = 'pg_class'::regclass
+                       AND d.refclassid = 'pg_class'::regclass AND d.deptype IN ('a', 'i')
+      WHERE d.refobjid = ANY($1::text[]::oid[])`,
+    [order]
+  );
+  return { rels: rels.map((r) => r.rel), seqs };
+}
+
+async function deleteCleanTables() {
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SET LOCAL session_replication_role = replica');
+    const plan = await deletePlanFor(client);
+    await client.query(plan.rels.map((r) => `DELETE FROM ${r}`).join('; '));
+    if (plan.seqs.length) {
+      await client.query(
+        `SELECT setval(x.seq::regclass, x.start::bigint, false)
+           FROM unnest($1::text[], $2::text[]) AS x(seq, start)`,
+        [plan.seqs.map((s) => s.seq), plan.seqs.map((s) => s.start)]
+      );
+    }
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    if (err.code === '42501') { // insufficient_privilege on the SET
+      deleteRefused = true;
+      return false;
+    }
+    throw err;
+  } finally {
+    client.release();
+  }
+  return true;
+}
+
+/** Empty all mutable tables and reset sequences between tests. */
+async function cleanTables() {
+  // event_logs is emptied with the users closure (it references users); a
+  // fire-and-forget EventLog.record() from the previous test (errorHandler,
+  // eventLogOn5xx) can still be inserting, and the clean + that INSERT
+  // deadlock. Let the writes land first (icelandicstore #254).
+  await EventLog.flush();
+  const useDelete = process.env.TEST_CLEAN_MODE !== 'truncate' && !deleteRefused;
+  if (!useDelete || !(await deleteCleanTables())) {
+    await db.query(
+      `TRUNCATE TABLE ${CLEAN_ROOTS.join(', ')} RESTART IDENTITY CASCADE`
+    );
+  }
   // party_logistics_categories is listed above only for clarity — it would be
-  // truncated regardless, because TRUNCATE ... CASCADE sweeps every table with
-  // an FK to `users` (created_by), and CASCADE ignores ON DELETE SET NULL. Its
+  // emptied regardless, because the clean (like TRUNCATE ... CASCADE) sweeps
+  // every table with an FK to `users` (created_by), ON DELETE SET NULL or not. Its
   // three built-in rows are seeded by migration 068, not written by any test,
   // so without this re-seed every category-aware endpoint would 400 after the
   // first cleanTables() call. Mirrors the 068 seed exactly.

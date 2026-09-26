@@ -55,6 +55,7 @@ const path = require('path');
 const {
   ReplayError, assertReplayDatabase, replayUrlFrom, formatReport,
 } = require('../services/bookkeeping/replayCase');
+const { checkTarget } = require('./targetGuard');
 
 const FIXTURE_DIR = path.join(__dirname, '..', 'fixtures', 'books-replay');
 
@@ -108,6 +109,13 @@ async function main() {
     || process.env.REPLAY_DATABASE_URL
     || replayUrlFrom(process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/orangesmiley');
   const { url, dbName } = assertReplayDatabase(target);
+  // …and the shared destructive-script guard (server/scripts/targetGuard.js,
+  // harvest 2, 2026-09-26): the `_replay` name alone did not stop a replay from
+  // dropping the public schema of a `…_replay` database on an Azure server, or
+  // from running inside a deployed container. Local host, no deployed-stack
+  // markers, `_replay` name — no flag relaxes it.
+  const safe = checkTarget({ databaseUrl: url, env: process.env, namePattern: /_replay$/ });
+  if (!safe.ok) throw new ReplayError(`Refusing to touch database "${dbName}": ${safe.reason}.`, 'BAD_DB');
   process.env.DATABASE_URL = url;
   if (!process.env.DB_SSL) process.env.DB_SSL = 'false';
   // Stubs go to a temp directory, never among real fylgiskjöl.

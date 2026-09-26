@@ -2,8 +2,11 @@
 /**
  * Demo books for a small Icelandic software company.
  *
- *   npm run seed:books            # seed
- *   npm run seed:books -- --wipe  # start from empty books first
+ *   npm run seed:books -- --allow-dev-db          # seed the local dev database
+ *   npm run seed:books -- --allow-dev-db --wipe   # replace an earlier demo first
+ *
+ * (A local `…_test` database needs no flag; anything else is refused — see
+ * SAFETY below.)
  *
  * The business it models is a two-person shop selling three things — a website
  * build as a fixed-price project, an ERP system as a monthly subscription, and
@@ -22,12 +25,17 @@
  *     the VSK preflight has something real to complain about.
  *   * An unpaid invoice past its due date, so receivables aging is not empty.
  *
- * SAFETY: refuses to run when NODE_ENV=production, and --wipe only ever touches
- * books tables plus the demo customers/products it created itself.
+ * SAFETY (harvest 2, 2026-09-26): server/scripts/targetGuard.js runs first and
+ * refuses any target that is not a LOCAL database named `…_test`, or the local
+ * dev database when --allow-dev-db is passed — never a books/ops/prod name,
+ * never an Azure host, never under NODE_ENV=production, APP_ENV=production|staging
+ * or inside App Service. --wipe deletes ONLY the rows this script seeded, and
+ * refuses (UNSEEDED_BOOKS, nothing deleted) when the books hold anything else.
  */
 
-require('dotenv').config();
+require('dotenv').config({ path: require('path').join(__dirname, '../../.env'), quiet: true });
 const db = require('../config/database');
+const { assertSafeTarget } = require('./targetGuard');
 const ledger = require('../services/bookkeeping/ledgerService');
 const invoices = require('../services/bookkeeping/invoiceService');
 const expenses = require('../services/bookkeeping/expenseService');
@@ -35,8 +43,6 @@ const documents = require('../services/bookkeeping/documentService');
 const Setting = require('../models/Setting');
 const FxRate = require('../models/FxRate');
 const { periodForDate } = require('../utils/vatPeriod');
-
-const WIPE = process.argv.includes('--wipe');
 
 // Demo rows are tagged so --wipe can find exactly what this script created and
 // leave anything real alone.
@@ -242,8 +248,120 @@ function dateDaysAgo(days) {
   return d.toISOString().slice(0, 10);
 }
 
+// ── What this script created ─────────────────────────────────────────────────
+//
+// Ported from icelandicstore #427 (seed:bookkeeping never deletes a real
+// expense). --wipe used to `DELETE FROM` every books table outright — every
+// invoice, payment, credit note, expense, journal entry, VAT return and audit
+// row, whoever had entered them — and reset the invoice counter to 1001. Its
+// only guard was NODE_ENV=production, which a shell holding the private books
+// instance's DATABASE_URL does not set (docs/BOOKS-PARALLEL-RUN.md §0 calls it
+// "the single largest risk to the figure"). Now it finds exactly the rows it
+// seeded, REFUSES (code UNSEEDED_BOOKS, nothing deleted) when the books hold
+// anything else, and deletes only those ids.
+
+// An expense this script created matches one EXPENSES entry on supplier +
+// invoice number + description + the amount it was entered with. The amount is
+// the stored gross — except under reverse charge, where the supplier's figure is
+// the NET and Icelandic VAT goes on top (expenseService.createExpense), so it is
+// the stored net there.
+const expenseKey = (supplier, invoiceNo, description) => `${supplier}|${invoiceNo || ''}|${description || ''}`;
+const DEMO_EXPENSE_AMOUNTS = new Map(
+  EXPENSES.map(e => [expenseKey(e.supplier, e.invoiceNo, e.description), e.gross])
+);
+function isDemoExpense(row) {
+  const entered = DEMO_EXPENSE_AMOUNTS.get(expenseKey(row.supplier_name, row.supplier_invoice_no, row.description));
+  if (entered === undefined) return false;
+  return Number(row.amount_gross) === entered
+    || (row.vat_code === 'reverse_charge_24' && Number(row.amount_net) === entered);
+}
+// books_documents.file_path is relative to BOOKS_UPLOAD_ROOT (documentService
+// relativePath), and the stand-in receipts are written as demo/demo-<rand>.pdf.
+const DEMO_DOCUMENT_PREFIX = 'demo/demo-';
+
+async function findDemoBooks(client) {
+  const ids = async (sql, params) => (await client.query(sql, params)).rows.map(r => r.id);
+  const orderIds = await ids('SELECT id FROM orders WHERE guest_email LIKE $1', [DEMO_WIPE_PATTERN]);
+  const invoiceIds = await ids('SELECT id FROM invoices WHERE order_id = ANY($1::text[])', [orderIds]);
+  const paymentIds = await ids('SELECT id FROM payments WHERE invoice_id = ANY($1::text[])', [invoiceIds]);
+  const creditNoteIds = await ids('SELECT id FROM credit_notes WHERE invoice_id = ANY($1::text[])', [invoiceIds]);
+  const { rows: expenseRows } = await client.query(
+    `SELECT id, supplier_name, supplier_invoice_no, description, amount_gross, amount_net,
+            vat_code, document_id FROM expenses`
+  );
+  const demoExpenses = expenseRows.filter(isDemoExpense);
+  const expenseIds = demoExpenses.map(r => r.id);
+  // The stand-in receipts: the ones a demo expense points at, plus any orphan a
+  // failed run left in the `demo` bucket (real uploads land in YYYY-MM buckets).
+  const documentIds = [...new Set([
+    ...demoExpenses.map(r => r.document_id).filter(Boolean),
+    ...await ids('SELECT id FROM books_documents WHERE starts_with(file_path, $1)', [DEMO_DOCUMENT_PREFIX]),
+  ])];
+  const entryIds = await ids(
+    `SELECT id FROM journal_entries
+      WHERE (source_type = 'invoice'     AND source_id = ANY($1::text[]))
+         OR (source_type = 'payment'     AND source_id = ANY($2::text[]))
+         OR (source_type = 'credit_note' AND source_id = ANY($3::text[]))
+         OR (source_type = 'expense'     AND source_id = ANY($4::text[]))`,
+    [invoiceIds, paymentIds, creditNoteIds, expenseIds]
+  );
+  return { orderIds, invoiceIds, paymentIds, creditNoteIds, expenseIds, documentIds, entryIds };
+}
+
+// Every books row that is NOT the demo's, table by table. A filed VAT return or
+// an intake item is never the demo's (the seed creates neither).
+async function findUnseededBooks(client, demo) {
+  const checks = [
+    ['invoices', 'SELECT COUNT(*)::int n FROM invoices WHERE NOT (id = ANY($1::text[]))', demo.invoiceIds],
+    ['payments', 'SELECT COUNT(*)::int n FROM payments WHERE NOT (id = ANY($1::text[]))', demo.paymentIds],
+    ['credit_notes', 'SELECT COUNT(*)::int n FROM credit_notes WHERE NOT (id = ANY($1::text[]))', demo.creditNoteIds],
+    ['expenses', 'SELECT COUNT(*)::int n FROM expenses WHERE NOT (id = ANY($1::text[]))', demo.expenseIds],
+    ['journal_entries', 'SELECT COUNT(*)::int n FROM journal_entries WHERE NOT (id = ANY($1::text[]))', demo.entryIds],
+    ['books_documents', 'SELECT COUNT(*)::int n FROM books_documents WHERE NOT (id = ANY($1::text[]))', demo.documentIds],
+    ['vat_returns', 'SELECT COUNT(*)::int n FROM vat_returns', null],
+    ['books_intake', 'SELECT COUNT(*)::int n FROM books_intake', null],
+  ];
+  const found = [];
+  for (const [table, sql, param] of checks) {
+    const { rows } = await client.query(sql, param ? [param] : []);
+    if (rows[0].n > 0) found.push({ table, count: rows[0].n });
+  }
+  return found;
+}
+
 async function wipe() {
   log('Wiping demo books…');
+  const client = await db.pool.connect();
+  try {
+    // One transaction: the refusal check, the trigger switch and the deletes
+    // commit together or not at all — a crash can no longer leave the
+    // immutability triggers disabled, and ALTER TABLE's lock keeps a concurrent
+    // posting out of the window.
+    await client.query('BEGIN');
+    const demo = await findDemoBooks(client);
+    const unseeded = await findUnseededBooks(client, demo);
+    if (unseeded.length > 0) {
+      const err = new Error(
+        'refusing to wipe: the books hold rows this script did not create ('
+        + unseeded.map(u => `${u.table} ${u.count}`).join(', ')
+        + '). Nothing was deleted. Use a fresh database for the demo.'
+      );
+      err.code = 'UNSEEDED_BOOKS';
+      err.unseeded = unseeded;
+      throw err;
+    }
+    await wipeDemoRows(client, demo);
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+  log('  wiped.');
+}
+
+async function wipeDemoRows(db, demo) {
   // Books tables first (children before parents), then only the demo catalogue and
   // demo customers. Triggers block ordinary DELETEs on posted history, so these are
   // disabled for the duration — acceptable in a dev seed, never in the app.
@@ -260,34 +378,42 @@ async function wipe() {
     ['vat_returns', 'trg_vat_returns_immutable'],
     ['books_audit_log', 'trg_books_audit_log_immutable'],
   ];
+  // No .catch() on the switch any more: inside the transaction a failed ALTER
+  // aborts the wipe (and the rollback restores the trigger), where a swallowed
+  // one used to let the deletes run into the trigger half-way through.
   for (const [table, trig] of guarded) {
-    await db.query(`ALTER TABLE ${table} DISABLE TRIGGER ${trig}`).catch(() => {});
+    await db.query(`ALTER TABLE ${table} DISABLE TRIGGER ${trig}`);
   }
-  try {
-    await db.query(`DELETE FROM journal_lines`);
-    await db.query(`DELETE FROM journal_entries`);
-    await db.query(`DELETE FROM credit_notes`);
-    await db.query(`DELETE FROM payments`);
-    await db.query(`DELETE FROM invoice_lines`);
-    await db.query(`DELETE FROM invoices`);
-    await db.query(`DELETE FROM expenses`);
-    await db.query(`DELETE FROM books_documents`);
-    await db.query(`DELETE FROM vat_returns`);
-    await db.query(`DELETE FROM books_audit_log`);
-    await db.query(`UPDATE fiscal_periods SET status='open', locked_at=NULL, locked_by=NULL`);
-    await db.query(`UPDATE bookkeeping_counters SET next_value = CASE
-                      WHEN name = 'invoice' THEN 1001 ELSE 1 END`);
-    await db.query(
-      `DELETE FROM order_items WHERE order_id IN
-         (SELECT id FROM orders WHERE guest_email LIKE $1)`, [DEMO_WIPE_PATTERN]);
-    await db.query(`DELETE FROM orders WHERE guest_email LIKE $1`, [DEMO_WIPE_PATTERN]);
-    await db.query(`DELETE FROM products WHERE slug LIKE $1`, [`${DEMO_SLUG_PREFIX}%`]);
-  } finally {
-    for (const [table, trig] of guarded) {
-      await db.query(`ALTER TABLE ${table} ENABLE TRIGGER ${trig}`).catch(() => {});
-    }
+  const auditIds = [
+    ...demo.invoiceIds, ...demo.paymentIds, ...demo.creditNoteIds,
+    ...demo.expenseIds, ...demo.documentIds, ...demo.entryIds,
+  ];
+  // Every statement names the ids findDemoBooks() found — never a whole table.
+  await db.query('DELETE FROM journal_lines WHERE entry_id = ANY($1::text[])', [demo.entryIds]);
+  await db.query('DELETE FROM journal_entries WHERE id = ANY($1::text[])', [demo.entryIds]);
+  await db.query('DELETE FROM credit_notes WHERE id = ANY($1::text[])', [demo.creditNoteIds]);
+  await db.query('DELETE FROM payments WHERE id = ANY($1::text[])', [demo.paymentIds]);
+  await db.query('DELETE FROM invoice_lines WHERE invoice_id = ANY($1::text[])', [demo.invoiceIds]);
+  await db.query('DELETE FROM invoices WHERE id = ANY($1::text[])', [demo.invoiceIds]);
+  await db.query('DELETE FROM expenses WHERE id = ANY($1::text[])', [demo.expenseIds]);
+  await db.query('DELETE FROM books_documents WHERE id = ANY($1::text[])', [demo.documentIds]);
+  await db.query('DELETE FROM books_audit_log WHERE entity_id = ANY($1::text[])', [auditIds]);
+  // Reopening the periods and restarting the number series is safe ONLY because
+  // wipe() refused above unless the demo was all the books held: after these
+  // deletes the ledger is empty, so no real document shares a number.
+  await db.query(`UPDATE fiscal_periods SET status='open', locked_at=NULL, locked_by=NULL`);
+  await db.query(`UPDATE bookkeeping_counters SET next_value = CASE
+                    WHEN name = 'invoice' THEN 1001 ELSE 1 END`);
+  await db.query('DELETE FROM order_items WHERE order_id = ANY($1::text[])', [demo.orderIds]);
+  await db.query('DELETE FROM orders WHERE id = ANY($1::text[])', [demo.orderIds]);
+  await db.query(`DELETE FROM products WHERE slug LIKE $1`, [`${DEMO_SLUG_PREFIX}%`]);
+  // The ledger's deferred constraint triggers (the entry-balances check) queue
+  // events on the deletes above, and ALTER TABLE refuses a table with pending
+  // trigger events — fire them now, inside the transaction.
+  await db.query('SET CONSTRAINTS ALL IMMEDIATE');
+  for (const [table, trig] of guarded) {
+    await db.query(`ALTER TABLE ${table} ENABLE TRIGGER ${trig}`);
   }
-  log('  wiped.');
 }
 
 async function ensureSeller() {
@@ -499,23 +625,30 @@ async function summarise() {
   for (const f of pre.findings) log(`  [${f.level}] ${f.message}`);
 }
 
-(async () => {
-  if (process.env.NODE_ENV === 'production') {
-    log('Refusing to seed demo books in production.');
-    process.exit(1);
-  }
+async function main(argv = process.argv) {
+  const wipeFirst = argv.includes('--wipe');
+  // The shared guard (server/scripts/targetGuard.js) replaces the old
+  // NODE_ENV-only check: a local `_test` database, or the local dev database
+  // with --allow-dev-db — never a books/ops/prod name, never Azure. Checked
+  // before the first query; the pool connects lazily.
+  const target = assertSafeTarget({
+    databaseUrl: db.pool.options?.connectionString || process.env.DATABASE_URL,
+    env: process.env,
+    allowDevDb: argv.includes('--allow-dev-db'),
+  }, { label: 'seed:books', exit: () => {} });
+  if (!target.ok) return 1;
 
   const { rows: admins } = await db.query(
     `SELECT id, username FROM users WHERE role = 'admin' ORDER BY created_at LIMIT 1`
   );
   if (!admins.length) {
     log('No admin user found. Run `node server/scripts/setup-admin.js` first.');
-    process.exit(1);
+    return 1;
   }
   const adminId = admins[0].id;
   log(`Seeding as admin "${admins[0].username}".`);
 
-  if (WIPE) await wipe();
+  if (wipeFirst) await wipe();
 
   ledger.invalidateAccountCache();
   await ensureSeller();
@@ -528,10 +661,24 @@ async function summarise() {
   log('');
   log('Done. Open /admin/books, /admin/books/invoices, /admin/books/expenses,');
   log('/admin/books/ar and /admin/books/vat to see it.');
-  await db.pool.end();
-})().catch(async (err) => {
-  log(`FAILED: ${err.message}`);
-  if (err.stack) log(err.stack.split('\n').slice(1, 4).join('\n'));
-  await db.pool.end().catch(() => {});
-  process.exit(1);
-});
+  return 0;
+}
+
+if (require.main === module) {
+  main()
+    .then(async (code) => {
+      await db.pool.end().catch(() => {});
+      process.exit(code);
+    })
+    .catch(async (err) => {
+      log(`FAILED: ${err.message}`);
+      if (err.stack) log(err.stack.split('\n').slice(1, 4).join('\n'));
+      await db.pool.end().catch(() => {});
+      process.exit(1);
+    });
+}
+
+module.exports = {
+  main, wipe, findDemoBooks, findUnseededBooks, ensureSeller, ensureFxRates, ensureProducts,
+  seedSales, seedExpenses, EXPENSES, ORDERS, PRODUCTS,
+};
