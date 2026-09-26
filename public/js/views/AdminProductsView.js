@@ -5,7 +5,7 @@ import { t, href } from '../i18n/i18n.js';
 import { BarcodeScanner } from '../components/BarcodeScanner.js';
 import { renderAdminShell } from '../components/AdminSidebar.js';
 import { thumbUrl } from '../utils/imageUrl.js';
-import { formatDateTime } from '../utils/format.js';
+import { formatDate, formatDateTime } from '../utils/format.js';
 import {
   adminExportProductsUrl, adminPreviewProductImport, adminApplyProductImport,
   adminBulkProducts, adminProductAdjustments, adminParseProductImportFile,
@@ -323,8 +323,9 @@ export class AdminProductsView {
     const onHand    = Number(p.on_hand ?? p.stock) || 0;
     const committed = Number(p.committed) || 0;
     const available = p.available == null ? onHand - committed : Number(p.available);
+    // App-locale dates (was toLocaleDateString('en-GB'); ice #324).
     const fmtDate = (iso) => iso
-      ? new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+      ? formatDate(iso, { day: '2-digit', month: 'short', year: 'numeric' })
       : '—';
     const field = (label, val) => `<div class="prod-detail__field"><dt>${label}</dt><dd>${val}</dd></div>`;
     const axes = Array.isArray(p.variant_axes) ? p.variant_axes : [];

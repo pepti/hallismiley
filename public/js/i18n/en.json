@@ -1533,6 +1533,7 @@
   "shop.landing.carpentry.seeAll": "See all carpentry",
   "shop.landing.empty": "Nothing in this section yet — check back soon.",
   "adminOrders.title": "Manage Orders",
+  "adminOrders.documentTitle": "Order {number}",
   "adminOrders.order": "Order",
   "adminOrders.customer": "Customer",
   "adminOrders.payment": "Payment",

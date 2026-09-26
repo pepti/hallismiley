@@ -9,6 +9,7 @@ import { navigateReplace } from '../navigate.js';
 import { renderAdminShell } from '../components/AdminSidebar.js';
 import { showToast } from '../components/Toast.js';
 import { downloadCsv } from '../utils/downloadCsv.js';
+import { formatDate, formatMoney } from '../utils/format.js';
 import {
   adminListCustomers, adminCreateCustomer,
   adminPreviewCustomerImport, adminApplyCustomerImport, adminDeleteCustomers,
@@ -109,8 +110,10 @@ export class AdminCustomersView {
     }
   }
 
+  // The kit formatter, which follows the app locale (was toLocaleDateString
+  // ('en-GB') — English in the Icelandic admin). Ported from icelandicstore #324.
   _date(iso) {
-    return iso ? new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+    return iso ? formatDate(iso, { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
   }
 
   // invited_at is stamped only on a confirmed send (ice #258), so "Invited
@@ -146,7 +149,7 @@ export class AdminCustomersView {
               <td>${escHtml(c.display_name || '—')}</td>
               <td>${escHtml(c.phone || '—')}</td>
               <td>${Number(c.order_count) || 0}</td>
-              <td>${Number(c.total_spent) ? Number(c.total_spent).toLocaleString('is-IS') + ' kr' : '—'}</td>
+              <td>${Number(c.total_spent) ? formatMoney(c.total_spent, 'ISK') : '—'}</td>
               <td>${this._date(c.created_at)}</td>
               <td>${escHtml(this._statusLabel(c))}</td>
               <td>${c.role === 'user'

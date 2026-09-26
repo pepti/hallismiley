@@ -1533,6 +1533,7 @@
   "shop.landing.carpentry.seeAll": "Sjá alla smíðaþjónustu",
   "shop.landing.empty": "Ekkert í þessum hluta ennþá — kíktu aftur fljótlega.",
   "adminOrders.title": "Stjórna pöntunum",
+  "adminOrders.documentTitle": "Pöntun {number}",
   "adminOrders.order": "Pöntun",
   "adminOrders.customer": "Viðskiptavinur",
   "adminOrders.payment": "Greiðsla",
