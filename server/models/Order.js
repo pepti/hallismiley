@@ -414,6 +414,26 @@ class Order {
     return rows;
   }
 
+  // The order's lines with the LIVE code, shelf and options of what was sold —
+  // the delivery note's pick list (ported from icelandicstore #8/#334; harvest
+  // 2 lane 6c). The variant's own SKU/bin win over the product's; an archived
+  // variant still resolves (by id), so an old order prints its SKU. Staff-only:
+  // it carries the shelf.
+  static async listItemsWithSku(orderId) {
+    const { rows } = await db.query(
+      `SELECT ${ITEM_COLUMNS.split(',').map(c => `oi.${c.trim()}`).join(', ')},
+              COALESCE(pv.sku, p.sku) AS sku, COALESCE(pv.bin, p.bin) AS bin,
+              pv.attributes AS variant_attributes_current, p.variant_axes AS variant_axes
+         FROM order_items oi
+         LEFT JOIN products p          ON p.id  = oi.product_id
+         LEFT JOIN product_variants pv ON pv.id = oi.product_variant_id
+        WHERE oi.order_id = $1
+        ORDER BY oi.created_at ASC, oi.id ASC`,
+      [String(orderId)]
+    );
+    return rows;
+  }
+
   // Aggregate sales over the last `days` (paid orders only — paid_at set).
   // Revenue is grouped by currency to avoid mixing ISK + EUR; byDay (order
   // count) and topProducts (units sold) are currency-agnostic so they're always

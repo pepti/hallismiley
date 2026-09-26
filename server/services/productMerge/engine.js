@@ -43,7 +43,11 @@ const ID_RE = /^[A-Za-z0-9._-]{1,100}$/;
 const DEFAULT_LOCK_TIMEOUT_MS = 3000;
 const PRODUCT_COLS = `id, slug, name, sku, barcode, category, is_bookable, price_isk, price_eur, stock, vat_rate,
   active, merged_into_id, variant_axes, bin, description, description_is, name_is, weight_grams, subcategory, updated_at`;
-const VARIANT_COLS = 'id, product_id, sku, barcode, attributes, price_isk, price_eur, stock, bin, active';
+// archived_at (migration 119): an archived variant is inactive, so it is never
+// a unit — it stays archived on its source, never moved or switched back on —
+// and it does not block an attribute combination on the survivor (the unique
+// index is live-only).
+const VARIANT_COLS = 'id, product_id, sku, barcode, attributes, price_isk, price_eur, stock, bin, active, archived_at';
 
 function badRequest(code) {
   const e = new Error(code); e.code = 'MERGE_BAD_REQUEST'; e.reason = code; return e;
@@ -80,7 +84,7 @@ async function loadState(q, masterId, ids) {
     .map(p => String(p.sku || p.slug || '').toLowerCase()).filter(Boolean);
   const variantSkus = new Map();
   if (candidates.length) {
-    const { rows } = await q(`SELECT lower(sku) AS sku, id FROM product_variants WHERE lower(sku) = ANY($1::text[])`, [candidates]);
+    const { rows } = await q(`SELECT lower(sku) AS sku, id FROM product_variants WHERE lower(sku) = ANY($1::text[]) AND archived_at IS NULL`, [candidates]);
     for (const r of rows) variantSkus.set(r.sku, r.id);
   }
   return { master: byId.get(masterId), sources: ids.map(id => byId.get(id)), variantSkus };
@@ -94,7 +98,7 @@ const view = (p) => ({
     id: v.id, sku: v.sku, barcode: v.barcode, attributes: v.attributes,
     price_isk: v.price_isk, price_eur: v.price_eur, stock: v.stock, bin: v.bin,
   })),
-  inactive_variant_count: (p.variants || []).filter(v => v.active === false).length,
+  inactive_variant_count: (p.variants || []).filter(v => v.active === false && !v.archived_at).length,
 });
 
 // Read-only preview: the planner over current rows. With no variant_map the

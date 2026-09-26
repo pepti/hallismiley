@@ -108,6 +108,18 @@ module on. orangesmiley.is keeps all three off.
 | `create_product` | `productCreate` | creates a product — ALWAYS a Draft (`active: false`) — slug from the name unless given; opening stock recorded as an `opening` adjustment | no name or price; a bad or taken slug |
 | `update_product` | `productUpdate` | changes the fields given on a product found by id or product-level SKU/barcode | stock (that is `set_stock`); unknown fields |
 | `set_stock` | `stock` | sets on hand of a product or variant (a SKU/barcode resolves variant first) through the audited writer: reason, `MCP: <note>` and the token owner on the `inventory_adjustments` row | a negative count; a variant product by id |
+| `add_variants` | `variantCreate` | adds variants to a product that has options (found by `product_id`, `slug` or product-level `sku`): each row `{ attributes: { <option>: <value>, … }, sku, barcode?, price_isk?, price_eur?, bin? }`, up to 200, **all or none**, created INACTIVE at stock 0 (an admin switches them on in the variant grid; stock via `set_stock`); `dry_run: true` checks and writes nothing — the same writer as the admin bulk route (`services/variantAdd.js`) | an option missing or unknown; a combination the product already has; a SKU or barcode used anywhere in the live catalogue (as either code, case-blind) or twice in the list; a product without options; any unknown key, at any depth (e.g. `stock`) — every problem listed in one answer |
+| `list_variants` | `variantCreate` | READ (scope `read`, writes nothing): a product's option names and every variant with its values, SKU, barcode, shelf, price overrides, on hand and active — read it before `add_variants` | an unknown product |
+
+Harvest 2 lane 6c (2026-09-26, icelandicstore #432) added the last two. Both
+ride the ONE switch `mcp.write.variantCreate` (env
+`CLIENT_CONFIG_MCP_WRITE_VARIANT_CREATE`, OFF by default): `list_variants` is a
+read tool, but it only exists to serve `add_variants`, and the default read
+surface stays the v1 system tools. The registry's `validateArgs` checks arrays
+(`minItems` / `maxItems` / `items`) and nested objects (`properties`,
+`required`, `additionalProperties` as a schema) since then, and refuses an
+unknown key at every level. History:
+[harvest2-lane6c-2026-09-26](history.d/2026-09-26-harvest2-lane6c-variants.md#harvest2-lane6c-2026-09-26).
 
 ## OAuth 2.1 (R5a)
 

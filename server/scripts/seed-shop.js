@@ -375,14 +375,16 @@ async function seedVariants(productId, p) {
   for (const color of COLORS) {
     for (const size of SIZES) {
       const sku = `${p.slug}-${color}-${size.toLowerCase()}`;
-      // Upsert by (product_id, attributes). Opening stock is written on the
+      // Upsert by (product_id, attributes) — the LIVE-row unique index since
+      // migration 119 (an archived variant frees its slot), so the conflict
+      // target names its predicate. Opening stock is written on the
       // first insert only: a re-seed leaves an existing variant's on hand
       // alone, because every later movement belongs in inventory_adjustments
       // (models/Inventory.js — ProductVariant carries no upsert on purpose).
       const { rows } = await pool.query(
         `INSERT INTO product_variants (product_id, sku, attributes, price_isk, price_eur, stock, active)
          VALUES ($1, $2, $3::jsonb, NULL, NULL, $4, TRUE)
-         ON CONFLICT (product_id, attributes) DO UPDATE SET
+         ON CONFLICT (product_id, attributes) WHERE archived_at IS NULL DO UPDATE SET
            sku = EXCLUDED.sku, price_isk = NULL, price_eur = NULL, active = TRUE
          RETURNING *`,
         [productId, sku, JSON.stringify({ color, size }), STOCK_BY_SIZE[size] ?? 8]

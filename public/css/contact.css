@@ -312,11 +312,13 @@
   color: var(--gold);
   transition: all var(--transition);
 }
+/* Filled accent controls: --on-accent label, --accent-hover fill (harvest 2
+   lane 6c — --gold-light under a near-white label failed contrast). */
 .availability__save-btn {
   background: var(--gold);
-  color: var(--bg-nav);
+  color: var(--on-accent);
 }
-.availability__save-btn:hover  { background: var(--gold-light); }
+.availability__save-btn:hover  { background: var(--accent-hover); border-color: var(--accent-hover); }
 .availability__cancel-btn:hover { background: rgba(200,170,110,0.1); }
 
 .availability__edit-status {
@@ -369,7 +371,7 @@
   padding: 10px 16px;
   background: var(--gold);
   border: 1px solid var(--gold);
-  color: var(--bg-nav);
+  color: var(--on-accent);
   font-family: 'Barlow', sans-serif;
   font-size: 0.72rem;
   font-weight: 700;
@@ -380,7 +382,8 @@
   transition: background var(--transition), transform var(--transition);
 }
 .contact-view__edit-btn:hover {
-  background: var(--gold-light);
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
   transform: translateY(-1px);
 }
 .contact-view__edit-btn--hidden { display: none; }
@@ -418,9 +421,9 @@
 }
 .contact-view__save-btn {
   background: var(--gold);
-  color: var(--bg-nav);
+  color: var(--on-accent);
 }
-.contact-view__save-btn:hover  { background: var(--gold-light); }
+.contact-view__save-btn:hover  { background: var(--accent-hover); border-color: var(--accent-hover); }
 .contact-view__cancel-btn:hover { background: rgba(200, 170, 110, 0.1); }
 
 .contact-view__edit-status {
@@ -439,7 +442,7 @@
 }
 .contact-view--editing [data-field]:focus {
   outline-style: solid;
-  outline-color: var(--gold-light);
+  outline-color: var(--accent-ink);
   background: rgba(200, 170, 110, 0.06);
 }
 

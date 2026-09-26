@@ -323,6 +323,21 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
   depend on them merging; (d) the news and project upload routes still hand-roll
   their multer wrapper (hidden surfaces; the builders already use
   `ensureDestination`).
+- Harvest 2 lane 6c (2026-09-26, branch `harvest2/lane6c-variants`,
+  [harvest2-lane6c-2026-09-26](docs/history.d/2026-09-26-harvest2-lane6c-variants.md#harvest2-lane6c-2026-09-26)):
+  the variant grid (add / delete / archive, colour → size order, header sort,
+  "+ Add a colour"), the bulk variants route + MCP `add_variants` /
+  `list_variants` (switch `mcp.write.variantCreate`, off), colour swatches that
+  swap the photo, the delivery note as a pick list, and the lane 4a
+  `--gold-light` leftover. Engine migration `119_product_image_color` (after
+  118, before 120). Open: (a) **the new
+  `adminProducts.*`, `variants.*`, `shop.sortByCol`, `errors.variantAdd.*`,
+  `validation.variant.*` strings are DRAFT** (Halli; listed in the fragment);
+  (b) settled 2026-09-26 after merging lane 6b: merged products refuse
+  variant writes (route guard + `variantAdd`) and merges keep archived
+  variants archived; (c) settled 2026-09-26: the other `--bg-nav`
+  labels on `--gold` fills clear AA on every theme and are now pinned by the
+  contrast test; lane 6a's stock code skips archived variants.
 - Upward harvest from icelandicstore `4694289`, lane 1 (chunks A then B, branch
   `harvest/ice-2026-09-24-ab`, not merged). Chunk A landed on the branch
   ([harvest-ice-a-2026-09-24](docs/HISTORY.md#harvest-ice-a-2026-09-24)): admin

@@ -6,7 +6,8 @@
 // hide, detach restores the input); its CSS lives in public/css/admin-kit.css
 // (tokens only). Engine users: AdminExpensesView
 // (supplier), PartyAdminView (task assignee), AdminRolesView (member search,
-// async source).
+// async source), AdminProductsView (product subcategory) and VariantGrid (a
+// new variant row's option values) — the last two from harvest 2 lane 6c.
 //
 // Replaces the native <datalist>, which looked right in the DOM but was useless
 // in practice: no visible affordance that suggestions exist, and when the field

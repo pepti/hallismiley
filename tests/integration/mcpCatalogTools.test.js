@@ -20,8 +20,9 @@ const FLAGS = {
   productCreate: 'CLIENT_CONFIG_MCP_WRITE_PRODUCT_CREATE',
   productUpdate: 'CLIENT_CONFIG_MCP_WRITE_PRODUCT_UPDATE',
   stock:         'CLIENT_CONFIG_MCP_WRITE_STOCK',
+  variantCreate: 'CLIENT_CONFIG_MCP_WRITE_VARIANT_CREATE',
 };
-const TOOLS = ['create_product', 'update_product', 'set_stock'];
+const TOOLS = ['create_product', 'update_product', 'set_stock', 'add_variants'];
 
 let adminId, writeToken;
 const rpc = (bearer, body) => request(app).post('/api/v1/mcp').set('Authorization', `Bearer ${bearer}`).send(body);
@@ -46,7 +47,7 @@ afterAll(async () => {
 });
 
 describe('the switches', () => {
-  test('all three are off by default: not listed, and a call is an unknown tool', async () => {
+  test('all four are off by default: not listed, and a call is an unknown tool', async () => {
     const names = await listed();
     for (const tool of TOOLS) expect(names).not.toContain(tool);
     const res = await call('create_product', { name: 'X', price_isk: 1, price_eur: 1 });
@@ -119,5 +120,69 @@ describe('the tools', () => {
     } finally {
       delete process.env.CLIENT_CONFIG_MODULES_SHOP_ENABLED;
     }
+  });
+});
+
+// add_variants / list_variants (harvest 2 lane 6c, ported from icelandicstore
+// #432): both behind mcp.write.variantCreate (OFF by default) — list_variants
+// is a READ tool that serves add_variants, so the default read surface stays
+// the v1 system tools. add_variants goes through the admin bulk route's writer
+// (services/variantAdd.js) and creates INACTIVE rows at stock 0, all or none.
+describe('the variant tools', () => {
+  const ProductVariant = require('../../server/models/ProductVariant');
+  let tee;
+  beforeEach(async () => {
+    tee = await Product.create({ slug: 'mcp-cat-tee', name: 'MCP Tee', price_isk: 3990, price_eur: 2700, variant_axes: ['color', 'size'], active: true });
+    await ProductVariant.create({ product_id: tee.id, sku: 'MCP-TEE-BLK-S', attributes: { color: 'Black', size: 'S' } });
+  });
+
+  test('list_variants rides the add_variants switch, even on a read-only token, and shows the options and SKUs', async () => {
+    expect(await listed()).not.toContain('list_variants');
+    process.env[FLAGS.variantCreate] = 'true';
+    expect(await listed()).toContain('list_variants');
+    const readOnly = (await McpToken.create({ userId: adminId, name: 'reader', scopes: ['read'] })).token;
+    const names = (await rpc(readOnly, { jsonrpc: '2.0', id: 1, method: 'tools/list' })).body.result.tools.map(t => t.name);
+    expect(names).toContain('list_variants');
+    expect(names).not.toContain('add_variants');
+    const out = payload(await call('list_variants', { slug: 'mcp-cat-tee' }));
+    expect(out.product.variant_axes).toEqual(['color', 'size']);
+    expect(out.variants.map(v => v.sku)).toEqual(['MCP-TEE-BLK-S']);
+  });
+
+  test('add_variants: dry run writes nothing; the real call creates INACTIVE rows at stock 0, audited to the owner', async () => {
+    process.env[FLAGS.variantCreate] = 'true';
+    const variants = [
+      { attributes: { color: 'Light Blue', size: 'S' }, sku: 'MCP-TEE-LB-S', barcode: '5055000000101' },
+      { attributes: { color: 'Light Blue', size: 'M' }, sku: 'MCP-TEE-LB-M' },
+    ];
+    const dry = payload(await call('add_variants', { slug: 'mcp-cat-tee', variants, dry_run: true }));
+    expect(dry).toMatchObject({ created: false, dry_run: true, count: 2 });
+    expect(await ProductVariant.findBySku('MCP-TEE-LB-S')).toBeNull();
+
+    const out = payload(await call('add_variants', { product_id: tee.id, variants }));
+    expect(out).toMatchObject({ created: true, count: 2, active: false });
+    const rows = await ProductVariant.listForProduct(tee.id, { activeOnly: false });
+    expect(rows.filter(r => r.sku.startsWith('MCP-TEE-LB')).map(r => [r.active, r.stock])).toEqual([[false, 0], [false, 0]]);
+  });
+
+  test('add_variants refuses the whole batch and lists every problem', async () => {
+    process.env[FLAGS.variantCreate] = 'true';
+    const res = await call('add_variants', { slug: 'mcp-cat-tee', variants: [
+      { attributes: { color: 'Black', size: 'S' }, sku: 'MCP-TEE-NEW' },
+      { attributes: { color: 'Navy', size: 'S' }, sku: 'mcp-tee-blk-s' },
+    ] });
+    expect(res.body.result.isError).toBe(true);
+    const msg = payload(res).error;
+    expect(msg).toMatch(/nothing was created — 2 problem/);
+    expect(msg).toMatch(/Row 1: the product already has Black \/ S/);
+    expect(msg).toMatch(/Row 2: SKU mcp-tee-blk-s is already in use/);
+    expect(await ProductVariant.findBySku('MCP-TEE-NEW')).toBeNull();
+  });
+
+  test('a stock figure is not an argument (the registry refuses unknown nested keys)', async () => {
+    process.env[FLAGS.variantCreate] = 'true';
+    const res = await call('add_variants', { slug: 'mcp-cat-tee', variants: [{ attributes: { color: 'Red', size: 'S' }, sku: 'MCP-TEE-RED-S', stock: 9 }] });
+    expect(res.body.result.isError).toBe(true);
+    expect(payload(res).error).toMatch(/unknown argument: variants\[0\]\.stock/);
   });
 });
