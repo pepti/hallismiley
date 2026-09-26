@@ -428,6 +428,40 @@ App Service will auto-resume once the subscription is reactivated.
 4. Tighten rate limits in `server/app.js` or `server/routes/authRoutes.js` if
    the source is widely distributed.
 
+### Certificates and Key Vault secrets
+
+The weekly expiry watch (`.github/workflows/secret-cert-watch.yml`,
+docs/DEPLOYMENT.md §7 → "The expiry watch") failed, or its digest arrived. The
+scan step's log names each finding.
+
+- **`tls/<host>` — expires in N days / EXPIRED / not trusted.** The App Service
+  managed certificate did not renew. Check the binding and the renewal state:
+  ```bash
+  az webapp config ssl list --resource-group <RESOURCE_GROUP> -o table
+  az webapp config hostname list --resource-group <RESOURCE_GROUP> --webapp-name <WEBAPP_NAME> -o table
+  ```
+  The usual cause is DNS: a managed certificate renews only while the host's
+  `CNAME`/`A` and `asuid` TXT records still point at the app (ISNIC,
+  docs/DEPLOYMENT.md §6). Fix the record, then re-create the managed
+  certificate and re-bind it (`az webapp config ssl create` +
+  `az webapp config ssl bind --ssl-type SNI`).
+- **`<vault>/<secret>` — expires in N days / EXPIRED.** Rotate: set the new
+  value WITH a new expiry, then make the app re-read it — a plain restart can
+  keep the cached value (docs/DEPLOYMENT.md §6, "Rotating a Key Vault secret"):
+  ```bash
+  az keyvault secret set --vault-name <VAULT> --name <SECRET> --value '<new>' \
+    --expires "$(date -u -d '+180 days' +%Y-%m-%dT%H:%M:%SZ)"
+  # re-set the app setting to the same @Microsoft.KeyVault(...) reference, then check /ready uptime
+  ```
+  Never paste a value into chat or a commit; `csrf-secret` rotation signs every
+  visitor out, `database-url` must match the server's password first.
+- **`<vault>/<secret>` — no expiry stamp.** Stamp one without changing the value:
+  `az keyvault secret set-attributes --vault-name <VAULT> --name <SECRET> --expires <ISO date>`.
+- **The run failed before the scan** (az login or `secret list` errored). The
+  watch could not read the vault, which is a finding in itself: check the
+  deploy identity still holds Key Vault Reader and that the three `AZURE_*`
+  secrets are repository secrets.
+
 ---
 
 ## Health Check
