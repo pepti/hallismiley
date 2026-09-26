@@ -17,6 +17,8 @@ const { sendWelcomeInvite } = require('../utils/inviteSend');
 const { isPlaceholderEmail, realEmailSql } = require('../utils/placeholderEmail');
 // Time-limited logins (migration 114): the optional `expires_at` on create.
 const { parseExpiresAt } = require('../auth/accountExpiry');
+// The session's role set (after the 2FA withholding) — the email-change gate.
+const { hasRole } = require('../auth/roles');
 
 const MAX_IMPORT_ROWS = 1000;
 // Bulk delete is bounded so one request can't fan out across the whole base.
@@ -240,6 +242,8 @@ const adminCustomerController = {
 
   // PATCH /api/v1/admin/customers/:id
   //   { email?, display_name?, phone?, address1?, address2?, city?, zip?, country? }
+  // A CHANGED email needs admin (403 email_admin_only for a customers-view-only
+  // holder); name, phone and address need only the view.
   // Only the keys sent are touched; a blank clears to NULL (the email cannot be
   // blank — validateCustomerContact refuses it); the email is lowercased and
   // the country upper-cased. 409 when the email is another login's. Audited
@@ -267,6 +271,20 @@ const adminCustomerController = {
 
       const existing = await Customer.findEditable(req.params.id);
       if (!existing) return res.status(404).json({ error: t(req.locale, 'errors.admin.customerNotFound'), code: 404 });
+
+      // Changing the EMAIL needs admin powers (tighten, never loosen — lane 3
+      // review follow-up, 2026-09-26). A new address plus the public
+      // forgot-password flow is a takeover of the customer's login, so the
+      // `customers` view alone may edit name, phone and address but not the
+      // address the login lives on. The role set is the session's (after the
+      // 2FA withholding), exactly what requireRole('admin') reads on the other
+      // customer writes. Re-sending the SAME address is not a change.
+      const emailChanges = 'email' in fields && fields.email !== String(existing.email || '').toLowerCase();
+      if (emailChanges && !hasRole(req.user, 'admin')) {
+        return res.status(403).json({
+          error: t(req.locale, 'errors.admin.customerEmailAdminOnly'), code: 403, reason: 'email_admin_only',
+        });
+      }
 
       // A new address that is already somebody's login (case-insensitive, like
       // findExistingEmails) — the UNIQUE index is case-sensitive, so check.

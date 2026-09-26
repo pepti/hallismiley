@@ -582,6 +582,48 @@ describe('one customer: GET/PATCH /:id and POST /:id/invite', () => {
       .send({ email: 'crm-made@example.com' })).status).toBe(403);
   });
 
+  test('changing the EMAIL needs admin: a customers-view holder gets 403 and nothing changes', async () => {
+    await db.query(
+      `UPDATE users SET email_verified = TRUE, invited_at = NOW(), password_reset_token = 'tok-x' WHERE id = $1`, [custId]);
+    const crm = await getTestSessionCookie(await staffWith(['customers'], 'crm-seller'));
+    const res = await request(app).patch(`/api/v1/admin/customers/${custId}`).set('Cookie', crm)
+      .send({ email: 'crm-owned@example.com', phone: '+354 555 0000' });
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe(403);
+    expect(res.body.reason).toBe('email_admin_only');
+    expect(typeof res.body.error).toBe('string');
+    expect(res.body.error).not.toBe('errors.admin.customerEmailAdminOnly'); // translated
+    // Nothing at all was written — not even the phone that rode along.
+    const { rows: [u] } = await db.query(
+      `SELECT email, phone, email_verified, invited_at, password_reset_token FROM users WHERE id = $1`, [custId]);
+    expect(u).toMatchObject({ email: 'solo@example.com', phone: null, email_verified: true, password_reset_token: 'tok-x' });
+    expect(u.invited_at).not.toBeNull();
+    const { rows: audit } = await db.query(
+      `SELECT 1 FROM staff_audit_log WHERE action = 'user.updated' AND entity_id = $1`, [custId]);
+    expect(audit).toHaveLength(0);
+
+    // The same person may change the phone, and may re-send the SAME address.
+    const phone = await request(app).patch(`/api/v1/admin/customers/${custId}`).set('Cookie', crm)
+      .send({ phone: '+354 555 0000', email: 'Solo@Example.com' });
+    expect(phone.status).toBe(200);
+    expect(phone.body.customer.phone).toBe('+354 555 0000');
+  });
+
+  test('an admin changing the email → 200, and invited_at, the token and verified are cleared', async () => {
+    await db.query(
+      `UPDATE users SET email_verified = TRUE, invited_at = NOW(), password_reset_token = 'tok-y',
+              password_reset_expires = NOW() + interval '1 day' WHERE id = $1`, [custId]);
+    const res = await request(app).patch(`/api/v1/admin/customers/${custId}`).set('Cookie', adminCookie)
+      .send({ email: 'moved@example.com' });
+    expect(res.status).toBe(200);
+    const { rows: [u] } = await db.query(
+      `SELECT email, email_verified, invited_at, password_reset_token, password_reset_expires FROM users WHERE id = $1`, [custId]);
+    expect(u).toMatchObject({
+      email: 'moved@example.com', email_verified: false, invited_at: null,
+      password_reset_token: null, password_reset_expires: null,
+    });
+  });
+
   test('invite: mints a fresh token, reports honestly, NEVER returns the link; audited', async () => {
     const { rows: [before] } = await db.query('SELECT password_reset_token FROM users WHERE id = $1', [custId]);
     const res = await request(app).post(`/api/v1/admin/customers/${custId}/invite`).set('Cookie', adminCookie);

@@ -210,11 +210,16 @@ export class AdminCustomersView {
       </label>`;
     const inviteState = !c.email ? t('adminCustomers.noEmailNoInvite')
       : c.has_password ? t('adminCustomers.hasPasswordNote') : '';
+    // The email is the login's address: only an administrator may change it
+    // (the server answers 403 email_admin_only otherwise — this is UX).
+    const canEditEmail = isAdmin();
     bodyEl.innerHTML = `
       <form class="admin-shop__form" id="cust-edit-form" novalidate>
         <label>${t('adminCustomers.email')}
-          <input type="email" name="email" value="${escHtml(c.email || '')}" maxlength="254" ${c.email ? 'required' : ''} autocomplete="off"/>
+          <input type="email" name="email" value="${escHtml(c.email || '')}" maxlength="254" ${c.email ? 'required' : ''} autocomplete="off"
+                 ${canEditEmail ? '' : 'readonly aria-describedby="cust-email-hint"'}/>
         </label>
+        ${canEditEmail ? '' : `<p class="admin-shop__hint" id="cust-email-hint">${t('adminCustomers.emailAdminOnly')}</p>`}
         ${field('display_name', t('adminCustomers.name'), 'maxlength="200"')}
         ${field('phone', t('adminCustomers.phone'), 'maxlength="20" inputmode="tel"')}
         ${field('address1', t('adminCustomers.address1'), 'maxlength="200" autocomplete="off"')}
@@ -235,7 +240,7 @@ export class AdminCustomersView {
         ${inviteState ? '' : `<button type="button" class="admin-shop__primary-btn" id="cust-edit-invite">${t('adminCustomers.sendInvite')}</button>`}
         <p class="cust-edit__status" id="cust-invite-status" role="status" aria-live="polite"></p>
       </section>`;
-    bodyEl.querySelector('[name=email]')?.focus();
+    bodyEl.querySelector(canEditEmail ? '[name=email]' : '[name=display_name]')?.focus();
 
     const form = bodyEl.querySelector('#cust-edit-form');
     const errEl = bodyEl.querySelector('#cust-edit-error');
@@ -245,7 +250,8 @@ export class AdminCustomersView {
       // Only what changed is sent — the server touches only the keys it gets.
       const fd = new FormData(form);
       const patch = {};
-      for (const k of ['email', 'display_name', 'phone', 'address1', 'address2', 'zip', 'city', 'country']) {
+      const keys = ['display_name', 'phone', 'address1', 'address2', 'zip', 'city', 'country'];
+      for (const k of canEditEmail ? ['email', ...keys] : keys) {
         const v = String(fd.get(k) ?? '').trim();
         if (v !== String(c[k] || '')) patch[k] = v;
       }

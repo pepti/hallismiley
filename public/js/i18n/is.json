@@ -1196,6 +1196,7 @@
   "adminCustomers.inviteRedirectedNoLink": "Boðið fór á prófunarlistann, ekki til viðskiptavinarins.",
   "adminCustomers.hasPasswordNote": "Þessi viðskiptavinur er þegar með lykilorð og þarf ekki boð.",
   "adminCustomers.noEmailNoInvite": "Ekkert netfang, svo ekki er hægt að senda boð.",
+  "adminCustomers.emailAdminOnly": "Aðeins stjórnandi getur breytt netfanginu, því innskráning viðskiptavinarins byggir á því.",
   "adminCustomers.inviteLinkLabel": "Hlekkur til að velja lykilorð",
   "adminCustomers.importIntro": "Hladdu upp CSV með dálkunum Netfang, Nafn og Sími. Nýir viðskiptavinir eru stofnaðir án lykilorðs; netföng sem eru þegar til eru hunsuð.",
   "adminCustomers.importStatusNew": "nýir",

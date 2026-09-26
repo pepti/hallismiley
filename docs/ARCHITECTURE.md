@@ -976,12 +976,17 @@ company/                  gitignored: plans, decisions, logs, market-research st
   a non-admin holder of the view from re-pointing a STAFF login's email and
   taking it over through forgot-password; any new one-customer route uses it.
 - **A customer edit** ([harvest2-lane3](history.d/2026-09-26-harvest2-lane3-users.md#harvest2-lane3-2026-09-26))
+  may change the EMAIL only with admin (`hasRole(req.user, 'admin')`, the
+  session's set); from a `customers`-view-only holder a changed email is 403
+  `email_admin_only` and nothing in the request is written — name, phone and
+  address need only the view (Halli may loosen this). It
   changes only the keys sent (blank clears to NULL; the email cannot be blank),
   validated by `validateCustomerContact`; the email is lowercased and must not
   be another login's (case-insensitive, 409) or a `noemail.invalid`
   placeholder; the country is a two-letter code, stored upper-case. An email
   change sets `email_verified = FALSE` and clears any set-password/reset token
-  in flight. The address lives on the person (`users.address1, address2, city,
+  in flight and `invited_at` (the seller area's proof of a real address), in
+  the same UPDATE. The address lives on the person (`users.address1, address2, city,
   zip, country`, migration 117 — icelandicstore's column names exactly, so ice
   aliases its `114_user_address`). Audited `user.updated` with the NAMES of
   the changed fields only.

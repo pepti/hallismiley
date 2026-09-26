@@ -231,10 +231,9 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
   and editing one customer (`117_user_address`, per-customer invite). Open:
   (a) **every new `adminRoles.*`, `adminCustomers.*`, `profile.roles`,
   `errors.admin.*` and `validation.*` string is DRAFT** (Halli; listed in the
-  fragment); (b) **the `customers` view now lets its holder change a
-  customer's email** — with forgot-password that is a takeover of that
-  customer's login; staff accounts are out of reach (404). Halli decides
-  whether the email field should be admin-only; (c) migration numbers 116/117
+  fragment); (b) changing a customer's email is **done, admin-only; Halli may loosen**
+  (the `customers` view edits name, phone and address; a changed email from
+  a non-admin is 403 `email_admin_only`); (c) migration numbers 116/117
   are provisional; icelandicstore aliases `117_user_address` →
   `114_user_address` in its next sync; (d) the `user` role can no longer gain
   a view (a downstream that granted one keeps it until removed).

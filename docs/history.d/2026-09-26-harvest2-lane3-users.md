@@ -112,6 +112,7 @@ Client (`public/js/i18n/*.json`), IS / EN:
 - `adminCustomers.inviteRedirectedNoLink` — "Boðið fór á prófunarlistann, ekki til viðskiptavinarins." / "The invite went to the test allowlist, not to the customer."
 - `adminCustomers.hasPasswordNote` — "Þessi viðskiptavinur er þegar með lykilorð og þarf ekki boð." / "This customer already has a password and needs no invite."
 - `adminCustomers.noEmailNoInvite` — "Ekkert netfang, svo ekki er hægt að senda boð." / "No email address, so no invite can be sent."
+- `adminCustomers.emailAdminOnly` — "Aðeins stjórnandi getur breytt netfanginu, því innskráning viðskiptavinarins byggir á því." / "Only an administrator can change the email: the customer's login lives on it."
 
 Server (`server/i18n/*.json`), IS / EN:
 - `errors.admin.roleNameReserved` (reworded) — "Þetta heiti tilheyrir innbyggðu hlutverki eða hljómar eins og kerfisstjórn (t.d. admin, Stjórnandi, Kerfi). Veldu annað." / "That name belongs to a built-in role or reads as running the system (e.g. admin, Stjórnandi, Kerfi). Choose another."
@@ -122,6 +123,7 @@ Server (`server/i18n/*.json`), IS / EN:
 - `errors.admin.customerNotFound` — "Viðskiptavinur fannst ekki" / "Customer not found"
 - `errors.admin.inviteHasPassword` — "Þessi viðskiptavinur er þegar með lykilorð — sendu lykilorðshlekk í staðinn." / "This customer already has a password — send them a set-password link instead." (ice's text)
 - `errors.admin.inviteNoEmail` — "Þessi viðskiptavinur er ekki með netfang til að senda boð á." / "This customer has no email address to send an invite to."
+- `errors.admin.customerEmailAdminOnly` — "Aðeins stjórnandi getur breytt netfangi viðskiptavinar, því innskráningin hans byggir á því." / "Only an administrator can change a customer's email address: it is the address their login lives on."
 - `validation.address.maxLength` — "Heimilisfangsreitir mega að hámarki vera {n} stafir" / "Address fields can be at most {n} characters"
 - `validation.country.invalid` — "Land verður að vera tveggja stafa kóði, t.d. IS" / "Country must be a two-letter code, e.g. IS"
 
@@ -145,8 +147,8 @@ Verdict FAIL on one finding, fixed on the branch:
   now clears `invited_at`, `password_reset_token`/`_expires` and `email_verified` in the SAME
   UPDATE whenever the address really changes (`CASE WHEN email IS DISTINCT FROM …`), which also
   fixes **L4** (the reset used to be a second statement). Test extended.
-- **M1 (open, Halli).** The `customers` view now writes user rows (the email). Recorded below; the
-  route file's header comment no longer says customer writes are admin-only.
+- **M1 (fixed after the review).** The `customers` view could change a customer's email; that
+  change is now admin-only (next section).
 - **L1 (fixed).** Reference copies `server/migrations/116_role_label.sql`, `117_user_address.sql`.
 - **L2 (won't fix).** 116's backfill writes data in an engine migration; it derives each label from
   that database's own row (no product copy), so it stays within invariant 4.
@@ -160,10 +162,20 @@ Other checks in the review passed: SQL built from fixed column lists only, every
 Also seen in passing: the Customers LIST table is wider than a 375px phone (about 500px of
 sideways page scroll) — pre-existing, not this lane's dialog.
 
+### The email change is admin-only (the default taken)
+
+After the review the coordinator took the tighter default (tighten, never loosen — M1 above is
+closed by it): a new email plus the public forgot-password flow is a takeover of the customer's
+login, so **changing a customer's EMAIL through `PATCH /admin/customers/:id` needs admin**
+(`hasRole(req.user, 'admin')` — the session's role set after the 2FA withholding, what
+`requireRole('admin')` reads on the other customer writes). A `customers`-view holder who sends a
+CHANGED email gets 403 `errors.admin.customerEmailAdminOnly` (`reason: 'email_admin_only'`) and
+nothing in the request is written; name, phone and address stay editable with the view, and
+re-sending the same address is not a change. The dialog shows the email read-only to a non-admin,
+with a hint, and never sends it. **Halli can loosen this** (drop the check in
+`adminCustomerController.updateCustomer`) if sellers should correct emails themselves.
+
 ### Still owed / for Halli
 
-- **The `customers` view now grants an EDIT of a customer's email**, and a new email plus the public
-  forgot-password flow is a takeover of that customer's account. That is inherent in "edit
-  email" and was Halli's scope ("server-side gate = the customers view"); staff accounts are
-  out of reach (404). If sellers should not change emails, gate `email` in the PATCH on admin.
+- Whether to loosen the admin-only email change (above).
 - All strings above are DRAFT.

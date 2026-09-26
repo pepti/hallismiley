@@ -1196,6 +1196,7 @@
   "adminCustomers.inviteRedirectedNoLink": "The invite went to the test allowlist, not to the customer.",
   "adminCustomers.hasPasswordNote": "This customer already has a password and needs no invite.",
   "adminCustomers.noEmailNoInvite": "No email address, so no invite can be sent.",
+  "adminCustomers.emailAdminOnly": "Only an administrator can change the email: the customer's login lives on it.",
   "adminCustomers.inviteLinkLabel": "Set-password link",
   "adminCustomers.importIntro": "Upload a CSV with Email, Name and Phone columns. New customers are created passwordless; existing emails are skipped.",
   "adminCustomers.importStatusNew": "new",

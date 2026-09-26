@@ -274,7 +274,7 @@ The survey's headline is that **the harvest is not one-directional**. This repo'
 
 **What.** From icelandicstore #421/#416/#336: create an admin role by its display name (the server derives the slug; reserved back-office names refused folded), one roles × admin-screens grid with a save bar that counts the people a change reaches, the Profile badge naming the session's roles, 409-with-count on deleting a role in use, and editing one customer's contact details and address with a per-customer invite that never returns the set-password link ("send now" off by default on Add).
 **Why.** The role form refused Icelandic names; the per-role modal made comparing roles hard; the Customers screen could not correct an email or keep an address.
-**Effort.** M. **Risk.** Low–medium: the `customers` view now grants an email edit (see the fragment's "Still owed").
+**Effort.** M. **Risk.** Low: changing a customer's email is admin-only (the `customers` view edits name, phone and address); Halli may loosen it.
 
 ### Reverse queue — this repo → icelandicstore and the base
 

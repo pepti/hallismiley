@@ -397,6 +397,7 @@
   "errors.admin.customerNotFound": "Viðskiptavinur fannst ekki",
   "errors.admin.inviteHasPassword": "Þessi viðskiptavinur er þegar með lykilorð — sendu lykilorðshlekk í staðinn.",
   "errors.admin.inviteNoEmail": "Þessi viðskiptavinur er ekki með netfang til að senda boð á.",
+  "errors.admin.customerEmailAdminOnly": "Aðeins stjórnandi getur breytt netfangi viðskiptavinar, því innskráningin hans byggir á því.",
   "validation.address.maxLength": "Heimilisfangsreitir mega að hámarki vera {n} stafir",
   "validation.country.invalid": "Land verður að vera tveggja stafa kóði, t.d. IS",
   "errors.admin.shapeEnum": "shape verður að vera eitt af: {values}",
