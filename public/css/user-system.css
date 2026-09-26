@@ -399,8 +399,12 @@
   letter-spacing: 0.06em;
   font-family: var(--font-sans);
 }
-.approval-badge--pending  { color: #1a1a1a; background: #c9a84c; }
-.approval-badge--declined { color: #fff;    background: var(--danger, #b23b3b); }
+/* Status tokens, not literals (ported from icelandicstore #399's amber pills):
+   the old #1a1a1a on #c9a84c and #fff on a hex fallback were one fixed palette
+   on every theme. The status ink on its -dim wash re-values per theme
+   (variables.css / themes.css measure the ink at ≥ 6:1). */
+.approval-badge--pending  { color: var(--warning); background: var(--warning-dim); }
+.approval-badge--declined { color: var(--error);   background: var(--error-dim); }
 
 /* Profile sections */
 .profile-section {

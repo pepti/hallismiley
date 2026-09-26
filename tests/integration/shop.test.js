@@ -63,6 +63,22 @@ describe('GET /api/v1/shop/products — ?category= filter (shop redesign step 2)
     expect(slugs).toEqual(expect.arrayContaining(TEST_SLUGS));
   });
 
+  // The cart/checkout split the VAT per rate from the catalogue payload
+  // (public/js/utils/vat.js, harvest 2 lane 4b) — in BOTH locales' column
+  // lists (the IS one COALESCEs the translated name).
+  test('each product carries its VSK rate, in both locales', async () => {
+    await db.query(`UPDATE products SET vat_rate = 11 WHERE slug = $1`, [TEST_SLUGS[0]]);
+    for (const locale of ['is', 'en']) {
+      const res = await request(app).get('/api/v1/shop/products').set('X-Locale', locale);
+      const phys = res.body.products.find(p => p.slug === TEST_SLUGS[0]);
+      const tech = res.body.products.find(p => p.slug === TEST_SLUGS[1]);
+      expect(phys.vat_rate).toBe(11);
+      expect(tech.vat_rate).toBe(24);
+    }
+    const one = await request(app).get(`/api/v1/shop/products/${TEST_SLUGS[0]}`);
+    expect(one.body.product.vat_rate).toBe(11);
+  });
+
   test('?category=product returns only physical-goods rows', async () => {
     const res = await request(app).get('/api/v1/shop/products?category=product');
     expect(res.status).toBe(200);
@@ -163,6 +179,17 @@ describe('Order.listItems — is_bookable flag (shop redesign step 5)', () => {
     const byProductId = Object.fromEntries(items.map(it => [it.product_id, it]));
     expect(byProductId[physicalId].is_bookable).toBe(false);
     expect(byProductId[serviceId].is_bookable).toBe(true);
+  });
+
+  // The admin order page splits the VAT per rate from this (utils/vat.js,
+  // ported from icelandicstore #51) — the product's current rate, the same
+  // live read the invoice books with.
+  test('exposes the product VSK rate from the same JOIN', async () => {
+    await db.query(`UPDATE products SET vat_rate = 11 WHERE id = $1`, [physicalId]);
+    const items = await Order.listItems(orderId);
+    const byProductId = Object.fromEntries(items.map(it => [it.product_id, it]));
+    expect(byProductId[physicalId].vat_rate).toBe(11);
+    expect(byProductId[serviceId].vat_rate).toBe(24);
   });
 
   test('preserves the snapshot columns alongside the joined flag', async () => {
@@ -291,5 +318,51 @@ describe('sendBookingNotification — guard rails (shop redesign step 5)', () =>
     await expect(sendBookingNotification({
       order: fakeOrder, bookableItems: fakeItems, adminEmails: ['admin@example.com'],
     })).resolves.toBeUndefined();
+  });
+});
+
+// ─── Checkout: the shipping address's postcode + phone shape ────────────────
+// Ported from icelandicstore #399 (utils/contactFormat.js): an Icelandic
+// address needs a three-digit postnúmer, abroad the postcode is free text, and
+// a phone (optional) gets the same rule as every other phone field. The check
+// is a route middleware (validate.validateCheckoutContact) in front of the
+// controller, so it answers before the Stripe/price path runs.
+describe('POST /api/v1/shop/checkout — postcode + phone shape', () => {
+  const { tx } = require('../lib/locale');
+  const base = (addr) => ({
+    items: [{ productId: 'no-such-product', quantity: 1 }],
+    currency: 'ISK',
+    shipping_method: 'flat_rate',
+    guest_email: 'shape@example.com',
+    guest_name: 'Shape Test',
+    shipping_address: { name: 'Jón', line1: 'Gata 1', city: 'Reykjavík', postal: '101', country: 'IS', ...addr },
+  });
+
+  test('a malformed Icelandic postcode is a 400 in the error envelope', async () => {
+    for (const postal of ['1', '1010', '101 Reykjavík']) {
+      const res = await request(app).post('/api/v1/shop/checkout').send(base({ postal }));
+      expect(res.status).toBe(400);
+      expect(res.body).toEqual({ error: tx('validation.checkout.postcodeInvalid'), code: 400 });
+    }
+  });
+
+  test('a malformed phone is a 400; a blank or real one passes the shape check', async () => {
+    const bad = await request(app).post('/api/v1/shop/checkout').send(base({ phone: 'call me' }));
+    expect(bad.status).toBe(400);
+    expect(bad.body.error).toBe(tx('validation.phone.invalid'));
+    for (const phone of [null, '', '+354 555 1234']) {
+      const res = await request(app).post('/api/v1/shop/checkout').send(base({ phone }));
+      expect(res.body.error).not.toBe(tx('validation.phone.invalid'));
+    }
+  });
+
+  test('a foreign postcode is free text, and local pickup reads no address', async () => {
+    for (const addr of [{ postal: 'SW1A 1AA', country: 'GB' }, { postal: '1', country: 'DK' }, { postal: '101' }]) {
+      const res = await request(app).post('/api/v1/shop/checkout').send(base(addr));
+      expect(res.body.error).not.toBe(tx('validation.checkout.postcodeInvalid'));
+    }
+    const pickup = await request(app).post('/api/v1/shop/checkout')
+      .send({ ...base({ postal: '1' }), shipping_method: 'local_pickup' });
+    expect(pickup.body.error).not.toBe(tx('validation.checkout.postcodeInvalid'));
   });
 });

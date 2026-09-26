@@ -365,9 +365,15 @@ class Order {
      // columns on order_items remain the source of truth for name/price;
      // the JOIN is non-authoritative — a deleted product just renders the
      // booking flag as NULL, which we coerce to false at read time.
+    // vat_rate is the product's CURRENT rate, the same live read
+    // bookkeeping/invoiceService.readOrderForInvoicing books the invoice with,
+    // so the admin order page's per-rate VAT (utils/vat.js) matches the
+    // invoice. A deleted product reads NULL, which the display treats as the
+    // standard rate, as the invoice does.
     const { rows } = await db.query(
       `SELECT ${ITEM_COLUMNS.split(',').map(c => `oi.${c.trim()}`).join(', ')},
-              COALESCE(p.is_bookable, FALSE) AS is_bookable
+              COALESCE(p.is_bookable, FALSE) AS is_bookable,
+              p.vat_rate
          FROM order_items oi
     LEFT JOIN products p ON p.id = oi.product_id
         WHERE oi.order_id = $1
