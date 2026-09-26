@@ -193,20 +193,27 @@ Client (`public/js/i18n`): `adminProducts.variantHint` and `adminProducts.noVari
 the 19 `errors.variantAdd.*`, the 11 `validation.variant.*`. Icelandic drafted
 natively (most follow ice's approved wording).
 
+### After merging master (lanes 3 and 6a, 116–118)
+119 sits after 118. Lane 6a's stock code now sees live variants only:
+`GoodsReceipt.matchCodes` (an archived twin sharing the SKU made the code
+"ambiguous", or received onto a deleted variant), `Inventory.watchRows`,
+`stockItems`, `variantRefs` and `searchItems` filter `archived_at IS NULL`, and
+`applyLines` refuses an archived variant under a new `refuseArchived` flag that
+`applyBatch` (every count and receipt) passes; `Inventory.correct` ("Fix
+stock") refuses one too. Order fulfilment does NOT pass the flag: an order line
+may name an archived variant and must still ship or be restored.
+`tests/integration/archivedVariantStock.test.js` pins it: a receipt line and the
+count lookup/search pick the live variant that shares the archived one's SKU; a
+count batch and "Fix stock" naming the archived one are refused and move
+nothing; fulfilment still moves it. The receiving tables' foreign keys are read
+by `hasReferences`, so a variant on a receipt is archived, not deleted.
+
+The other filled `--gold` controls (add-to-cart, basket checkout, checkout
+submit) keep their `--bg-nav` label: measured with the contrast test's helpers
+they clear AA on every theme (lowest Bjart's brightness(1.15) hover, 5.12 : 1),
+so nothing moved; `themeTokenContrast.test.js` now pins those pairs and those
+rules, and pins the inline-edit controls to `--on-accent` / `--accent-hover`.
+
 ### Still owed
-- **At merge (master moved on while this lane ran):** master already has
-  engine migrations 116–118, so 119 goes after 118 (renumber if the harvest
-  wants a different slot). Lane 6a's queries that resolve a code or list
-  variants need `AND v.archived_at IS NULL` once 119 exists — the reviewer
-  named `GoodsReceipt.js` (code matching: `v.sku = ANY … OR v.barcode = ANY …`,
-  which could now see an archived twin) and `Inventory.searchItems` (the count
-  picker); the `v.active` filters elsewhere already exclude archived rows.
-- Lane 6a's receiving/count tables reference `product_variants`;
-  `hasReferences` reads the catalogue, so a variant with a receipt or count line
-  is archived, not deleted — its test should gain a case once those tables are
-  on this branch.
 - Lane 6b (merges): the merged-product refusal in `variantAdd` and on the variant
   routes (ice's `refuseMergedProduct`).
-- The engine's other `color: var(--bg-nav)` labels on `--gold` fills (cart,
-  checkout, product add-to-cart) carry the same Bjart risk item 7 fixed for the
-  inline-edit controls; not in this lane's scope.

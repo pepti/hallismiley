@@ -281,8 +281,9 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
   `adminProducts.*`, `variants.*`, `shop.sortByCol`, `errors.variantAdd.*`,
   `validation.variant.*` strings are DRAFT** (Halli; listed in the fragment);
   (b) when lane 6b (merges) lands, `variantAdd` and the variant routes need
-  its merged-product refusal; (c) the other `--bg-nav` labels on `--gold`
-  fills (cart, checkout, add-to-cart) want the same `--on-accent` treatment.
+  its merged-product refusal; (c) settled 2026-09-26: the other `--bg-nav`
+  labels on `--gold` fills clear AA on every theme and are now pinned by the
+  contrast test; lane 6a's stock code skips archived variants.
 - Upward harvest from icelandicstore `4694289`, lane 1 (chunks A then B, branch
   `harvest/ice-2026-09-24-ab`, not merged). Chunk A landed on the branch
   ([harvest-ice-a-2026-09-24](docs/HISTORY.md#harvest-ice-a-2026-09-24)): admin

@@ -206,9 +206,13 @@ const GoodsReceipt = {
     };
     if (skus.length || bars.length) {
       const { rows: vs } = await db.query(
+        // Live variants only (migration 119, harvest 2 lane 6c): an archived
+        // variant may share its SKU with the live one that replaced it, and a
+        // delivery is never received onto a deleted variant.
         `SELECT v.id AS variant_id, v.product_id, v.sku, v.barcode
            FROM product_variants v
-          WHERE v.sku = ANY($1::text[]) OR v.barcode = ANY($2::text[])`,
+          WHERE (v.sku = ANY($1::text[]) OR v.barcode = ANY($2::text[]))
+            AND v.archived_at IS NULL`,
         [skus, bars]
       );
       const { rows: ps } = await db.query(
