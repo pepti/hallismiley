@@ -1,6 +1,7 @@
 const { execSync } = require('child_process');
 const { Pool }     = require('pg');
 const { e2eDatabaseUrl } = require('./lib/dbUrl');
+const { checkTarget } = require('../server/scripts/targetGuard');
 
 // Provisions a deterministic, ISOLATED test database for the e2e suite:
 // ensure the _test DB exists → migrate → admin → project fixture. Each step
@@ -16,6 +17,16 @@ const { e2eDatabaseUrl } = require('./lib/dbUrl');
 // the DB is ready before the server boots. (Ported from icelandicstore #197.)
 module.exports = async function globalSetup() {
   const dbUrl = e2eDatabaseUrl();
+  // The steps below migrate, upsert the e2e admin and seed fixtures into this
+  // database, and the specs then write orders into it. Ported from
+  // icelandicstore #370 (the e2e fixtures guard) via the shared
+  // server/scripts/targetGuard.js: a LOCAL `_test` database only — an
+  // E2E_DATABASE_URL pointing at an Azure server, or a run inside a deployed
+  // container, is refused before anything connects.
+  const target = checkTarget({ databaseUrl: dbUrl, env: process.env });
+  if (!target.ok) {
+    throw new Error(`[e2e provision] refusing to provision: ${target.reason}.`);
+  }
   await ensureDatabase(dbUrl);
 
   const env  = { ...process.env, DATABASE_URL: dbUrl, NODE_ENV: 'test', DB_SSL: 'false' };

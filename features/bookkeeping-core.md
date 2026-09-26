@@ -45,6 +45,7 @@ paths:
   - tests/unit/booksFx.test.js
   - tests/unit/booksControllerParse.test.js
   - tests/unit/money.client.test.js
+  - tests/integration/seedBooksDemo.test.js
 migrations: [072_bookkeeping, 073_books_expenses, 075_books_reconciliation, 101_books_deferred_revenue, 103_books_vehicle_accounts]
 since: 2026-08-09
 origin: null
@@ -58,4 +59,5 @@ The double-entry books (072): chart of accounts, journal, periods, expenses (073
 - Build deposit = prepayment on 2150; **2150 never goes debit**; crediting a RELEASED deposit goes against `recognised_into_account`.
 - Client money is minor units at the API boundary (`money.js`).
 - 6600 atvinnubifreiðar deductible, 6610 fólksbifreiðar blocked (103).
+- `seed:books` runs only where `targetGuard` allows (a local `_test` DB, or the local dev DB with `--allow-dev-db`; never `*_books`), and its `--wipe` deletes only the rows the seed created, by id, in one transaction — it refuses (`UNSEEDED_BOOKS`, nothing deleted) while the books hold any other row (harvest 2, lane 1a; ported from icelandicstore #427).
 - Full rules: [../docs/ARCHITECTURE.md#9-bookkeeping--invoices-vsk-peppol-intake-settings-replay-payroll](../docs/ARCHITECTURE.md#9-bookkeeping--invoices-vsk-peppol-intake-settings-replay-payroll).

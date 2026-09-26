@@ -25,6 +25,7 @@ const {
   adminDbUrl,
   isDerivedTestDbName,
 } = require('../tests/workerDb');
+const { checkTarget } = require('../server/scripts/targetGuard');
 
 const args   = process.argv.slice(2);
 const dryRun = args.includes('--dry-run');
@@ -44,6 +45,14 @@ function isCandidate(name) {
 
 async function main() {
   const { url } = resolveTestBaseUrl();
+  // DROP DATABASE on a server it can reach: local host only (the shared
+  // destructive-script guard, server/scripts/targetGuard.js, harvest 2).
+  const target = checkTarget({ databaseUrl: url, env: process.env });
+  if (!target.ok) {
+    console.error(`[test:db:clean] refusing: ${target.reason}.`);
+    process.exitCode = 1;
+    return;
+  }
   const admin = new Pool({ connectionString: adminDbUrl(url) });
   let dropped = 0, skipped = 0;
   try {

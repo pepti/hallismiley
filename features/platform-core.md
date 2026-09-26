@@ -50,6 +50,8 @@ paths:
   - server/services/anthropicAuth.js
   - tests/unit/anthropicAuth.test.js
   - tests/unit/anthropicWifWiring.test.js
+  - server/scripts/targetGuard.js
+  - tests/unit/targetGuard.test.js
 migrations: [001_initial_schema, 043_strip_stale_railway_references]
 since: 2026-08-09
 origin: null
@@ -65,4 +67,5 @@ The Express 5 app and boot sequence, the pg pool, the migration runner and the e
 - Never edit an applied migration; append. Express 5 catch-alls keep the braces. Node major pinned in THREE places.
 - The migration runner is transactional and locked; a release's migrations are backward-compatible with the previous release (invariant 14).
 - A Claude client is built from `anthropicAuth.clientAuthOptions()`, never from `ANTHROPIC_API_KEY` directly; in workload-identity mode the key is never read.
+- Every script or harness step that deletes, truncates, drops or rewrites rows calls `server/scripts/targetGuard.js` before its first query: a LOCAL host (localhost / 127.0.0.1 / ::1), a name matching the caller's pattern (`_test`; `_replay` for books:replay) or the local dev database with an explicit `--allow-dev-db`, never a `*_books`/ops/prod name, never an Azure host, `NODE_ENV=production`, `APP_ENV=production|staging` or App Service. `NODE_ENV` alone is not a guard. The one exemption, `reset-admin-totp.js` (break-glass against the real instance), says so in its header (harvest 2, lane 1a).
 - Full rules: [../docs/ARCHITECTURE.md#20-infrastructure-and-cross-cutting](../docs/ARCHITECTURE.md#20-infrastructure-and-cross-cutting).

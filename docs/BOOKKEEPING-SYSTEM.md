@@ -408,8 +408,8 @@ Other notes:
 
 ```bash
 npm run migrate                          # apply schema changes
-npm run seed:books                       # demo data for a software business
-npm run seed:books -- --wipe             # ...replacing what is there
+npm run seed:books -- --allow-dev-db    # demo data for a software business (local dev DB)
+npm run seed:books -- --allow-dev-db --wipe  # ...replacing an earlier demo (refuses if real rows exist)
 npm run books:fx -- --date=2026-08-06 --rate=143.20
 npm run books:archive -- --out=./archive/2026
 npm run books:archive -- --verify-only --out=./archive/2026
@@ -419,8 +419,13 @@ npm run books:replay -- --all             # replay recorded periods, diff agains
 npm run books:replay -- --case=D:/customer1/2025-P6.json --db=postgresql://…/customer1_replay
 ```
 
+`seed:books` runs only against a local `_test` database or, with `--allow-dev-db`, the local
+dev database — never a `*_books`/ops/prod name or an Azure host (`server/scripts/targetGuard.js`).
+Its `--wipe` deletes only the rows the seed created and refuses, deleting nothing, when the
+books hold anything else.
+
 `books:replay` drops and recreates its target schema, so it refuses any database whose
-name does not end in `_replay` (`createdb orangesmiley_replay` once). Cases live in
+name does not end in `_replay`, or that is not on a local host (`createdb orangesmiley_replay` once). Cases live in
 `server/fixtures/books-replay/` (this company's own) or outside the repo (a customer's);
 the format and the reason the D-split is diffed are in `server/services/bookkeeping/replayCase.js`.
 
