@@ -65,6 +65,15 @@ describe('plan', () => {
     expect(codes(col)).toContain('attribute_collision');
   });
 
+  test('a new variant on the attributes of a SWITCHED-OFF survivor row is refused (the unique index covers it)', () => {
+    const master = prod('m', { variant_axes: ['color', 'size'], variants: [
+      v('m1', { color: 'Black', size: 'S' }), v('old', { color: 'Grá (GR)', size: 'S' }, { active: false }),
+    ] });
+    const src = prod('s', { name: 'Tee | x | Grá (GR)', variant_axes: ['size'], variants: [v('s1', { size: 'S' })] });
+    const r = plan({ master, sources: [src] }, { variant_map: [{ source: { productId: 's', variantId: 's1' }, target: { attributes: { color: 'Grá (GR)', size: 'S' } } }] });
+    expect(r.refusals).toEqual([expect.objectContaining({ code: 'attribute_collision_inactive', variantId: 'old' })]);
+  });
+
   test('a simple source into a variant master becomes a new variant; its SKU must be free', () => {
     const master = prod('m', { variant_axes: ['size'], variants: [v('m1', { size: 'S' })] });
     const src = prod('s', { sku: 'TAKEN', stock: 2 });

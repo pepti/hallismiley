@@ -1486,6 +1486,7 @@
   "adminProductDuplicates.reason.bookable_mismatch": "Ekki er hægt að sameina bókanlega þjónustu og lagervöru",
   "adminProductDuplicates.reason.attributes_invalid": "Nýja afbrigðið fyllir ekki alla valkosti vörunnar sem haldið er",
   "adminProductDuplicates.reason.attribute_collision": "Varan sem haldið er á nú þegar þetta afbrigði",
+  "adminProductDuplicates.reason.attribute_collision_inactive": "Varan sem haldið er á þetta afbrigði en það er óvirkt — gerðu það virkt í vöruritlinum, forskoðaðu aftur og veldu það",
   "adminProductDuplicates.reason.sku_collision": "Annað afbrigði notar nú þegar þetta vörunúmer",
   "adminProductDuplicates.reason.already_merged": "Nú þegar sameinuð annarri vöru",
   "adminProductDuplicates.reason.too_many": "Í mesta lagi 20 vörur í einu",

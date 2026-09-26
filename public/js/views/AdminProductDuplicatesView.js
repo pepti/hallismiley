@@ -43,6 +43,7 @@ const REASON_KEY = {
   bookable_mismatch:            'adminProductDuplicates.reason.bookable_mismatch',
   attributes_invalid:           'adminProductDuplicates.reason.attributes_invalid',
   attribute_collision:          'adminProductDuplicates.reason.attribute_collision',
+  attribute_collision_inactive: 'adminProductDuplicates.reason.attribute_collision_inactive',
   sku_collision:                'adminProductDuplicates.reason.sku_collision',
   already_merged:               'adminProductDuplicates.reason.already_merged',
   too_many:                     'adminProductDuplicates.reason.too_many',

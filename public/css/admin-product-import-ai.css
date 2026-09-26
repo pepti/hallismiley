@@ -26,6 +26,7 @@
 .prod-import-ai__pricing legend { padding: 0 var(--sp-1); font-weight: 700; color: var(--text-primary); }
 .prod-import-ai__field { display: flex; flex-direction: column; gap: var(--sp-1); }
 .prod-import-ai__field label { font-weight: 600; color: var(--text-primary); font-size: 0.875rem; }
+.prod-import-ai__field .form-hint { font-size: 0.8rem; line-height: 1.4; color: var(--text-secondary); }
 .prod-import-ai__field .form-input[aria-invalid="true"] { border-color: var(--error); box-shadow: 0 0 0 1px var(--error); }
 .prod-import-ai__err { color: var(--error); font-size: 0.8rem; min-height: 1em; }
 .prod-import-ai__err:empty { display: none; }

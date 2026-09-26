@@ -208,6 +208,16 @@ function plan(state, raw) {
     if (!foldGroups.has(k)) foldGroups.set(k, []);
     foldGroups.get(k).push({ id: String(v.id), sku: v.sku || null, exact: exactKey(axes, v.attributes || {}) });
   }
+  // The engine's unique (product_id, attributes) index covers switched-off rows
+  // too (ice's excludes archived ones), so a new or moved variant must not land
+  // on the attributes of a SWITCHED-OFF survivor row either — that is the row a
+  // colour's own product often replaced. Refused, never a 500 from the index:
+  // the admin switches that row on and maps onto it instead.
+  const inactiveKeys = new Map();
+  for (const v of (master.variants || []).filter(x => x.active === false)) {
+    const k = attrKey(axes, v.attributes || {});
+    if (!inactiveKeys.has(k)) inactiveKeys.set(k, String(v.id));
+  }
 
   // ── units ─────────────────────────────────────────────────────────────────
   const byKey = new Map();
@@ -245,6 +255,7 @@ function plan(state, raw) {
         if (!norm) { refuse('attributes_invalid', { unit: u.key }); continue; }
         const k = attrKey(axes, norm);
         if (liveKeys.has(k)) { refuse('attribute_collision', { unit: u.key, variantId: liveKeys.get(k) }); continue; }
+        if (inactiveKeys.has(k)) { refuse('attribute_collision_inactive', { unit: u.key, variantId: inactiveKeys.get(k) }); continue; }
         if (newKeys.has(k)) { refuse('attribute_collision', { unit: u.key, with: newKeys.get(k) }); continue; }
         newKeys.set(k, u.key);
         unit.newAttributes = norm;

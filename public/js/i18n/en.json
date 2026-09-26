@@ -1486,6 +1486,7 @@
   "adminProductDuplicates.reason.bookable_mismatch": "A bookable service and a stocked product cannot be merged",
   "adminProductDuplicates.reason.attributes_invalid": "The new variant does not fill every option of the product you keep",
   "adminProductDuplicates.reason.attribute_collision": "The product you keep already has that variant",
+  "adminProductDuplicates.reason.attribute_collision_inactive": "The product you keep has this variant switched off — switch it on in the product editor, then preview again and choose it",
   "adminProductDuplicates.reason.sku_collision": "That SKU is already used by another variant",
   "adminProductDuplicates.reason.already_merged": "Already merged into another product",
   "adminProductDuplicates.reason.too_many": "At most 20 products at a time",
