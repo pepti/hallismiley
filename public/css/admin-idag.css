@@ -107,6 +107,10 @@
 .idag-todo__item--warn .idag-todo__n { color: var(--warning); }
 .idag-todo__item--warn .idag-todo__tag { background: var(--warning-dim); color: var(--text-primary); box-shadow: inset 0 0 0 1px var(--warning); }
 .idag-todo__item--soon .idag-todo__tag { background: var(--bg-hover); color: var(--text-primary); box-shadow: inset 0 0 0 1px var(--border); }
+/* A source that could not be read (harvest 2 lane 5): "—" in the number column, muted, dashed rule. */
+.idag-todo__item--unread { border-left-style: dashed; }
+.idag-todo__item--unread .idag-todo__n { color: var(--text-muted); }
+.idag-todo__item--unread .idag-todo__tag { background: transparent; color: var(--text-secondary); box-shadow: inset 0 0 0 1px var(--border); }
 
 /* ── Staðan (the tally rail) ──────────────────────────────────────────────
    Deliberately NOT a card: a ruled column on the page itself, like the end of

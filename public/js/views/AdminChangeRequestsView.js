@@ -8,6 +8,7 @@ import { formatDateTime } from '../utils/format.js';
 import { navigateReplace } from '../navigate.js';
 import { renderAdminShell } from '../components/AdminSidebar.js';
 import { showToast } from '../components/Toast.js';
+import { readListState, syncListState } from '../utils/listState.js';
 
 const FILTERS = ['all', 'open', 'resolved'];
 
@@ -17,7 +18,13 @@ function fmtDate(d) {
 }
 
 export class AdminChangeRequestsView {
-  constructor() { this._el = null; this._batches = []; this._filter = 'all'; }
+  constructor() {
+    this._el = null; this._batches = [];
+    // ?status=open|resolved — the "Í dag" card links to ?status=open, and
+    // counts the same open items (harvest 2 lane 5).
+    const st = readListState({ status: 'all' }).status;
+    this._filter = FILTERS.includes(st) ? st : 'all';
+  }
 
   async render() {
     if (!isAuthenticated() || !isAdmin()) {
@@ -47,6 +54,7 @@ export class AdminChangeRequestsView {
     this._el.querySelectorAll('.cr-filter').forEach(b => b.addEventListener('click', () => {
       this._filter = b.dataset.filter;
       this._el.querySelectorAll('.cr-filter').forEach(x => x.classList.toggle('is-active', x === b));
+      syncListState(href('/admin/feedback'), { status: this._filter }, { status: 'all' });
       this._load();
     }));
     await Promise.all([this._load(), this._loadSwitch()]);
