@@ -103,6 +103,8 @@ export const ADMIN_NAV = [
     // The projects board (AdminProjectsView), listed since the "Í dag" home
     // replaced the overview whose header linked to it (2026-09-26).
     { id: 'projects',   route: '/admin/projects',      labelKey: 'admin.nav.projects',   icon: 'folder' },
+    // The time-limited site announcement (harvest2-lane7a, ice #200).
+    { id: 'announcement', route: '/admin/announcement', labelKey: 'admin.nav.announcement', icon: 'inbox' },
   ] },
   { key: 'settings', group: 'admin.navGroup.settings', items: [
     { id: 'general', route: '/admin/general', labelKey: 'admin.nav.general', icon: 'gear' },
@@ -119,6 +121,8 @@ export const ADMIN_NAV = [
     { id: 'receiving',   route: '/admin/receiving',        labelKey: 'admin.nav.receiving',   icon: 'inbox' },
     { id: 'orders',      route: '/admin/shop/orders',      labelKey: 'admin.nav.orders',      icon: 'receipt' },
     { id: 'discounts',   route: '/admin/discounts',        labelKey: 'admin.nav.discounts',   icon: 'percent' },
+    // Checkout settings (harvest2-lane7a, ice #151): pause, minimum, fields, delivery price.
+    { id: 'checkout',    route: '/admin/checkout',         labelKey: 'admin.nav.checkout',    icon: 'gear' },
     { id: 'sales',       route: '/admin/sales',            labelKey: 'admin.nav.sales',       icon: 'chart' },
   ] },
 ];

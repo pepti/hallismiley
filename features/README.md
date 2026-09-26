@@ -12,7 +12,7 @@ Status: `live` · `hidden` (served, hidden from nav/sitemap/admin lines) ·
 `config/client.json` key path that gates the feature, when one exists.
 Downstream overrides go in `features/local.json`.
 
-## Engine features (55)
+## Engine features (57)
 
 | id | name (is / en) | domain | owner | status | flag | migrations | file |
 |---|---|---|---|---|---|---|---|
@@ -47,6 +47,7 @@ Downstream overrides go in `features/local.json`.
 | `vsk` | Virðisaukaskattur / VAT (VSK) returns | 9 | engine | live | `modules.books.enabled` | — | [vsk.md](vsk.md) |
 | `sales-handbook` | Handbók sölufólks / Sales handbook | 10 | engine | live | `modules.salesOps.enabled` | `090_sales_guides` | [sales-handbook.md](sales-handbook.md) |
 | `cart-checkout` | Verslun, karfa og greiðsla / Storefront, cart and checkout | 11 | engine | hidden | `modules.shop.enabled` | — | [cart-checkout.md](cart-checkout.md) |
+| `checkout-settings` | Stillingar greiðsluferlis / Checkout settings | 11 | engine | hidden | `modules.shop.enabled` | — | [checkout-settings.md](checkout-settings.md) |
 | `discounts` | Afslættir / Discounts | 11 | engine | hidden | `modules.shop.enabled` | `050_discounts`, `055_discount_types` | [discounts.md](discounts.md) |
 | `goods-receiving` | Vörumóttaka / Goods receiving | 11 | engine | hidden | `modules.shop.enabled` | `118_goods_receipts` | [goods-receiving.md](goods-receiving.md) |
 | `orders` | Pantanir / Orders | 11 | engine | hidden | `modules.shop.enabled` | `054_order_payment_fulfillment_tags`, `115_order_notes` | [orders.md](orders.md) |
@@ -62,6 +63,7 @@ Downstream overrides go in `features/local.json`.
 | `change-requests` | Breytingarbeiðnir / Change requests | 16 | engine | live | — | `052_change_requests` | [change-requests.md](change-requests.md) |
 | `app-settings` | Almennar stillingar / General settings | 17 | engine | live | — | `047_app_settings` | [app-settings.md](app-settings.md) |
 | `landing-background` | Bakgrunnur forsíðu / Landing background | 17 | engine | hidden | — | `051_background_media`, `080_background_sections`, `085_landing_background_gradient`, `086_landing_background_scene`, `089_landing_background_video` | [landing-background.md](landing-background.md) |
+| `site-announcement` | Tímabundin tilkynning / Site announcement | 17 | engine | live | — | — | [site-announcement.md](site-announcement.md) |
 | `site-content` | Vefefni / Site content | 17 | engine | live | — | `005_site_content` | [site-content.md](site-content.md) |
 | `uploads-media` | Skráaupphal / Uploads and media | 18 | engine | live | — | — | [uploads-media.md](uploads-media.md) |
 | `email` | Tölvupóstur / Email | 19 | engine | live | — | — | [email.md](email.md) |

@@ -15,6 +15,8 @@
 @import './shop.css';
 @import './analytics-admin.css';
 @import './admin-general-settings.css';
+@import './admin-checkout-settings.css';
+@import './site-announcement.css';
 @import './admin-updates.css';
 @import './barcode-scanner.css';
 @import './scan.css';

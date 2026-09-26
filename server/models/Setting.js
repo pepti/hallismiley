@@ -6,9 +6,10 @@
 // Ported from the icelandicstore settings store, trimmed to what fits this
 // (B2C) site: the generic get/set/getMany helpers plus the "general" group
 // (store identity, address, store defaults, order-ID display). The store's
-// wholesale-only groups (customer-account approval, checkout field rules) are
-// intentionally omitted. This table is also the intended home for feature flags
-// that later phases introduce.
+// wholesale-only customer-account group is omitted; its checkout rules,
+// shipping price and site announcement arrived with harvest 2 lane 7a
+// (2026-09-26). This table is also the intended home for feature flags that
+// later phases introduce.
 const db = require('../config/database');
 
 // Setting keys, namespaced so the store stays organised as it grows.
@@ -72,7 +73,63 @@ const KEYS = {
   // Change-request widget on PROD (admins only; a non-prod app-env always has
   // it on — see changeRequestGate in middleware/changeRequestGate.js, ice #206).
   changeRequestsEnabled: 'change_requests.enabled',
+
+  // Checkout group (Admin → Verslun → Afgreiðsla; ported from icelandicstore
+  // #151, harvest2-lane7a-2026-09-26). Every key is ENFORCED server-side on the
+  // order path (services/checkoutRules.js): the pause answers before any order
+  // work, the minimum reads the DB-trusted subtotal after discounts, the field
+  // rules drop hidden values and refuse missing required ones, and the notify
+  // list is who the paid-order alert goes to.
+  checkoutOrderingPaused:        'checkout.ordering_paused',
+  checkoutOrderingPausedMessage: 'checkout.ordering_paused_message',
+  checkoutMinOrderValueIsk:      'checkout.min_order_value_isk',
+  checkoutOrderNotifyEmails:     'checkout.order_notify_emails',
+  checkoutFieldPhone:            'checkout.field_phone',
+  checkoutFieldCompany:          'checkout.field_company',
+  checkoutFieldKennitala:        'checkout.field_kennitala',
+  checkoutFieldNote:             'checkout.field_note',
+
+  // Shipping group — the delivery price, one source of truth for the order
+  // total AND the cart/checkout display (config/shipping.js). ISK only: the EUR
+  // flat rate stays env-only (SHIPPING_FLAT_RATE_EUR). free_over_isk = 0 = off.
+  shippingFlatRateIsk: 'shipping.flat_rate_isk',
+  shippingFreeOverIsk: 'shipping.free_over_isk',
+
+  // Site announcement (Admin → Tilkynning; ported from icelandicstore #200).
+  // The window is decided SERVER-side (utils/announcementWindow.js) and the
+  // copy is withheld from the public endpoint outside it. Title/message/link
+  // label are per-locale { en, is }; link_path is an optional in-site path.
+  // The API field is `message`, not ice's `body`: sanitizeBody treats a key
+  // named `body` as rich text and passes a nested { en, is } object through
+  // UNSTRIPPED, so a plain-text field must not carry that name.
+  announceEnabled:   'announcement.enabled',
+  announceStartsAt:  'announcement.starts_at',
+  announceEndsAt:    'announcement.ends_at',
+  announceTitle:     'announcement.title',
+  announceMessage:   'announcement.message',
+  announceLinkPath:  'announcement.link_path',
+  announceLinkLabel: 'announcement.link_label',
 };
+
+// ── Checkout / shipping / announcement bounds (harvest2-lane7a) ─────────────
+const LOCALES = ['en', 'is'];
+const FIELD_RULES = ['optional', 'required', 'hidden'];
+const PAUSED_MSG_MAX_LEN = 300;
+const ANNOUNCE_TITLE_MAX = 120;
+const ANNOUNCE_MESSAGE_MAX = 600;
+const ANNOUNCE_LABEL_MAX = 60;
+const ANNOUNCE_PATH_MAX = 200;
+const NOTIFY_MAX = 5;
+// Every ISK amount setting is bounded by the same ceiling (100 million kr.).
+const MAX_AMOUNT_ISK = 100000000;
+
+// Non-negative whole-number env value, else the fallback. The shipping
+// defaults read the env the price used to be frozen from, so an instance that
+// set SHIPPING_FLAT_RATE_ISK keeps that price until an admin saves one.
+function envAmount(name, fallback) {
+  const n = Number.parseInt(process.env[name] || '', 10);
+  return Number.isInteger(n) && n >= 0 ? n : fallback;
+}
 
 // Welcome-invite editable fields + per-locale limits. body allows the rich-text
 // allowlist (sanitizeBody), subject/heading are tag-stripped to plain text.
@@ -154,6 +211,29 @@ const DEFAULTS = {
   [KEYS.bkSellerIban]:           '',
   [KEYS.bkSellerBic]:            '',
   [KEYS.changeRequestsEnabled]: false,
+
+  // Checkout defaults reproduce today's checkout exactly: ordering open, no
+  // minimum, phone and note optional, company and kennitala not asked, and
+  // no alert list (ORDER_NOTIFY_EMAIL, when set, is the fallback).
+  [KEYS.checkoutOrderingPaused]:        false,
+  [KEYS.checkoutOrderingPausedMessage]: {},
+  [KEYS.checkoutMinOrderValueIsk]:      0,
+  [KEYS.checkoutOrderNotifyEmails]:     [],
+  [KEYS.checkoutFieldPhone]:            'optional',
+  [KEYS.checkoutFieldCompany]:          'hidden',
+  [KEYS.checkoutFieldKennitala]:        'hidden',
+  [KEYS.checkoutFieldNote]:             'optional',
+  // Env stays the fallback until an admin saves a value (DEPLOYMENT.md).
+  [KEYS.shippingFlatRateIsk]: envAmount('SHIPPING_FLAT_RATE_ISK', 2500),
+  [KEYS.shippingFreeOverIsk]: 0,
+  // Off, no window, no copy: a fresh instance never shows an announcement.
+  [KEYS.announceEnabled]:   false,
+  [KEYS.announceStartsAt]:  '',
+  [KEYS.announceEndsAt]:    '',
+  [KEYS.announceTitle]:     {},
+  [KEYS.announceMessage]:   {},
+  [KEYS.announceLinkPath]:  '',
+  [KEYS.announceLinkLabel]: {},
 };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -525,6 +605,199 @@ class Setting {
     return this.getBookkeepingSettings();
   }
 
+  // ── Checkout group (harvest2-lane7a; ported from icelandicstore #151) ──────
+  // Read side never throws: a hand-edited row coerces back to its default, so
+  // the order path and the public /shop/config can never be broken by data.
+  // `client` lets the order path read through its own connection.
+  static async getCheckoutSettings(client = db) {
+    const v = await this.getMany([
+      KEYS.checkoutOrderingPaused, KEYS.checkoutOrderingPausedMessage,
+      KEYS.checkoutMinOrderValueIsk, KEYS.checkoutOrderNotifyEmails,
+      KEYS.checkoutFieldPhone, KEYS.checkoutFieldCompany,
+      KEYS.checkoutFieldKennitala, KEYS.checkoutFieldNote,
+    ], client);
+    const rule = (val, key) => (FIELD_RULES.includes(val) ? val : DEFAULTS[key]);
+    return {
+      ordering_paused:         v[KEYS.checkoutOrderingPaused] === true,
+      ordering_paused_message: perLocale(v[KEYS.checkoutOrderingPausedMessage]),
+      min_order_value_isk:     readAmount(v[KEYS.checkoutMinOrderValueIsk], 0),
+      order_notify_emails:     Array.isArray(v[KEYS.checkoutOrderNotifyEmails])
+        ? v[KEYS.checkoutOrderNotifyEmails].filter(e => typeof e === 'string' && EMAIL_RE.test(e)).slice(0, NOTIFY_MAX)
+        : [],
+      fields: {
+        phone:     rule(v[KEYS.checkoutFieldPhone],     KEYS.checkoutFieldPhone),
+        company:   rule(v[KEYS.checkoutFieldCompany],   KEYS.checkoutFieldCompany),
+        kennitala: rule(v[KEYS.checkoutFieldKennitala], KEYS.checkoutFieldKennitala),
+        note:      rule(v[KEYS.checkoutFieldNote],      KEYS.checkoutFieldNote),
+      },
+    };
+  }
+
+  // Validate a checkout patch → the [key, value] writes it implies; persists
+  // nothing (so a PATCH carrying the checkout AND the shipping group is all or
+  // nothing — the controller collects both, then applyWrites once).
+  static async collectCheckoutWrites(patch = {}) {
+    if (patch == null || typeof patch !== 'object' || Array.isArray(patch)) {
+      throw new SettingValidationError('Invalid settings payload');
+    }
+    const has = k => Object.prototype.hasOwnProperty.call(patch, k);
+    const writes = [];
+    if (has('ordering_paused')) {
+      if (typeof patch.ordering_paused !== 'boolean') throw new SettingValidationError('ordering_paused must be true or false');
+      writes.push([KEYS.checkoutOrderingPaused, patch.ordering_paused]);
+    }
+    if (has('ordering_paused_message')) {
+      writes.push([KEYS.checkoutOrderingPausedMessage, mergePerLocale(
+        await this.get(KEYS.checkoutOrderingPausedMessage), patch.ordering_paused_message,
+        'ordering_paused_message', PAUSED_MSG_MAX_LEN)]);
+    }
+    if (has('min_order_value_isk')) {
+      writes.push([KEYS.checkoutMinOrderValueIsk, amountOrThrow('min_order_value_isk', patch.min_order_value_isk)]);
+    }
+    if (has('order_notify_emails')) {
+      writes.push([KEYS.checkoutOrderNotifyEmails, emailListOrThrow('order_notify_emails', patch.order_notify_emails)]);
+    }
+    if (has('fields')) {
+      const f = patch.fields;
+      if (f == null || typeof f !== 'object' || Array.isArray(f)) throw new SettingValidationError('fields must be an object');
+      const byField = {
+        phone: KEYS.checkoutFieldPhone, company: KEYS.checkoutFieldCompany,
+        kennitala: KEYS.checkoutFieldKennitala, note: KEYS.checkoutFieldNote,
+      };
+      for (const name of Object.keys(f)) {
+        if (!byField[name]) throw new SettingValidationError(`fields.${name} is not a checkout field`);
+        if (!FIELD_RULES.includes(f[name])) {
+          throw new SettingValidationError(`fields.${name} must be one of ${FIELD_RULES.join(', ')}`);
+        }
+        writes.push([byField[name], f[name]]);
+      }
+    }
+    return writes;
+  }
+
+  // ── Shipping group — the one source of the delivery price ──────────────────
+  static async getShippingSettings(client = db) {
+    const v = await this.getMany([KEYS.shippingFlatRateIsk, KEYS.shippingFreeOverIsk], client);
+    return {
+      flat_rate_isk: readAmount(v[KEYS.shippingFlatRateIsk], DEFAULTS[KEYS.shippingFlatRateIsk]),
+      free_over_isk: readAmount(v[KEYS.shippingFreeOverIsk], 0), // 0 = no threshold
+    };
+  }
+
+  static collectShippingWrites(patch = {}) {
+    if (patch == null || typeof patch !== 'object' || Array.isArray(patch)) {
+      throw new SettingValidationError('shipping must be an object');
+    }
+    const has = k => Object.prototype.hasOwnProperty.call(patch, k);
+    const writes = [];
+    if (has('flat_rate_isk')) writes.push([KEYS.shippingFlatRateIsk, amountOrThrow('shipping.flat_rate_isk', patch.flat_rate_isk)]);
+    if (has('free_over_isk')) writes.push([KEYS.shippingFreeOverIsk, amountOrThrow('shipping.free_over_isk', patch.free_over_isk)]);
+    return writes;
+  }
+
+  // ── Site announcement (harvest2-lane7a; ported from icelandicstore #200) ───
+  static async getAnnouncementSettings() {
+    const v = await this.getMany([
+      KEYS.announceEnabled, KEYS.announceStartsAt, KEYS.announceEndsAt,
+      KEYS.announceTitle, KEYS.announceMessage, KEYS.announceLinkPath, KEYS.announceLinkLabel,
+    ]);
+    const str = (val) => (typeof val === 'string' ? val : '');
+    return {
+      enabled:    v[KEYS.announceEnabled] === true,
+      starts_at:  str(v[KEYS.announceStartsAt]),
+      ends_at:    str(v[KEYS.announceEndsAt]),
+      title:      perLocale(v[KEYS.announceTitle]),
+      message:    perLocale(v[KEYS.announceMessage]),
+      link_path:  isSitePath(v[KEYS.announceLinkPath]) ? v[KEYS.announceLinkPath] : '',
+      link_label: perLocale(v[KEYS.announceLinkLabel]),
+    };
+  }
+
+  static async collectAnnouncementWrites(patch = {}) {
+    if (patch == null || typeof patch !== 'object' || Array.isArray(patch)) {
+      throw new SettingValidationError('Invalid settings payload');
+    }
+    const { parseLocalDateTime } = require('../utils/announcementWindow');
+    const has = k => Object.prototype.hasOwnProperty.call(patch, k);
+    const current = await this.getAnnouncementSettings();
+    const next = { ...current };
+    const writes = [];
+
+    if (has('enabled')) {
+      if (typeof patch.enabled !== 'boolean') throw new SettingValidationError('enabled must be true or false');
+      next.enabled = patch.enabled;
+      writes.push([KEYS.announceEnabled, patch.enabled]);
+    }
+    for (const [field, key] of [['starts_at', KEYS.announceStartsAt], ['ends_at', KEYS.announceEndsAt]]) {
+      if (!has(field)) continue;
+      const raw = patch[field];
+      if (typeof raw !== 'string') throw new SettingValidationError(`${field} must be a date and time (YYYY-MM-DDTHH:mm) or empty`);
+      const val = raw.trim();
+      if (val && parseLocalDateTime(val) === null) {
+        throw new SettingValidationError(`${field} must be a valid date and time (YYYY-MM-DDTHH:mm)`);
+      }
+      next[field] = val;
+      writes.push([key, val]);
+    }
+    // Half-open [start, end): an equal or inverted pair would never show, and
+    // the admin would blame the code. Checked against the stored side too.
+    if (next.starts_at && next.ends_at
+        && parseLocalDateTime(next.starts_at) >= parseLocalDateTime(next.ends_at)) {
+      throw new SettingValidationError('starts_at must be before ends_at');
+    }
+    for (const [field, key, max] of [
+      ['title', KEYS.announceTitle, ANNOUNCE_TITLE_MAX],
+      ['message', KEYS.announceMessage, ANNOUNCE_MESSAGE_MAX],
+      ['link_label', KEYS.announceLinkLabel, ANNOUNCE_LABEL_MAX],
+    ]) {
+      if (!has(field)) continue;
+      const merged = mergePerLocale(current[field], patch[field], field, max);
+      next[field] = perLocale(merged);
+      writes.push([key, merged]);
+    }
+    if (has('link_path')) {
+      const p = typeof patch.link_path === 'string' ? patch.link_path.trim() : null;
+      if (p === null || (p !== '' && !isSitePath(p))) {
+        throw new SettingValidationError('link_path must be a path on this site, starting with / (e.g. /hafa-samband)');
+      }
+      next.link_path = p;
+      writes.push([KEYS.announceLinkPath, p]);
+    }
+    // Switched on with nothing to say would open an empty dialog.
+    if (next.enabled && !LOCALES.some(l => next.title[l])) {
+      throw new SettingValidationError('title is required (in at least one language) to switch the announcement on');
+    }
+    return writes;
+  }
+
+  static async updateAnnouncementSettings(patch = {}) {
+    await this.applyWrites(await this.collectAnnouncementWrites(patch));
+    return this.getAnnouncementSettings();
+  }
+
+  // Persist a validated write list in ONE transaction: a multi-key save either
+  // lands whole or not at all (the ordering pause never half-applies).
+  static async applyWrites(writes) {
+    if (!writes.length) return;
+    const client = await db.pool.connect();
+    try {
+      await client.query('BEGIN');
+      for (const [key, value] of writes) {
+        await client.query(
+          `INSERT INTO app_settings (key, value) VALUES ($1, $2::jsonb)
+           ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+          [key, JSON.stringify(value)]
+        );
+      }
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
   // ── Change-request widget switch (Admin → Feedback) ────────────────────────
   static async getChangeRequestsEnabled() {
     return (await this.get(KEYS.changeRequestsEnabled)) === true;
@@ -551,7 +824,81 @@ function isValidKennitala(digits) {
   return check === Number(digits[8]);
 }
 
+// ── Helpers for the checkout / shipping / announcement groups ────────────────
+
+// { en, is } of strings from whatever is stored ('' where absent).
+function perLocale(raw) {
+  const out = {};
+  for (const loc of LOCALES) {
+    out[loc] = (raw && typeof raw === 'object' && typeof raw[loc] === 'string') ? raw[loc] : '';
+  }
+  return out;
+}
+
+// Merge an incoming per-locale patch onto the stored object: a locale left out
+// keeps its text, '' clears it. Plain text, capped.
+function mergePerLocale(current, incoming, field, maxLen) {
+  if (incoming == null || typeof incoming !== 'object' || Array.isArray(incoming)) {
+    throw new SettingValidationError(`${field} must be an object of per-language texts ({ en, is })`);
+  }
+  const merged = perLocale(current);
+  for (const loc of Object.keys(incoming)) {
+    if (!LOCALES.includes(loc)) throw new SettingValidationError(`${field}.${loc} is not a supported language`);
+    const val = incoming[loc];
+    if (typeof val !== 'string') throw new SettingValidationError(`${field}.${loc} must be text`);
+    if (val.length > maxLen) throw new SettingValidationError(`${field}.${loc} is too long (max ${maxLen} characters)`);
+    merged[loc] = val.trim();
+  }
+  return merged;
+}
+
+// Read side: a whole ISK amount in range, else the fallback.
+function readAmount(val, fallback) {
+  return Number.isInteger(val) && val >= 0 && val <= MAX_AMOUNT_ISK ? val : fallback;
+}
+
+// Write side: a JSON number or a digits-only string, whole, 0..MAX. Strict on
+// purpose — Number(null), Number('') and Number(false) are all 0, and a
+// minimum or a shipping price silently reset to 0 is a money bug.
+function amountOrThrow(field, val) {
+  const n = typeof val === 'number' ? val
+    : (typeof val === 'string' && /^\d{1,9}$/.test(val.trim()) ? Number(val.trim()) : NaN);
+  if (!Number.isInteger(n) || n < 0 || n > MAX_AMOUNT_ISK) {
+    throw new SettingValidationError(`${field} must be a whole number of krónur between 0 and ${MAX_AMOUNT_ISK}`);
+  }
+  return n;
+}
+
+// The owner alert list: an array of addresses, or one string separated by
+// commas, semicolons or whitespace. Lower-cased, de-duplicated, each checked,
+// at most NOTIFY_MAX. [] (or '') clears it.
+function emailListOrThrow(field, val) {
+  let items;
+  if (Array.isArray(val)) items = val;
+  else if (typeof val === 'string') items = val.split(/[\s,;]+/);
+  else throw new SettingValidationError(`${field} must be a list of email addresses`);
+  const out = [];
+  for (const raw of items) {
+    if (typeof raw !== 'string') throw new SettingValidationError(`${field} must be a list of email addresses`);
+    const e = raw.trim().toLowerCase();
+    if (!e) continue;
+    if (e.length > 254 || !EMAIL_RE.test(e)) throw new SettingValidationError(`${field}: "${e.slice(0, 60)}" is not a valid email address`);
+    if (!out.includes(e)) out.push(e);
+  }
+  if (out.length > NOTIFY_MAX) throw new SettingValidationError(`${field} takes at most ${NOTIFY_MAX} addresses`);
+  return out;
+}
+
+// An in-site path the announcement may link to: starts with ONE '/', no
+// scheme, no backslash, no whitespace. The client prefixes the locale.
+function isSitePath(p) {
+  return typeof p === 'string' && p.length <= ANNOUNCE_PATH_MAX
+    && /^\/(?![/\\])[A-Za-z0-9\-._~/%?=&#]*$/.test(p);
+}
+
 Setting.SettingValidationError = SettingValidationError;
+Setting.FIELD_RULES = FIELD_RULES;
+Setting.MAX_AMOUNT_ISK = MAX_AMOUNT_ISK;
 Setting.KEYS = KEYS;
 Setting.isValidKennitala = isValidKennitala;
 Setting.DEFAULTS = DEFAULTS;
