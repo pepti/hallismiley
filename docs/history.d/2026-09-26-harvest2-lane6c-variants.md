@@ -214,6 +214,25 @@ they clear AA on every theme (lowest Bjart's brightness(1.15) hover, 5.12 : 1),
 so nothing moved; `themeTokenContrast.test.js` now pins those pairs and those
 rules, and pins the inline-edit controls to `--on-accent` / `--accent-hover`.
 
+### After merging master again (lane 6b, product merge, 120)
+119 sits before 120. The merge now knows 119:
+- an archived variant is never a merge unit (it is inactive): it stays
+  archived on its source, never moved or switched back on; the merge engine
+  reads `archived_at` and the planner no longer refuses a moved variant that
+  lands on an ARCHIVED survivor row's combination
+  (`attribute_collision_inactive` now covers switched-off, not archived, rows —
+  the unique index is live-only); a new variant's SKU check ignores archived
+  SKUs; the Duplicates screen's "inactive variants" count leaves them out;
+- `product_images.color` travels with the image (the `images` policy moves the
+  row);
+- 119 adds no foreign key, so `repointSpec.js` needs no new rule;
+- a merged-away product is frozen for the variant writers: lane 6b's route
+  guard (`router.use('/products/:id', …refuseMergedProduct)`) already covers
+  POST/PATCH/DELETE variants, `/variants/bulk` and the image colour PATCH, and
+  `services/variantAdd.js` (the MCP `add_variants` path) refuses it up front and
+  again under its product lock (409 `product_merged` + `movedTo` on the route,
+  a clear MCP error). `Product.findForImport` (6b's merged-aware version) reads
+  live variants only.
+Pinned in `tests/integration/productMerge.test.js`.
+
 ### Still owed
-- Lane 6b (merges): the merged-product refusal in `variantAdd` and on the variant
-  routes (ice's `refuseMergedProduct`).

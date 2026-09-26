@@ -270,6 +270,23 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
   - (c) At ice's next graft, engine 118 runs on ice and adds only
     `goods_receipt_lines.sku` + `inventory_adjustments.batch_id`/`goods_receipt_id`
     (its CREATEs are no-ops against ice 080) — no alias.
+- Harvest 2 lane 6b (2026-09-26, branch `harvest2/lane6b-merge-ai`, not merged,
+  [harvest2-lane6b-2026-09-26](docs/history.d/2026-09-26-harvest2-lane6b-merge-ai.md#harvest2-lane6b-2026-09-26)):
+  Products → Duplicates + a one-transaction product merge (engine migration
+  `120_product_merge`, provisional number — renumber at merge; ice aliases it
+  to its `112_product_merges`), and the AI PDF reader in the product import,
+  **dark**. Open: (a) **for Halli: turning "Read with AI" on
+  (`PRODUCT_IMPORT_AI_ENABLED=true` + Claude credentials) costs money per page
+  read** — the day caps in `docs/DEPLOYMENT.md` bound it, per container; (b) the
+  new Duplicates / AI strings are DRAFT (listed in the fragment); (c) AI lines
+  without sizes/colours stay unmatched — the engine import has no single-row
+  create path (ice's is not ported); (d) master (lane 6a's `118_goods_receipts`)
+  is merged into the branch and its four product/variant foreign keys are in
+  `repointSpec.js` (draft receipts locked like orders); lane 6c must add its own,
+  or merging switches itself off (`schema_drift`) and `productMerge.test.js` fails;
+  (e) the merge itself is **admin-only** (default taken: tighten, never loosen —
+  Halli may loosen it to the `products` view); the suggestions and the preview
+  stay on the `products` view.
 - Harvest 2 lane 6c (2026-09-26, branch `harvest2/lane6c-variants`,
   [harvest2-lane6c-2026-09-26](docs/history.d/2026-09-26-harvest2-lane6c-variants.md#harvest2-lane6c-2026-09-26)):
   the variant grid (add / delete / archive, colour → size order, header sort,
@@ -280,8 +297,9 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
   `119_product_image_color` (renumber at merge). Open: (a) **the new
   `adminProducts.*`, `variants.*`, `shop.sortByCol`, `errors.variantAdd.*`,
   `validation.variant.*` strings are DRAFT** (Halli; listed in the fragment);
-  (b) when lane 6b (merges) lands, `variantAdd` and the variant routes need
-  its merged-product refusal; (c) settled 2026-09-26: the other `--bg-nav`
+  (b) settled 2026-09-26 after merging lane 6b: merged products refuse
+  variant writes (route guard + `variantAdd`) and merges keep archived
+  variants archived; (c) settled 2026-09-26: the other `--bg-nav`
   labels on `--gold` fills clear AA on every theme and are now pinned by the
   contrast test; lane 6a's stock code skips archived variants.
 - Upward harvest from icelandicstore `4694289`, lane 1 (chunks A then B, branch

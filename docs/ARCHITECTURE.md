@@ -1115,17 +1115,17 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | | |
 |---|---|
 | Routes | `server/routes/shopRoutes.js` → `/api/v1/shop` · `adminShopRoutes.js` → `/api/v1/admin/shop` · `adminDiscountRoutes.js` → `/api/v1/admin/discounts` · `adminBinsRoutes.js` → `/api/v1/admin/bins` · `adminInventoryRoutes.js` → `/api/v1/admin/inventory` (+ `GET /api/v1/admin/shop/reports/inventory` in `adminShopRoutes.js`) · `adminReceivingRoutes.js` → `/api/v1/admin/receiving` |
-| Controllers | `server/controllers/shopController.js`, `adminShopController.js`, `adminDiscountController.js`, `adminBinsController.js`, `adminInventoryController.js`, `adminReceivingController.js` |
-| Models | `server/models/Product.js`, `ProductVariant.js`, `Collection.js`, `Order.js`, `Discount.js`, `Bin.js`, `Inventory.js` (On hand / Committed / Available, the one audited stock writer, the lock order, `applyBatch`), `GoodsReceipt.js` |
-| Services | `server/services/stripeService.js`, `discountEngine.js`, `orderExport.js` (the orders list as .xlsx); `server/services/productImport/parseFile.js`, `headerMap.js`, `parseXlsx.js`, `parsePdf.js`, `headerHints.js`, `tradeLabels.js`, `variantCell.js`, `variantGroups.js` (the one reader for every product file, harvested from icelandicstore — goods receiving reads the supplier file through it too); `server/services/pdfService.js` (the goods receipt PDF; the delivery note as a pick list), `variantAdd.js` (many variants of one product, all or none — the bulk route and MCP `add_variants`), `deliveryNote.js` (the delivery note's lines: live SKU/bin, size label, a picture each, at most four decodes at once); `server/config/stripe.js`, `shipping.js`; `server/utils/qr.js`, `variantAxis.js`, `inventoryStatus.js` (Inventory Watch buckets), `colorMatch.js` (which photo a variant colour shows — matched here only), `variantLabel.js` (an order line's size label), `skuCompare.js` (natural order for SKUs and bins) |
-| Views | `public/js/views/ShopView.js`, `ProductView.js`, `CartView.js`, `CheckoutView.js`, `CheckoutSuccessView.js`, `CheckoutCancelView.js`, `OrderHistoryView.js`, `AdminProductsView.js`, `AdminOrdersView.js`, `AdminOrderDetailView.js`, `AdminCollectionsView.js`, `AdminDiscountsView.js`, `AdminBinsView.js`, `AdminSalesView.js`, `AdminInventoryView.js`, `AdminStockCountView.js`, `AdminReceivingView.js`, `AdminReceivingDetailView.js` |
-| Components | `public/js/components/ProductCard.js`, `ShopFilters.js`, `CartIcon.js`, `CurrencySelector.js`, `BarcodeScanner.js`, `VariantGrid.js` (the product editor's variant table: add, edit, delete, arrange, "+ Add a colour") |
-| Client | `public/js/services/cart.js`, `adminProducts.js`, `adminOrders.js`, `adminCollections.js`, `adminDiscounts.js`, `adminBins.js`, `adminInventory.js`, `adminReceiving.js`; `public/js/utils/availability.js` (the basket's sold-out gate), `imageUrl.js` (the `.thumb.webp` URL), `colorLabels.js` (colour names + picker labels as locale keys), `duplicateNames.js` (the SKU chip on a shared name), `vat.js` (the per-rate VAT display — twin of `server/utils/vat.js` + `invoiceService.buildLines`), `stockUnits.js` (the stock screens' shared naming, reasons and count check); `public/js/utils/variantAxis.js` (twin of the server's), `colorMatch.js` (display twin: swatch fill, labels, the admin photo-colour picker — never the photo match), `variantArrange.js` (colour → size, XS → 2XL), `variantSort.js` (header-click sorting), `variantAddValue.js` (the "+ Add a colour" planner and paste reader) |
+| Controllers | `server/controllers/shopController.js`, `adminShopController.js`, `adminProductMergeController.js` (Products → Duplicates + the merge), `adminProductImportAiController.js` ("Read with AI", dark), `adminDiscountController.js`, `adminBinsController.js`, `adminInventoryController.js`, `adminReceivingController.js` |
+| Models | `server/models/Product.js`, `ProductVariant.js`, `Collection.js`, `Order.js`, `Discount.js`, `Bin.js`, `Inventory.js` (On hand / Committed / Available, the one audited stock writer, the lock order, `applyBatch`), `GoodsReceipt.js`, `ProductMerge.js` (duplicate suggestions, `movedTo`, `resolveLive`) |
+| Services | `server/services/stripeService.js`, `discountEngine.js`, `orderExport.js` (the orders list as .xlsx); `server/services/productImport/parseFile.js`, `headerMap.js`, `parseXlsx.js`, `parsePdf.js`, `headerHints.js`, `tradeLabels.js`, `variantCell.js`, `variantGroups.js` (the one reader for every product file, harvested from icelandicstore — goods receiving reads the supplier file through it too), `aiExtract.js` + `aiLimits.js` (the AI PDF reader and its cost gate, dark by default); `server/services/pdfService.js` (the goods receipt PDF; the delivery note as a pick list), `variantAdd.js` (many variants of one product, all or none — the bulk route and MCP `add_variants`), `deliveryNote.js` (the delivery note's lines: live SKU/bin, size label, a picture each, at most four decodes at once); `server/services/productMerge/engine.js`, `planner.js`, `repointSpec.js` (the one-transaction product merge); `server/config/stripe.js`, `shipping.js`; `server/utils/qr.js`, `variantAxis.js`, `productDedupe.js` (the duplicate signals, pure), `inventoryStatus.js` (Inventory Watch buckets), `colorMatch.js` (which photo a variant colour shows — matched here only), `variantLabel.js` (an order line's size label), `skuCompare.js` (natural order for SKUs and bins) |
+| Views | `public/js/views/ShopView.js`, `ProductView.js`, `CartView.js`, `CheckoutView.js`, `CheckoutSuccessView.js`, `CheckoutCancelView.js`, `OrderHistoryView.js`, `AdminProductsView.js`, `AdminProductDuplicatesView.js` (Products → Duplicates: suggestions, preview, merge), `AdminOrdersView.js`, `AdminOrderDetailView.js`, `AdminCollectionsView.js`, `AdminDiscountsView.js`, `AdminBinsView.js`, `AdminSalesView.js`, `AdminInventoryView.js`, `AdminStockCountView.js`, `AdminReceivingView.js`, `AdminReceivingDetailView.js` |
+| Components | `public/js/components/ProductCard.js`, `ShopFilters.js`, `CartIcon.js`, `CurrencySelector.js`, `BarcodeScanner.js`, `VariantGrid.js` (the product editor's variant table: add, edit, delete, arrange, "+ Add a colour"), `ProductImportAi.js` (the import modal's AI step; loads the vendored pdf-lib 1.17.1, MIT, a verbatim copy of the exact-pinned devDependency — `pdfLibVendor.test.js`) |
+| Client | `public/js/services/cart.js`, `adminProducts.js`, `adminOrders.js`, `adminCollections.js`, `adminDiscounts.js`, `adminBins.js`, `adminInventory.js`, `adminReceiving.js`; `public/js/utils/availability.js` (the basket's sold-out gate), `imageUrl.js` (the `.thumb.webp` URL), `colorLabels.js` (colour names + picker labels as locale keys), `duplicateNames.js` (the SKU chip on a shared name), `vat.js` (the per-rate VAT display — twin of `server/utils/vat.js` + `invoiceService.buildLines`), `aiPdfChunks.js` (the AI read's chunk loop), `importMarkup.js` (cost + markup → ISK, rate → EUR), `stockUnits.js` (the stock screens' shared naming, reasons and count check); `public/js/utils/variantAxis.js` (twin of the server's), `colorMatch.js` (display twin: swatch fill, labels, the admin photo-colour picker — never the photo match), `variantArrange.js` (colour → size, XS → 2XL), `variantSort.js` (header-click sorting), `variantAddValue.js` (the "+ Add a colour" planner and paste reader) |
 | Scripts | `server/scripts/seed-shop.js`, `import-products-csv.js` |
-| CSS | `public/css/shop.css`, `admin-products.css`, `admin-orders.css`, `admin-collections.css`, `admin-discounts.css`, `admin-bins.css`, `admin-sales.css`, `barcode-scanner.css`, `admin-stock.css` |
-| Jest | `tests/integration/shop.test.js`, `discounts.test.js`, `adminOrderBulk.test.js`, `adminProductImportExport.test.js`, `sections.test.js`, `inventoryThreeNumbers.test.js`, `adminProductImportFile.test.js`, `adminOrderExport.test.js`, `adminInventory.test.js`, `goodsReceipts.test.js`; `tests/unit/discountEngine.test.js`, `shopFilters.test.js`, `bins-grid.test.js`, `qr.test.js`, `availability.client.test.js`, `productImportParseFile.test.js`, `productImportVariantCell.test.js`, `productImportVariantGroups.test.js`, `parsePdfWorker.test.js`, `imageUrl.test.js` (fixture `tests/fixtures/pdfFixture.js`), `colorLabels.client.test.js`, `duplicateNames.client.test.js`, `vatDisplay.client.test.js`, `cartPriceSync.client.test.js`, `inventoryStatus.test.js`, `colorMatch.test.js`, `variantArrange.client.test.js`, `variantSort.client.test.js`, `variantAddValue.client.test.js`, `variantAxisParity.test.js`, `variantLabel.test.js`, `skuCompare.test.js`, `deliveryNotePdf.test.js`; `tests/integration/adminShopVariants.test.js`, `archivedVariantStock.test.js` |
-| e2e | `e2e/admin-product-group.spec.js`, `cart-sold-out.spec.js`, `admin-stock.spec.js`, `admin-product-variants.spec.js`, `shop-colour-swatch.spec.js` |
-| Migrations | 022–025, 045, 048, 049, 050, 054, 055, 057, 074, 112, 113, 115 (`orders.notes`, the checkout note), 118 (goods receipts, the stock batch handle), 119 (`product_images.color`; `product_variants.archived_at` and the live-only SKU / option unique rules) |
+| CSS | `public/css/shop.css`, `admin-products.css`, `admin-product-merge.css`, `admin-product-import-ai.css`, `admin-orders.css`, `admin-collections.css`, `admin-discounts.css`, `admin-bins.css`, `admin-sales.css`, `barcode-scanner.css`, `admin-stock.css` |
+| Jest | `tests/integration/shop.test.js`, `discounts.test.js`, `adminOrderBulk.test.js`, `adminProductImportExport.test.js`, `sections.test.js`, `inventoryThreeNumbers.test.js`, `adminProductImportFile.test.js`, `adminOrderExport.test.js`, `productMerge.test.js`, `adminProductImportAi.test.js`, `adminInventory.test.js`, `goodsReceipts.test.js`; `tests/unit/discountEngine.test.js`, `productDedupe.test.js`, `productMergePlanner.test.js`, `productImportAiExtract.test.js`, `aiPdfChunks.client.test.js`, `importMarkup.client.test.js`, `pdfLibVendor.test.js`, `shopFilters.test.js`, `bins-grid.test.js`, `qr.test.js`, `availability.client.test.js`, `productImportParseFile.test.js`, `productImportVariantCell.test.js`, `productImportVariantGroups.test.js`, `parsePdfWorker.test.js`, `imageUrl.test.js` (fixture `tests/fixtures/pdfFixture.js`), `colorLabels.client.test.js`, `duplicateNames.client.test.js`, `vatDisplay.client.test.js`, `cartPriceSync.client.test.js`, `inventoryStatus.test.js`, `colorMatch.test.js`, `variantArrange.client.test.js`, `variantSort.client.test.js`, `variantAddValue.client.test.js`, `variantAxisParity.test.js`, `variantLabel.test.js`, `skuCompare.test.js`, `deliveryNotePdf.test.js`; `tests/integration/adminShopVariants.test.js`, `archivedVariantStock.test.js` |
+| e2e | `e2e/admin-product-group.spec.js`, `cart-sold-out.spec.js`, `admin-stock.spec.js`, `admin-product-duplicates.spec.js`, `admin-product-variants.spec.js`, `shop-colour-swatch.spec.js` |
+| Migrations | 022–025, 045, 048, 049, 050, 054, 055, 057, 074, 112, 113, 115 (`orders.notes`, the checkout note), 118 (goods receipts, the stock batch handle), 119 (`product_images.color`; `product_variants.archived_at` and the live-only SKU / option unique rules), 120 (`products.merged_into_id` + `product_merges`, the product merge) |
 | Features | [cart-checkout](../features/cart-checkout.md), [discounts](../features/discounts.md), [orders](../features/orders.md), [shop-catalog](../features/shop-catalog.md), [goods-receiving](../features/goods-receiving.md) |
 | Feature doc | — (retail is hidden here; ENHANCEMENTS #22, #23, #25 landed by the 2026-09-24 ice harvest, #24 in part; #26 remains) |
 
@@ -1210,7 +1210,11 @@ company/                  gitignored: plans, decisions, logs, market-research st
   `add_variants`; every problem comes back in one answer, SKUs and barcodes
   are checked case-blind against the live catalogue as either code, the batch
   is re-checked under advisory locks inside the transaction, stock starts at 0.
-  An archived variant's SKU is free on both paths.
+  An archived variant's SKU is free on both paths. A merged-away product (120)
+  refuses both: the route guard, and `variantAdd` itself up front and under its
+  product lock (the MCP path). In a merge an archived variant is never a unit —
+  it stays archived on its source — and does not block its combination on the
+  survivor; a photo's `color` travels with the photo.
 - **Which photo a colour shows is decided on the server only**
   (`utils/colorMatch.js` → `color_images` on the public product; exact, then
   unambiguous token containment): the browser consumes the map and never
@@ -1236,6 +1240,48 @@ company/                  gitignored: plans, decisions, logs, market-research st
   `--warning` ink on `--warning-dim`; no status pill carries a colour literal.
 - Bulk product edit (`POST /products/bulk`) sets type, subcategory, VAT rate,
   status and bin only — never name, price or stock.
+- **Merging duplicate products is ONE transaction** ([harvest2-lane6b](history.d/2026-09-26-harvest2-lane6b-merge-ai.md#harvest2-lane6b-2026-09-26),
+  migration 120; `services/productMerge/engine.js`): the suggestions and the
+  preview for staff with the `products` view, the merge itself ADMIN-ONLY
+  (`hasRole(req.user, 'admin')`, else 403 `merge_admin_only` — it cannot be
+  undone; Halli may loosen), CSRF, preview → apply with the preview's `expect` token (any change to a
+  row the merge reads → 409 `stale_preview`). Locks follow the stock lock order
+  — the orders that reference the products FOR UPDATE, then parent products,
+  variants, level products FOR UPDATE, each sorted — under a 3 s
+  `lock_timeout` (busy → 409 `merge_busy`). FOR UPDATE, not NO KEY UPDATE: it
+  blocks a checkout's order-line KEY SHARE, and `Order.createWithItems`
+  refuses a line on a merged product afterwards (409 `PRODUCT_MERGED`). Stock
+  moves ONLY through one `Inventory.applyLines` (`merge_out`/`merge_in`, net
+  zero; a zero-delta `merge` row per moved variant). Every FK to
+  products/variants has a policy in `repointSpec.js` and `assertCovers` checks
+  it against `pg_constraint` before any write — a new product FK with no
+  policy switches merging off (503 `schema_drift`); `productMerge.test.js`
+  fails CI until it gets one. Order lines follow their unit (their snapshots
+  keep what the order said); ISSUED invoice lines never change (only drafts
+  follow — the books' trigger would refuse it anyway); inventory history stays
+  where it happened. Nothing is deleted: the merged product becomes inactive
+  with `merged_into_id` and cleared codes, is hidden from every list, frozen
+  for writes (409 `product_merged` + `movedTo`), and its shop API and SSR URLs
+  answer **301 `no-store`** to the survivor (≤ 5 hops, only to a live product).
+  A retired SKU resolves to the live row it went to (import match, scanner).
+  There is no un-merge; `product_merges` is the record.
+- **"Read with AI" ships DARK and is a cost gate first** ([harvest2-lane6b](history.d/2026-09-26-harvest2-lane6b-merge-ai.md#harvest2-lane6b-2026-09-26)):
+  `PRODUCT_IMPORT_AI_ENABLED=true` AND Claude credentials, else `/ai-config`
+  says `enabled: false` and `/ai-extract` is 404. Route order on the paid call:
+  CSRF → flag (404) → today's page budget (429 `pageBudget`) → multer — a dark
+  or spent endpoint never buffers an upload; then pages counted server-side
+  (422 past the per-request or per-file cap), an `aiGate` slot within the
+  import's sub-cap (429 `AI_BUSY`), the charge, the read (502 refunds its
+  pages; a client that leaves → 499, never a 5xx). Budgets (`aiLimits.js`,
+  in memory per container): per request, per file, per user per UTC day, per
+  instance per UTC day. The model id is `PRODUCT_IMPORT_AI_MODEL` or the
+  engine's configured model (`translator.getModel`) — never a literal. The
+  model is a reader: a code or price the PDF's text layer does not print is
+  blanked and flagged, a cost is never a selling price (the preview's markup
+  and ISK-per-EUR rate price AI rows on the admin's say-so, from the rows as
+  read), nothing of our catalogue is sent, and an `__ai` row may only CREATE
+  through the unchanged preview → apply (`aiCreateOnly`). Logs carry counts,
+  tokens and timings, never rows.
 - **One reader for every product file** ([harvest-ice-d-2026-09-24](HISTORY.md#harvest-ice-d-2026-09-24)): `POST /products/import/parse-file`
   (multipart, memory-only, 10 MB, CSRF) reads the export's own CSV (csv-parse —
   a quoted line break survives), a supplier .xlsx (exceljs) or a generated PDF
@@ -1305,7 +1351,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
   insert. No stock writer locks a receipt row, so the two orders cannot cycle. Receiving scans have their own per-user limiter (a pallet is
   hundreds of POSTs); every other write is under `writeLimiter`.
 
-**History**: [harvest-2](HISTORY.md#harvest-2) · [ui-kit](HISTORY.md#ui-kit) · [ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23) · [harvest-ice-c-2026-09-24](HISTORY.md#harvest-ice-c-2026-09-24) · [harvest-ice-d-2026-09-24](HISTORY.md#harvest-ice-d-2026-09-24) · [harvest2-lane6a-2026-09-26](history.d/2026-09-26-harvest2-lane6a-stock.md#harvest2-lane6a-2026-09-26) · [harvest2-lane6c-2026-09-26](history.d/2026-09-26-harvest2-lane6c-variants.md#harvest2-lane6c-2026-09-26)
+**History**: [harvest-2](HISTORY.md#harvest-2) · [ui-kit](HISTORY.md#ui-kit) · [ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23) · [harvest-ice-c-2026-09-24](HISTORY.md#harvest-ice-c-2026-09-24) · [harvest-ice-d-2026-09-24](HISTORY.md#harvest-ice-d-2026-09-24) · [harvest2-lane6a-2026-09-26](history.d/2026-09-26-harvest2-lane6a-stock.md#harvest2-lane6a-2026-09-26) · [harvest2-lane6b](history.d/2026-09-26-harvest2-lane6b-merge-ai.md#harvest2-lane6b-2026-09-26) · [harvest2-lane6c-2026-09-26](history.d/2026-09-26-harvest2-lane6c-variants.md#harvest2-lane6c-2026-09-26)
 
 ## 12. News, projects, party, bio (hidden portfolio)
 

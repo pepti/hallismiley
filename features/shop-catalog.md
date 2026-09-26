@@ -15,12 +15,31 @@ paths:
   - server/models/Collection.js
   - server/models/Bin.js
   - server/models/Inventory.js
+  - server/models/ProductMerge.js
+  - server/controllers/adminProductMergeController.js
+  - server/controllers/adminProductImportAiController.js
+  - public/js/components/ProductImportAi.js
+  - public/js/utils/aiPdfChunks.js
+  - public/js/utils/importMarkup.js
+  - public/css/admin-product-import-ai.css
+  - tests/integration/adminProductImportAi.test.js
+  - tests/unit/productImportAiExtract.test.js
+  - tests/unit/aiPdfChunks.client.test.js
+  - tests/unit/importMarkup.client.test.js
+  - tests/unit/pdfLibVendor.test.js
+  - server/services/productMerge/**
+  - server/utils/productDedupe.js
+  - tests/integration/productMerge.test.js
+  - tests/unit/productDedupe.test.js
+  - tests/unit/productMergePlanner.test.js
   - server/routes/adminInventoryRoutes.js
   - server/controllers/adminInventoryController.js
   - server/utils/inventoryStatus.js
   - server/services/productImport/**
   - server/utils/variantAxis.js
   - public/js/views/AdminProductsView.js
+  - public/js/views/AdminProductDuplicatesView.js
+  - public/css/admin-product-merge.css
   - public/js/views/AdminCollectionsView.js
   - public/js/views/AdminBinsView.js
   - public/js/views/AdminInventoryView.js
@@ -70,10 +89,11 @@ paths:
   - e2e/admin-product-variants.spec.js
   - e2e/shop-colour-swatch.spec.js
   - e2e/admin-stock.spec.js
-migrations: [022_ecommerce, 023_product_taxonomy, 024_product_variants, 025_shop_content, 045_shop_sections, 048_product_codes, 049_collections, 057_product_bin, 074_product_vat_rate, 112_inventory_adjustments, 113_variant_barcode, 119_product_image_color]
+  - e2e/admin-product-duplicates.spec.js
+migrations: [022_ecommerce, 023_product_taxonomy, 024_product_variants, 025_shop_content, 045_shop_sections, 048_product_codes, 049_collections, 057_product_bin, 074_product_vat_rate, 112_inventory_adjustments, 113_variant_barcode, 119_product_image_color, 120_product_merge]
 since: 2026-08-09
 origin: null
-history: [harvest-2, ui-kit, harvest-ice-c-2026-09-24, harvest-ice-d-2026-09-24, harvest2-lane6a-2026-09-26, harvest2-lane6c-2026-09-26]
+history: [harvest-2, ui-kit, harvest-ice-c-2026-09-24, harvest-ice-d-2026-09-24, harvest2-lane6a-2026-09-26, harvest2-lane6b-2026-09-26, harvest2-lane6c-2026-09-26]
 ---
 
 Products, variants, taxonomy, product codes, collections, stock bins and the barcode scanner: the admin side of the shop (`/api/v1/admin/shop`, `/api/v1/admin/bins`) with CSV import/export. Hidden here (every line in `HIDDEN_ADMIN_VIEWS`); fully live in a retail downstream.
@@ -88,4 +108,6 @@ Products, variants, taxonomy, product codes, collections, stock bins and the bar
 - Every product file (CSV, .xlsx, PDF) is read on the SERVER by `services/productImport` (`POST /products/import/parse-file`, memory-only, 10 MB); SKU then Barcode is the match key, an ambiguous or duplicate code is refused, an order quantity is never stock; rows with a Variant cell create one Draft product with its variants, whole or not at all, only with `create: true` ([history](../docs/HISTORY.md#harvest-ice-d-2026-09-24)).
 - Variants (harvest 2 lane 6c, [history](../docs/history.d/2026-09-26-harvest2-lane6c-variants.md#harvest2-lane6c-2026-09-26)): the editor grid is `components/VariantGrid.js` (add, edit, delete, colour → size order, header sorting, "+ Add a colour"); DELETE deletes a variant nothing names and archives one an order or the stock history names — an archived row frees its SKU and option slot (migration 119) and leaves every list; `POST /products/:id/variants/bulk` adds many whole or not at all (`services/variantAdd.js`, shared with MCP `add_variants`).
 - Which photo a colour shows is matched on the server only (`utils/colorMatch.js` → `color_images`); the admin tags a photo with one of the product's active colours (`product_images.color`, 119).
+- Duplicate products merge in ONE transaction (migration 120): stock only through one `Inventory.applyLines` (`merge_out`/`merge_in`), every product FK named in `repointSpec.js` (a new one switches merging off), issued invoice lines never change, the merged product is inactive + `merged_into_id`, frozen, and its URLs 301 to the survivor ([history](../docs/history.d/2026-09-26-harvest2-lane6b-merge-ai.md#harvest2-lane6b-2026-09-26)).
+- "Read with AI" (a free-form supplier PDF → import rows) SHIPS DARK: `PRODUCT_IMPORT_AI_ENABLED=true` + Claude credentials. Every page is billed; the cost gate is `aiLimits.js` (pages per request / per file / per user per day / per instance per day, 2 of the `aiGate` slots), checked before the upload is read. The model is a reader: codes and prices must be printed in the PDF's text layer, a cost never becomes a price without the admin's markup, and an AI row may only CREATE through the unchanged preview → apply (`aiCreateOnly`) ([history](../docs/history.d/2026-09-26-harvest2-lane6b-merge-ai.md#harvest2-lane6b-2026-09-26)).
 - Full rules: [../docs/ARCHITECTURE.md#11-shop--cart-checkout-orders-products-collections-bins-discounts-hidden-surface](../docs/ARCHITECTURE.md#11-shop--cart-checkout-orders-products-collections-bins-discounts-hidden-surface).
