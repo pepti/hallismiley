@@ -3,27 +3,27 @@
 // schema, adds staff, prospects, a customer, sessions, uploads and sample data,
 // resets, then simulates an interrupted reset and the boot recovery, and
 // reports. See tests/fixtures/demoResetRun.js for the setup.
+//
+// The database is this worker's extra (`createExtraTestDb`, tests/workerDb.js):
+// `<product>_<branch>_w<N>_demo_test`, labelled and owned by the run, so the
+// run's teardown and the next run's sweep drop it when this suite dies before
+// afterAll (until 2026-09-26 it was `demo_reset_<pid>_test`, which nothing
+// owned). The suffix is exactly `demo`: the reset's guard wants "demo" as a
+// WORD in the name (`(^|[_-])demo([_-]|$)`), so `demoreset` would be refused.
 const { spawnSync } = require('child_process');
 const path = require('path');
-const { Client } = require('pg');
-
-const base = new URL(process.env.DATABASE_URL);
-const DB = `demo_reset_${process.pid}_test`;
-const admin = () => { const u = new URL(base); u.pathname = '/postgres'; return new Client({ connectionString: u.toString() }); };
+const { createExtraTestDb } = require('../workerDb');
 
 // Three full migration runs in a child process: seconds alone, minutes under a
 // full four-worker Jest run on a busy machine.
 jest.setTimeout(900_000);
 
 let out;
+let demoDb;
 beforeAll(async () => {
-  const c = admin(); await c.connect();
-  await c.query(`DROP DATABASE IF EXISTS ${DB} WITH (FORCE)`);
-  await c.query(`CREATE DATABASE ${DB}`);
-  await c.end();
-  const url = new URL(base); url.pathname = `/${DB}`;
+  demoDb = await createExtraTestDb('demo');
   const run = spawnSync(process.execPath, [path.join(__dirname, '../fixtures/demoResetRun.js')], {
-    env: { ...process.env, DATABASE_URL: url.toString(), DEMO_DATABASE_NAME: DB }, encoding: 'utf8', timeout: 840_000,
+    env: { ...process.env, DATABASE_URL: demoDb.url, DEMO_DATABASE_NAME: demoDb.name }, encoding: 'utf8', timeout: 840_000,
   });
   const line = (run.stdout || '').trim().split('\n').filter(Boolean).pop() || '{}';
   out = JSON.parse(line);
@@ -31,9 +31,13 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  const c = admin(); await c.connect();
-  await c.query(`DROP DATABASE IF EXISTS ${DB} WITH (FORCE)`);
-  await c.end();
+  if (demoDb) await demoDb.drop();
+});
+
+test('the database is the run\'s own extra, and its name passes the demo guard', () => {
+  expect(demoDb.name).toMatch(/_w\d+_demo_test$/);
+  expect(require('../workerDb').isDerivedTestDbName(demoDb.name)).toBe(true);
+  expect(demoDb.name).toMatch(/(^|[_-])demo([_-]|$)/i);
 });
 
 const ENGINE_STUB = { seeded: false, reason: 'the engine ships no demo data' };

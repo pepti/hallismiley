@@ -1,22 +1,76 @@
-/* Admin sales report (/admin/sales) — summary cards, orders-per-day chart,
-   top-products table. Built on shared tokens + the admin-table style. */
-.sales-page { max-width: 900px; }
-.sales-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
-.sales-ranges { display: flex; gap: 6px; }
-.sales-range {
-  padding: 6px 12px; font-size: 13px; cursor: pointer;
-  background: var(--bg-surface); border: 1px solid var(--border);
-  color: var(--text-secondary); border-radius: var(--radius-md);
-}
-.sales-range.is-active { background: var(--bg-hover); color: var(--text-primary); border-color: var(--text-primary); }
+/* Admin sales report (/admin/sales) — period picker, per-currency KPI cards
+   with the change against the comparison window, the net-sales chart, top
+   products, and (harvest 2 lane 5) the insights and marketing cards below.
+   Tokens only: every colour that reads rides html[data-theme]. */
+.sales-page { max-width: 1100px; }
+.sales-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px 24px; margin-bottom: 16px; flex-wrap: wrap; }
+.sales-period { display: grid; gap: 4px; min-width: 0; }
+.sales-period__label { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); }
+.sales-period__select { min-width: 220px; max-width: 100%; }
+.sales-period__dates { margin: 0; font-size: 13px; color: var(--text-secondary); }
 
-.sales-cards { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+.sales-cards { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
 .sales-card {
   flex: 1; min-width: 160px; padding: 16px;
   background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
 }
+/* The headline — net sales — is the widest card and the only one ruled in the accent. */
+.sales-card--headline { flex: 2; min-width: 220px; border-left: 3px solid var(--accent-ink); }
 .sales-card__label { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); }
-.sales-card__value { font-size: 28px; font-weight: 700; color: var(--text-primary); margin-top: 6px; }
+.sales-card__value { font-size: 28px; font-weight: 700; color: var(--text-primary); margin-top: 6px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.sales-card--headline .sales-card__value { font-size: 34px; }
+.sales-card__sub { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
 
-.sales-chart-wrap { position: relative; height: 240px; margin-bottom: 24px; }
-.sales-subtitle { font-size: 16px; margin: 0 0 12px; }
+.sales-delta { font-size: 13px; font-weight: 600; padding: 1px 7px; border-radius: 999px; white-space: nowrap; }
+.sales-delta--up   { color: var(--success); background: var(--success-dim); }
+.sales-delta--down { color: var(--error);   background: var(--error-dim); }
+.sales-delta--flat,
+.sales-delta--none { color: var(--text-muted); background: transparent; }
+.sales-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+.sales-chart-wrap { position: relative; height: 260px; margin-bottom: 24px; }
+.sales-subtitle { font-size: 16px; margin: 24px 0 12px; }
+.sales-empty { color: var(--text-muted); font-size: 14px; margin: 4px 0; }
+.sales-top .num, .sales-campaigns .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Insights + marketing: cards that differ — the dormant one is "the state now",
+   ruled dashed; the wide ones span the row. */
+.sales-section { margin-top: 8px; }
+.sales-insights { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-bottom: 16px; }
+.sales-insight {
+  padding: 16px; min-width: 0;
+  background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+}
+.sales-insight--now { border-style: dashed; }
+.sales-insight--wide { grid-column: 1 / -1; }
+.sales-insight__title { font-size: 14px; margin: 0 0 4px; color: var(--text-primary); }
+.sales-insight__note { font-size: 12px; color: var(--text-muted); margin: 0 0 8px; }
+.sales-insight__value { font-size: 26px; font-weight: 700; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.sales-insight__sub { font-size: 13px; color: var(--text-secondary); margin-top: 2px; }
+
+.sales-customers { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; }
+.sales-customers li { display: grid; grid-template-columns: 1fr auto; gap: 0 12px; padding-top: 6px; border-top: 1px solid var(--border-dim, var(--border)); }
+.sales-customers__name { font-weight: 600; color: var(--text-primary); overflow-wrap: anywhere; }
+.sales-customers__meta { grid-column: 1; font-size: 12px; color: var(--text-muted); }
+.sales-customers__amount { grid-column: 2; grid-row: 1 / span 2; align-self: center; font-variant-numeric: tabular-nums; color: var(--text-primary); }
+
+.sales-channels { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; }
+.sales-channel { display: grid; grid-template-columns: minmax(90px, 140px) 1fr auto auto; align-items: center; gap: 10px; font-size: 14px; }
+.sales-channel__name { color: var(--text-primary); }
+.sales-channel__bar { display: block; height: 10px; background: var(--bg-hover); border-radius: 999px; overflow: hidden; }
+.sales-channel__fill { display: block; height: 100%; inline-size: 0; background: var(--accent-ink); border-radius: 999px; }
+.sales-channel__n, .sales-channel__pct { font-variant-numeric: tabular-nums; color: var(--text-secondary); text-align: right; min-width: 3ch; }
+.sales-discount + .sales-discount { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border-dim, var(--border)); }
+
+.sales-campaigns__title { display: block; font-size: 12px; color: var(--text-muted); }
+.sales-status { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; white-space: nowrap; color: var(--text-secondary); background: var(--bg-hover); }
+.sales-status--active    { color: var(--success); background: var(--success-dim); }
+.sales-status--scheduled { color: var(--warning); background: var(--warning-dim); }
+
+@media (max-width: 560px) {
+  .sales-card__value { font-size: 24px; }
+  .sales-card--headline .sales-card__value { font-size: 28px; }
+  .sales-channel { grid-template-columns: 1fr auto auto; }
+  .sales-channel__bar { grid-column: 1 / -1; grid-row: 2; }
+  .sales-period, .sales-period__select { width: 100%; }
+}

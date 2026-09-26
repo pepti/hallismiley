@@ -13,6 +13,7 @@ const { csrfProtect }          = require('../middleware/csrf');
 const { sanitizeBody }         = require('../middleware/sanitize');
 const { uploadSingle, createProductUpload, createProductImportUpload } = require('../middleware/upload');
 const { verifyImageBytes } = require('../middleware/verifyImageBytes');
+const { validateVariant }  = require('../middleware/validate');
 
 // Admin shop routes require auth; per-view access is gated by path below, so a
 // role can be granted (e.g.) orders-only without products. The product editor's
@@ -113,12 +114,20 @@ router.post('/products/:id/images',
 
 router.delete('/products/:id/images/:imageId',
   csrfProtect, adminShop.deleteImage);
+// The colour a photo shows (migration 119, ice #182/#265). After /reorder, so
+// the literal is never read as an image id.
+router.patch('/products/:id/images/:imageId',
+  csrfProtect, adminShop.updateImageColor);
 
 // ── Product variants ────────────────────────────────────────────────────────
+// Harvest 2 lane 6c (ice #194/#432): validateVariant checks the shape of a
+// single row; DELETE really deletes (or archives a variant an order or the
+// stock history names); /bulk adds many rows whole or not at all.
 router.get('/products/:id/variants',                      adminShop.listVariants);
-router.post('/products/:id/variants',           csrfProtect, adminShop.createVariant);
-router.patch('/products/:id/variants/:variantId',  csrfProtect, adminShop.updateVariant);
-router.delete('/products/:id/variants/:variantId', csrfProtect, adminShop.deactivateVariant);
+router.post('/products/:id/variants/bulk',      csrfProtect, adminShop.createVariantsBulk);
+router.post('/products/:id/variants',           csrfProtect, validateVariant, adminShop.createVariant);
+router.patch('/products/:id/variants/:variantId',  csrfProtect, validateVariant, adminShop.updateVariant);
+router.delete('/products/:id/variants/:variantId', csrfProtect, adminShop.deleteVariant);
 
 // ── Collections ───────────────────────────────────────────────────────────────
 router.get('/collections',                      adminShop.listCollections);
@@ -128,6 +137,10 @@ router.put('/products/:id/collections', csrfProtect, adminShop.setProductCollect
 
 // ── Reports ───────────────────────────────────────────────────────────────────
 router.get('/reports',            adminShop.salesReport);
+// Harvest 2 lane 5: the analyses under the sales block, and the marketing
+// overview. Both behind the `sales` view above; each narrows further inside.
+router.get('/reports/insights',   adminShop.salesInsights);
+router.get('/reports/marketing',  adminShop.marketingReport);
 
 // ── Orders ──────────────────────────────────────────────────────────────────
 router.get('/orders',             adminShop.listOrders);

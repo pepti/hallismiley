@@ -25,11 +25,13 @@ const FxRate = require('../../models/FxRate');
 const ledger = require('./ledgerService');
 const audit = require('./auditLog');
 const {
-  splitVatInclusive, allocateProportional, summariseByRate, assertIntegerIsk, resolveVatRate,
+  allocateProportional, summariseByRate, assertIntegerIsk,
   STANDARD_VAT_RATE, REDUCED_VAT_RATE,
 } = require('../../utils/vat');
+const { computeOrderVat, lineVatRate, isExport, countryOf } = require('../../utils/orderVat');
 const { convertLinesToIsk, assertPlausibleRate } = require('../../utils/fx');
 const { toIsoDate, addDays, assertAccountingDate, todayIso } = require('../../utils/booksDate');
+const { clientConfig } = require('../../config/clientConfig');
 
 class InvoiceError extends Error {
   constructor(message, status = 400, code) {
@@ -139,7 +141,7 @@ function pickCustomer(order) {
     email,
     address: lines.join('\n'),
     // Country drives the VAT treatment: goods leaving Iceland are zero-rated.
-    country: (addr && addr.country_code) || (addr && addr.country) || 'IS',
+    country: countryOf(addr),
     street: part(street, 200),
     city: part(addr && addr.city, 120),
     postalZone: part(addr && addr.postal, 20),
@@ -180,13 +182,9 @@ function pickAccountCustomer(account) {
   };
 }
 
-// Iceland is not in the EU VAT area, so a sale shipped abroad is an export and
-// zero-rated — but only against proof of export. Anything shipped within Iceland,
-// and any service, stays at the standard rate.
-function isExport(customerCountry) {
-  const c = String(customerCountry || 'IS').trim().toUpperCase();
-  return !(c === 'IS' || c === 'ISL' || c === 'ICELAND' || c === 'ÍSLAND');
-}
+// isExport (a sale shipped abroad is zero-rated, against proof of export) lives
+// in utils/orderVat.js since harvest 2 lane 5, so the checkout's VAT snapshot
+// and the invoice apply the one rule; it is re-exported below unchanged.
 
 /**
  * Build the invoice lines for an order.
@@ -210,13 +208,12 @@ function buildLines({ order, items, rate, exportSale }) {
   // Otherwise the product's own rate applies. The 11% band is a closed statutory
   // list, and books and printed matter are on it — charging 24% on a catalogue is
   // the wrong tax, not a rounding preference.
-  const vatRateFor = (item) => {
-    if (exportSale && !item.is_service) return 0;
-    // resolveVatRate rather than a bare ?? default: a product row carrying a rate
-    // outside {0,11,24} should stop the invoice, not be quietly normalised.
-    return item.vat_rate === null || item.vat_rate === undefined
-      ? STANDARD_VAT_RATE : resolveVatRate(item.vat_rate);
-  };
+  //
+  // resolveVatRate rather than a bare ?? default: a product row carrying a rate
+  // outside {0,11,24} should stop the invoice, not be quietly normalised. The
+  // rule itself is utils/orderVat.js lineVatRate, which the checkout snapshot
+  // (migration 121) applies too.
+  const vatRateFor = item => lineVatRate(item, exportSale);
 
   // UNIT prices are what get translated, not line totals.
   //
@@ -252,28 +249,34 @@ function buildLines({ order, items, rate, exportSale }) {
   const orderTotalMinor = assertIntegerIsk(order.total, 'order.total');
   const iskInvoiceTotal = convertLinesToIsk([orderTotalMinor], orderCurrency, rate).lines[0];
 
-  // Whatever it takes to bring the translated lines down to the authoritative
-  // total — derived, never translated independently, so the two cannot disagree.
-  // Allocated by line size so each line keeps its effective rate and the per-rate
-  // VAT split stays honest. Shown separately on the line, so unit × qty still reads
-  // correctly with the discount stated beneath it.
-  const spread = grossBefore.reduce((a, b) => a + b, 0) - iskInvoiceTotal;
-  const discountAlloc = spread > 0
-    ? allocateProportional(spread, grossBefore)
-    : grossBefore.map(() => 0);
-  // A NEGATIVE spread means unit-price rounding left the lines a króna or two short
-  // of what was actually paid. That difference is real money and has to appear, so
-  // it becomes an explicit rounding line (sléttun) rather than being smeared into a
-  // unit price and breaking the arithmetic this function exists to protect.
-  const roundingIsk = spread < 0 ? -spread : 0;
+  // The VAT core — utils/orderVat.js, shared with the checkout's snapshot
+  // (migration 121; harvest 2 lane 5). It fits the translated lines to the
+  // authoritative total: whatever it takes to bring them down is DERIVED, never
+  // translated independently, and allocated by line size (shipping included) so
+  // each line keeps its effective rate and the per-rate VAT split stays honest —
+  // shown separately on the line, so unit × qty still reads correctly with the
+  // discount stated beneath it. A NEGATIVE spread means unit-price rounding left
+  // the lines a króna or two short of what was actually paid. That difference is
+  // real money and has to appear, so it becomes an explicit rounding line
+  // (sléttun) rather than being smeared into a unit price and breaking the
+  // arithmetic this function exists to protect. The per-line rate rule
+  // (vatRateFor above) is the core's lineVatRate. Pinned byte-for-byte against
+  // the pre-extraction output by tests/unit/orderVatParity.test.js.
+  const core = computeOrderVat({
+    lines: items.map((item, i) => ({
+      // quantity was asserted an integer where grossBefore was built above.
+      unit: unitIsk[i], quantity: Number(item.quantity),
+      vat_rate: item.vat_rate, is_service: item.is_service,
+    })),
+    shipping: shippingIsk,
+    total: iskInvoiceTotal,
+    exportSale,
+  });
 
   const built = [];
   items.forEach((item, i) => {
+    const l = core.lines[i];
     const vatRate = vatRateFor(item);
-    const before = grossBefore[i];
-    const discount = Math.min(discountAlloc[i], before);
-    const gross = before - discount;
-    const split = splitVatInclusive(gross, vatRate);
     built.push({
       product_id: item.product_id || null,
       sku: item.sku || null,
@@ -284,38 +287,32 @@ function buildLines({ order, items, rate, exportSale }) {
       // the customer was quoted.
       unit_price_gross: unitIsk[i],
       vat_rate: vatRate,
-      gross_before_discount: before,
-      discount_gross: discount,
-      line_net: split.net,
-      line_vat: split.vat,
-      line_gross: gross,
+      gross_before_discount: l.gross_before_discount,
+      discount_gross: l.discount_gross,
+      line_net: l.line_net,
+      line_vat: l.line_vat,
+      line_gross: l.line_gross,
       revenue_account: revenueAccountFor({ vatRate, isService: item.is_service }),
       is_shipping: false,
     });
   });
 
-  if (shippingIsk > 0) {
-    // Shipping is the last entry in grossBefore/discountAlloc — see where it was
-    // pushed above. Standard-rated at home, zero-rated on an export, because it
-    // follows the goods it carries.
-    const i = grossBefore.length - 1;
-    const vatRate = exportSale ? 0 : STANDARD_VAT_RATE;
-    const before = grossBefore[i];
-    const discount = Math.min(discountAlloc[i], before);
-    const gross = before - discount;
-    const split = splitVatInclusive(gross, vatRate);
+  if (core.shipping) {
+    // Standard-rated at home, zero-rated on an export, because it follows the
+    // goods it carries.
+    const s = core.shipping;
     built.push({
       product_id: null,
       sku: null,
       description: 'Sending',
       quantity: 1,
-      unit_price_gross: before,
-      vat_rate: vatRate,
-      gross_before_discount: before,
-      discount_gross: discount,
-      line_net: split.net,
-      line_vat: split.vat,
-      line_gross: gross,
+      unit_price_gross: s.gross_before_discount,
+      vat_rate: s.vat_rate,
+      gross_before_discount: s.gross_before_discount,
+      discount_gross: s.discount_gross,
+      line_net: s.line_net,
+      line_vat: s.line_vat,
+      line_gross: s.line_gross,
       revenue_account: exportSale ? '4300' : '4100',
       is_shipping: true,
     });
@@ -324,22 +321,21 @@ function buildLines({ order, items, rate, exportSale }) {
   // Sléttun. Only ever a couple of krónur, and only on a translated order, but it
   // is money the customer actually paid so it is stated rather than hidden. Taxed
   // at the rate of the largest line so it does not distort the per-rate split.
-  if (roundingIsk > 0) {
-    const dominant = built.reduce((best, l) => (l.line_gross > best.line_gross ? l : best), built[0]);
-    const vatRate = dominant ? dominant.vat_rate : STANDARD_VAT_RATE;
-    const split = splitVatInclusive(roundingIsk, vatRate);
+  if (core.rounding) {
+    const r = core.rounding;
+    const dominant = r.dominant >= 0 ? built[r.dominant] : null;
     built.push({
       product_id: null,
       sku: null,
       description: 'Sléttun',
       quantity: 1,
-      unit_price_gross: roundingIsk,
-      vat_rate: vatRate,
-      gross_before_discount: roundingIsk,
+      unit_price_gross: r.line_gross,
+      vat_rate: r.vat_rate,
+      gross_before_discount: r.line_gross,
       discount_gross: 0,
-      line_net: split.net,
-      line_vat: split.vat,
-      line_gross: roundingIsk,
+      line_net: r.line_net,
+      line_vat: r.line_vat,
+      line_gross: r.line_gross,
       revenue_account: dominant ? dominant.revenue_account : '4100',
       is_shipping: false,
       is_rounding: true,
@@ -973,28 +969,125 @@ async function findById(client, id) {
 const TIER_LABEL = { vefur: 'Vefur', verslun: 'Verslun', rekstur: 'Rekstur' };
 const IS_MONTHS = ['janúar', 'febrúar', 'mars', 'apríl', 'maí', 'júní',
   'júlí', 'ágúst', 'september', 'október', 'nóvember', 'desember'];
-const SERVICE_KINDS = ['build', 'recurring', 'overage'];
+const SERVICE_KINDS = ['build', 'recurring', 'overage', 'passthrough'];
+// The kinds that pay a seller: the build fee and the base contract, nothing
+// else (D-003). An ALLOW-list on purpose — a kind added later earns no
+// commission until someone decides it should, here.
+const COMMISSIONABLE_KINDS = ['build', 'recurring'];
+const PERIOD_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+// ── Pass-through costs (D-022) ───────────────────────────────────────────────
+// Hosting beyond the tier's D-012 pattern is billed at Azure cost + markup; AI
+// inside the customer's system is included up to an allowance a month, the
+// rest at cost + markup. The markup and the allowance are PRODUCT config
+// (`billing.passthrough` in config/client.json, schema defaults = D-022),
+// never literals here.
+const PASSTHROUGH_TYPES = ['hosting', 'ai'];
+const PASSTHROUGH_MAX_LINES = 20;
+const PASSTHROUGH_DESC_MAX = 120;
+const PASSTHROUGH_LABEL = {
+  hosting: 'Hýsing umfram staðlað umhverfi',
+  ai: 'Gervigreind umfram innifalið',
+};
+
+/** The instance's pass-through terms, read from the product seam. */
+function passthroughTerms() {
+  const p = (clientConfig.billing && clientConfig.billing.passthrough) || {};
+  return { markupBp: Number(p.markupBp), aiAllowanceIsk: Number(p.aiAllowanceIsk) };
+}
+
+// 12345 → "12.345" (Icelandic grouping; whole ISK only).
+function iskText(n) {
+  return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}
+// 1500 bp → "15", 1250 bp → "12,5".
+function percentText(bp) {
+  return String(bp / 100).replace('.', ',');
+}
+
+/**
+ * Pure: the pass-through arithmetic, with no I/O, so the admin preview, the
+ * tests and the issuing path agree by construction.
+ *
+ * The AI allowance is deducted from the period's AI cost total — taken from
+ * the AI lines in the order given — and never below zero; a line it covers in
+ * full stays on the invoice at 0 kr. so the customer sees what was included.
+ * The markup is applied PER LINE to what is left, rounded to whole ISK the way
+ * every other kind rounds (Math.round). No VSK here; the caller adds it.
+ *
+ * @param {object} p
+ * @param {Array<{type:string, description:string, costIsk:number}>} p.lines
+ * @param {number} p.markupBp        e.g. 1500 = 15 %
+ * @param {number} p.aiAllowanceIsk  e.g. 2000
+ * @returns {{ lines: Array<{type, description, costIsk, allowanceIsk, billableIsk, netIsk}>, markupBp,
+ *             aiCostIsk: number, aiAllowanceUsedIsk: number, netTotal: number }}
+ */
+function computePassthrough({ lines, markupBp, aiAllowanceIsk }) {
+  if (!Number.isInteger(markupBp) || markupBp < 0) {
+    throw new InvoiceError('billing.passthrough.markupBp is not configured', 500, 'PASSTHROUGH_TERMS');
+  }
+  if (!Number.isInteger(aiAllowanceIsk) || aiAllowanceIsk < 0) {
+    throw new InvoiceError('billing.passthrough.aiAllowanceIsk is not configured', 500, 'PASSTHROUGH_TERMS');
+  }
+  if (!Array.isArray(lines) || lines.length === 0) {
+    throw new InvoiceError('lines must hold at least one cost line', 400, 'BAD_PASSTHROUGH');
+  }
+  if (lines.length > PASSTHROUGH_MAX_LINES) {
+    throw new InvoiceError(`lines may hold at most ${PASSTHROUGH_MAX_LINES} cost lines`, 400, 'BAD_PASSTHROUGH');
+  }
+  let allowanceLeft = aiAllowanceIsk;
+  let aiCostIsk = 0;
+  const out = lines.map((l, i) => {
+    if (!l || !PASSTHROUGH_TYPES.includes(l.type)) {
+      throw new InvoiceError(`lines[${i}].type must be one of: ${PASSTHROUGH_TYPES.join(', ')}`, 400, 'BAD_PASSTHROUGH');
+    }
+    const description = typeof l.description === 'string' ? l.description.trim() : '';
+    if (!description || description.length > PASSTHROUGH_DESC_MAX) {
+      throw new InvoiceError(`lines[${i}].description is required, ${PASSTHROUGH_DESC_MAX} characters or fewer`, 400, 'BAD_PASSTHROUGH');
+    }
+    const costIsk = l.costIsk;
+    if (!Number.isSafeInteger(costIsk) || costIsk <= 0) {
+      throw new InvoiceError(`lines[${i}].cost_isk must be a positive whole number of ISK`, 400, 'BAD_PASSTHROUGH');
+    }
+    let allowanceIsk = 0;
+    if (l.type === 'ai') {
+      aiCostIsk += costIsk;
+      allowanceIsk = Math.min(allowanceLeft, costIsk);
+      allowanceLeft -= allowanceIsk;
+    }
+    const billableIsk = costIsk - allowanceIsk;
+    const netIsk = Math.round(billableIsk * (10000 + markupBp) / 10000);
+    return { type: l.type, description, costIsk, allowanceIsk, billableIsk, netIsk };
+  });
+  const netTotal = out.reduce((a, l) => a + l.netIsk, 0);
+  return { lines: out, markupBp, aiCostIsk, aiAllowanceUsedIsk: aiAllowanceIsk - allowanceLeft, netTotal };
+}
 
 /**
  * Issue an invoice to a customer ACCOUNT (customer_accounts, migration 098) —
  * the company's own revenue path, which has no order behind it.
  *
- *   kind 'build'     — 50% of build_fee_isk: `deposit` true = at signing,
- *                       false = at go-live (D-005)
- *   kind 'recurring' — monthly_fee_isk for `period` (YYYY-MM), in advance;
- *                       `amountNetIsk` overrides for a pro-rated first month
- *   kind 'overage'   — `units` × `unitPriceIsk` verkeiningar beyond the quota
+ *   kind 'build'       — 50% of build_fee_isk: `deposit` true = at signing,
+ *                         false = at go-live (D-005)
+ *   kind 'recurring'   — monthly_fee_isk for `period` (YYYY-MM), in advance;
+ *                         `amountNetIsk` overrides for a pro-rated first month
+ *   kind 'overage'     — `units` × `unitPriceIsk` verkeiningar beyond the quota
+ *   kind 'passthrough' — D-022's pass-through costs for `period`: `lines` of
+ *                         { type: hosting|ai, description, costIsk }, the AI
+ *                         allowance deducted, cost + markup per line
+ *                         (computePassthrough). One per account per period.
  *
  * Every price is ex-VSK (the customer is a VSK-registered business); 24% VSK is
  * added on top. Same document machinery as createFromOrder: counter, lines,
  * journal entry, books audit. Then the commission hook (D-003): build and
- * recurring kinds record a commission_events row for the account's CURRENT
- * owner at the account's current rate, in this same transaction — overage and
- * one-off verk carry no commission.
+ * recurring kinds (COMMISSIONABLE_KINDS) record a commission_events row for
+ * the account's CURRENT owner at the account's current rate, in this same
+ * transaction — overage, pass-through costs and one-off verk carry none.
  *
  * @param {object} client  pg client inside a transaction
  * @param {object} opts    { accountId, kind, deposit?, period?, amountNetIsk?,
- *                           units?, unitPriceIsk?, issuedAt?, createdBy, requestId? }
+ *                           units?, unitPriceIsk?, lines?, issuedAt, createdBy,
+ *                           requestId? }
  */
 async function createServiceInvoice(client, opts = {}) {
   // Required lazily: CustomerAccount → staffAudit and Commission are leaf modules,
@@ -1007,7 +1100,8 @@ const { invoiceableProblems } = require('./peppol/party');
 
   const {
     accountId, kind, deposit = true, period = null, amountNetIsk = null,
-    units = null, unitPriceIsk = null, createdBy, requestId = null, series = 'invoice',
+    units = null, unitPriceIsk = null, lines: costLines = null,
+    createdBy, requestId = null, series = 'invoice',
   } = opts;
   if (!createdBy) throw new InvoiceError('createServiceInvoice requires createdBy', 500);
   if (!SERVICE_KINDS.includes(kind)) {
@@ -1053,7 +1147,35 @@ const { invoiceableProblems } = require('./peppol/party');
   const tier = TIER_LABEL[account.tier] || account.tier;
   let net;
   let description;
-  if (kind === 'build') {
+  // Only a pass-through invoice has more than one line: [{ description, net }].
+  let parts = null;
+  let passthrough = null;
+  if (kind === 'passthrough') {
+    if (!PERIOD_RE.test(String(period || ''))) {
+      throw new InvoiceError('period must be YYYY-MM', 400, 'BAD_PERIOD');
+    }
+    const terms = passthroughTerms();
+    passthrough = computePassthrough({ lines: costLines, ...terms });
+    if (passthrough.netTotal <= 0) {
+      throw new InvoiceError(
+        `Nothing to bill: the period's AI cost is within the ${iskText(terms.aiAllowanceIsk)} kr. allowance and there is no hosting cost.`,
+        400, 'PASSTHROUGH_NOTHING_TO_BILL'
+      );
+    }
+    const [y, m] = String(period).split('-').map(Number);
+    const pct = percentText(terms.markupBp);
+    net = passthrough.netTotal;
+    parts = passthrough.lines.map(l => ({
+      // The cost basis is named on the line: D-022 promises the customer
+      // "cost + 15 %", so the invoice shows the cost, the allowance used and
+      // the markup, and the customer can check the arithmetic.
+      description: `${PASSTHROUGH_LABEL[l.type]} — ${l.description} — ${IS_MONTHS[m - 1]} ${y}`
+        + ` (kostnaður ${iskText(l.costIsk)} kr.`
+        + (l.allowanceIsk ? `, þar af ${iskText(l.allowanceIsk)} kr. innifalið` : '')
+        + ` + ${pct} %)`,
+      net: l.netIsk,
+    }));
+  } else if (kind === 'build') {
     const fee = Number(account.build_fee_isk);
     if (!Number.isInteger(fee) || fee <= 0) {
       throw new InvoiceError('The account has no build fee set', 409, 'ACCOUNT_FEES_MISSING');
@@ -1062,7 +1184,7 @@ const { invoiceableProblems } = require('./peppol/party');
     net = deposit ? half : fee - half;
     description = `Uppsetning Rekstrarkerfisins — ${tier} — ${deposit ? 'innborgun 50% við undirritun' : 'lokagreiðsla 50% við gangsetningu'}`;
   } else if (kind === 'recurring') {
-    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(period || ''))) {
+    if (!PERIOD_RE.test(String(period || ''))) {
       throw new InvoiceError('period must be YYYY-MM', 400, 'BAD_PERIOD');
     }
     const fee = amountNetIsk != null ? Number(amountNetIsk) : Number(account.monthly_fee_isk);
@@ -1082,32 +1204,44 @@ const { invoiceableProblems } = require('./peppol/party');
     description = `Verkeiningar umfram kvóta — ${u} ein.`;
   }
 
-  // What the duplicate guard keys on (migration 099). `service_period` is the
-  // billed month for a contract invoice; build halves are told apart by
-  // `service_kind`; overage is deliberately unguarded (several batches of
-  // verkeiningar in one month are legitimate).
+  // What the duplicate guard keys on (migrations 099 + 122). `service_period`
+  // is the billed month for a contract or pass-through invoice; build halves
+  // are told apart by `service_kind`; overage is deliberately unguarded
+  // (several batches of verkeiningar in one month are legitimate).
   const serviceKind = kind === 'build' ? (deposit ? 'build_deposit' : 'build_final') : kind;
-  const servicePeriod = kind === 'recurring' ? `${period}-01` : null;
+  const servicePeriod = (kind === 'recurring' || kind === 'passthrough') ? `${period}-01` : null;
 
   const vatRate = STANDARD_VAT_RATE;
+  // VSK on the invoice's net total, rounded once — the same figure the single-
+  // line kinds produce and the one EN 16931 computes per rate — then shared
+  // across the lines by largest remainder so the lines sum to it exactly.
   const vat = Math.round(net * vatRate / 100);
   const gross = net + vat;
-  const line = {
-    product_id: null, sku: null, description, quantity: 1,
-    unit_price_gross: gross, vat_rate: vatRate,
-    gross_before_discount: gross, discount_gross: 0,
-    line_net: net, line_vat: vat, line_gross: gross,
-    // The account this line’s NET is credited to — a revenue account normally,
-    // deferred income for a prepayment on work not yet delivered. The column
-    // name says "revenue_account" because renaming it would touch POS, the
-    // reports and the archive export for no behavioural gain.
-    revenue_account: (kind === 'build' && deposit)
-      ? DEFERRED_REVENUE_ACCOUNT
-      : revenueAccountFor({ vatRate, isService: true }),
-    is_shipping: false,
-  };
+  if (!parts) parts = [{ description, net }];
+  const lineVats = allocateProportional(vat, parts.map(p => p.net));
+  // The account each line's NET is credited to — a revenue account normally,
+  // deferred income for a prepayment on work not yet delivered. The column
+  // name says "revenue_account" because renaming it would touch POS, the
+  // reports and the archive export for no behavioural gain. A pass-through
+  // line is our own service sold at 24 % (we buy the Azure/AI capacity in our
+  // name and resell it at a markup), so it takes the same service account as
+  // the contract; ACCOUNTANT-QUESTIONS §12 asks whether it wants its own.
+  const revenueAccount = (kind === 'build' && deposit)
+    ? DEFERRED_REVENUE_ACCOUNT
+    : revenueAccountFor({ vatRate, isService: true });
+  const invoiceLines = parts.map((p, i) => {
+    const lineGross = p.net + lineVats[i];
+    return {
+      product_id: null, sku: null, description: p.description, quantity: 1,
+      unit_price_gross: lineGross, vat_rate: vatRate,
+      gross_before_discount: lineGross, discount_gross: 0,
+      line_net: p.net, line_vat: lineVats[i], line_gross: lineGross,
+      revenue_account: revenueAccount,
+      is_shipping: false,
+    };
+  });
   const totals = {
-    lines: [line], subtotal_net: net, vat_total: vat, total_gross: gross,
+    lines: invoiceLines, subtotal_net: net, vat_total: vat, total_gross: gross,
     discount_total: 0, shipping_gross: 0, by_rate: [{ rate: vatRate, net, vat, gross }],
   };
 
@@ -1162,7 +1296,9 @@ const { invoiceableProblems } = require('./peppol/party');
       throw new InvoiceError(
         kind === 'recurring'
           ? `This account already has a service invoice for ${period}. Credit that one instead of issuing a second.`
-          : 'This account already has that build-fee instalment. Credit that invoice instead of issuing a second.',
+          : kind === 'passthrough'
+            ? `This account already has a pass-through invoice for ${period}. Credit it in full and issue a corrected one, or bill a late cost in a later period.`
+            : 'This account already has that build-fee instalment. Credit that invoice instead of issuing a second.',
         409, 'DUPLICATE_SERVICE_INVOICE'
       );
     }
@@ -1192,11 +1328,19 @@ const { invoiceableProblems } = require('./peppol/party');
     summary: {
       invoice_number: invoiceNumber, series, account_id: account.id, kind,
       total_gross: gross, vat_total: vat, journal_entry_number: entry.entry_number,
+      // What the pass-through figures were computed from, so the audit row
+      // alone explains the invoice (the terms can change later in config).
+      ...(passthrough ? {
+        period,
+        markup_bp: passthrough.markupBp,
+        ai_cost_isk: passthrough.aiCostIsk,
+        ai_allowance_used_isk: passthrough.aiAllowanceUsedIsk,
+      } : {}),
     },
   });
 
   let commission = null;
-  if (kind !== 'overage') {
+  if (COMMISSIONABLE_KINDS.includes(kind)) {
     commission = await Commission.recordForInvoice(client, { account, invoice, kind, issuedAt });
     if (commission) {
       await staffAudit.record(client, {
@@ -1296,6 +1440,10 @@ module.exports = {
   InvoiceError,
   createServiceInvoice,
   SERVICE_KINDS,
+  COMMISSIONABLE_KINDS,
+  PASSTHROUGH_TYPES,
+  computePassthrough,
+  passthroughTerms,
   recordPayment,
   recordRefund,
   recordSettlement,

@@ -24,6 +24,10 @@
 const db = require('../config/database');
 const logger = require('../logger');
 const Bin = require('../models/Bin');
+const Order = require('../models/Order');
+const Inventory = require('../models/Inventory');
+const { buildWatchReport, WINDOW_DAYS: WATCH_WINDOW_DAYS } = require('../utils/inventoryStatus');
+const { PENDING_APPROVAL_SQL } = require('../utils/signupApproval');
 const Setting = require('../models/Setting');
 const vatService = require('./bookkeeping/vatService');
 const { toIsoDate } = require('../utils/booksDate');
@@ -44,9 +48,26 @@ const SHIPPED_WINDOW_DAYS = 14;
 
 // Stable order of the to-do kinds within one tone (the spec's order).
 const TODO_ORDER = [
-  'invoices_overdue', 'vat_deadline', 'orders_to_ship', 'leads_new',
-  'change_requests_open', 'bins_unshelved',
+  'invoices_overdue', 'vat_deadline', 'orders_to_ship', 'out_of_stock', 'leads_new',
+  'signups_pending', 'change_requests_open', 'bins_unshelved',
 ];
+
+// Where each counted to-do links, and the view it needs (harvest 2 lane 5,
+// icelandicstore #417): the list the work is done in, FILTERED to exactly the
+// rows the count counts — each source below and its list share one predicate
+// (Order.ORDER_VIEWS.open, the Inventory Watch report, utils/signupApproval.js,
+// the change_requests status). A source that FAILS still gets its row, with no
+// count (the client shows "—", never 0) — except the VSK deadline, whose
+// number is days, not rows.
+const TODO_LINKS = {
+  invoices_overdue: { view: 'ar', route: '/admin/books/ar', source: 'receivables' },
+  orders_to_ship: { view: 'orders', route: '/admin/shop/orders?view=open', source: 'orders' },
+  out_of_stock: { view: 'inventory', route: '/admin/inventory?status=out', source: 'stockOut' },
+  leads_new: { view: 'leads', route: '/admin/leads', source: 'leads' },
+  signups_pending: { view: 'users', route: '/admin/users?status=pending', source: 'signups' },
+  change_requests_open: { view: 'feedback', route: '/admin/feedback?status=open', source: 'changeRequests' },
+  bins_unshelved: { view: 'bins', route: '/admin/bins', source: 'bins' },
+};
 const TONE_RANK = { warn: 0, soon: 1 };
 
 // Sales channels and the view each one needs. The classification is a rule to
@@ -141,10 +162,8 @@ async function vatSource(now) {
 async function ordersSource(now) {
   const { rows } = await db.query(
     `SELECT
-       COUNT(*) FILTER (WHERE o.payment_status IN ('paid','partially_refunded')
-                          AND o.fulfillment_status IN ('unfulfilled','partial'))::int AS to_ship,
-       MIN(o.created_at) FILTER (WHERE o.payment_status IN ('paid','partially_refunded')
-                                   AND o.fulfillment_status IN ('unfulfilled','partial')) AS oldest_to_ship,
+       COUNT(*) FILTER (WHERE ${Order.ORDER_VIEWS.open})::int AS to_ship,
+       MIN(o.created_at) FILTER (WHERE ${Order.ORDER_VIEWS.open}) AS oldest_to_ship,
        COUNT(*) FILTER (WHERE o.payment_status IN ('paid','partially_refunded')
                           AND o.fulfillment_status = 'fulfilled'
                           AND o.fulfilled_at >= $1::timestamptz - INTERVAL '${SHIPPED_WINDOW_DAYS} days')::int AS shipped,
@@ -178,6 +197,28 @@ async function changeRequestsSource() {
             (SELECT note FROM change_requests WHERE status = 'open' ORDER BY created_at DESC LIMIT 1) AS latest`
   );
   return { count: rows[0].n, latest: rows[0].latest ? excerpt(rows[0].latest) : null };
+}
+
+// Sold out: the Birgðavakt's (Inventory Watch, harvest 2 lane 6a) `out`
+// bucket — every stocked unit (a product without variants, or one active
+// variant) whose Available is 0 or less — computed by the SAME report the page
+// behind the link renders (Inventory.watchRows → buildWatchReport), so the
+// count is the row count of /admin/inventory?status=out. A sample of names
+// for the detail line, like the bins row.
+async function stockOutSource() {
+  const report = buildWatchReport(await Inventory.watchRows({ windowDays: WATCH_WINDOW_DAYS }),
+    { windowDays: WATCH_WINDOW_DAYS });
+  const names = [...new Set(report.items.filter(i => i.status === 'out').map(i => i.name))];
+  return { count: report.counts.out, sample: names.slice(0, 2) };
+}
+
+// Sign-ups awaiting an admin's approval (utils/signupApproval.js).
+async function signupsSource() {
+  const { rows } = await db.query(
+    `SELECT COUNT(*)::int AS n, MIN(COALESCE(requested_at, created_at)) AS oldest
+       FROM users WHERE ${PENDING_APPROVAL_SQL}`
+  );
+  return { count: rows[0].n, oldestAt: iso(rows[0].oldest) };
 }
 
 async function binsSource() {
@@ -393,6 +434,8 @@ async function buildHome({ can, instanceLacks = () => false, isAdmin = false, us
   if (can('leads')) add('leads', ['todo.leads_new'], () => leadsSource());
   if (can('feedback')) add('changeRequests', ['todo.change_requests_open'], () => changeRequestsSource());
   if (can('bins')) add('bins', ['todo.bins_unshelved'], () => binsSource());
+  if (can('inventory')) add('stockOut', ['todo.out_of_stock'], () => stockOutSource());
+  if (can('users')) add('signups', ['todo.signups_pending'], () => signupsSource());
   const heldChannels = CHANNELS.filter(c => can(c.view));
   for (const c of heldChannels) add(`sales.${c.channel}`, ['figures.salesToday'], () => channelSource(c.channel, now));
   if (can('orders')) add('recent.orders', ['recent.orders'], recentOrders);
@@ -432,29 +475,43 @@ async function buildHome({ can, instanceLacks = () => false, isAdmin = false, us
       detail: { period: v.period, from: v.from, to: v.to, dueOn: v.dueOn, daysLeft: v.daysLeft },
     });
   }
+  const link = kind => ({ kind, view: TODO_LINKS[kind].view, route: TODO_LINKS[kind].route });
   if (ok('orders') && out.orders.toShip > 0) {
     todo.push({
-      kind: 'orders_to_ship', view: 'orders', route: '/admin/shop/orders', tone: null,
+      ...link('orders_to_ship'), tone: null,
       count: out.orders.toShip, detail: { oldestAt: out.orders.oldestAt },
     });
   }
+  if (ok('stockOut') && out.stockOut.count > 0) {
+    todo.push({ ...link('out_of_stock'), tone: null, count: out.stockOut.count, detail: { sample: out.stockOut.sample } });
+  }
   if (ok('leads') && out.leads.count > 0) {
     todo.push({
-      kind: 'leads_new', view: 'leads', route: '/admin/leads', tone: null,
+      ...link('leads_new'), tone: null,
       count: out.leads.count, detail: { latest: out.leads.latest },
     });
   }
+  if (ok('signups') && out.signups.count > 0) {
+    todo.push({ ...link('signups_pending'), tone: null, count: out.signups.count, detail: { oldestAt: out.signups.oldestAt } });
+  }
   if (ok('changeRequests') && out.changeRequests.count > 0) {
     todo.push({
-      kind: 'change_requests_open', view: 'feedback', route: '/admin/feedback', tone: null,
+      ...link('change_requests_open'), tone: null,
       count: out.changeRequests.count, detail: { latest: out.changeRequests.latest },
     });
   }
   if (ok('bins') && out.bins.count > 0) {
     todo.push({
-      kind: 'bins_unshelved', view: 'bins', route: '/admin/bins', tone: null,
+      ...link('bins_unshelved'), tone: null,
       count: out.bins.count, detail: { sample: out.bins.sample },
     });
+  }
+  // A counted to-do whose source failed keeps its row, unread: count null, the
+  // client shows "—". Only for a source that ran — i.e. a view the role holds.
+  for (const [kind, l] of Object.entries(TODO_LINKS)) {
+    if (Object.prototype.hasOwnProperty.call(jobs, l.source) && !ok(l.source)) {
+      todo.push({ ...link(kind), tone: null, count: null, failed: true });
+    }
   }
   todo.sort((a, b) => ((TONE_RANK[a.tone] ?? 2) - (TONE_RANK[b.tone] ?? 2))
     || (TODO_ORDER.indexOf(a.kind) - TODO_ORDER.indexOf(b.kind)));

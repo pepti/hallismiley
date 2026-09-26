@@ -1,0 +1,107 @@
+/* Admin settings pages Greiðsla (/admin/checkout) and Tilkynning
+   (/admin/announcement) — harvest2-lane7a, ported from icelandicstore #151 /
+   #200. Cards, rows, switch, inputs, chips and the sticky save bar, with a
+   co- prefix so the two pages never share class state with the general
+   settings page (gs-). Tokens only (invariant 15): no colour literal, no
+   literal fallback — every value re-hues with html[data-theme]. */
+
+.co-page { max-width: 820px; }
+
+.co-head { margin-bottom: var(--sp-4); }
+.co-sub  { margin: 4px 0 0; color: var(--text-muted); font-size: 14px; }
+
+.co-banner {
+  padding: 14px 16px; margin-bottom: 20px;
+  background: var(--bg-elevated); border: 1px solid var(--border-dim);
+  border-radius: var(--radius-lg);
+}
+.co-banner__text { margin: 0; font-size: 13px; color: var(--text-secondary); line-height: 1.5; }
+
+.co-card {
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); margin-bottom: 18px; overflow: hidden;
+}
+.co-card__head { padding: 14px 18px; border-bottom: 1px solid var(--border-dim); }
+.co-card__title { margin: 0; font-size: 15px; font-weight: 700; color: var(--text-primary); }
+.co-card__body { padding: 4px 18px 8px; }
+
+.co-row {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 16px; padding: 14px 0; border-top: 1px solid var(--border-dim);
+}
+.co-row:first-child { border-top: 0; }
+.co-row__main  { min-width: 0; }
+.co-row__title { margin: 0; font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.co-row__help  { margin: 4px 0 0; font-size: 13px; color: var(--text-muted); line-height: 1.5; }
+.co-row__side  { flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding-top: 2px; }
+.co-row--stacked { flex-direction: column; align-items: stretch; gap: 8px; }
+.co-row--stacked .co-row__side { width: 100%; padding-top: 0; }
+
+/* The switch: .is-on = on. The knob is the surface colour, the track the
+   border (off) or the success ink (on) — both re-hue per theme. */
+.co-switch {
+  -webkit-appearance: none; appearance: none; border: 0; margin: 0; padding: 0;
+  display: inline-block; width: 38px; height: 22px; flex-shrink: 0; cursor: pointer;
+  border-radius: 999px; background: var(--border); position: relative;
+  transition: background var(--transition);
+}
+.co-switch::after {
+  content: ''; position: absolute; top: 3px; left: 3px;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--bg-surface); box-shadow: var(--shadow-card);
+  transition: left var(--transition);
+}
+.co-switch.is-on { background: var(--success); }
+.co-switch.is-on::after { left: 19px; }
+
+.co-select, .co-input, .co-textarea {
+  padding: 7px 10px; font-size: 13px; font-family: inherit;
+  color: var(--text-primary); background: var(--bg-base);
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+}
+.co-select { min-width: 170px; cursor: pointer; }
+.co-input  { min-width: 190px; }
+.co-input--wide { width: 100%; min-width: 0; box-sizing: border-box; }
+.co-input--num  { min-width: 0; width: 130px; text-align: right; font-variant-numeric: tabular-nums; }
+.co-textarea {
+  width: 100%; box-sizing: border-box; min-height: 56px;
+  line-height: 1.5; resize: vertical;
+}
+.co-switch:focus-visible, .co-select:focus-visible,
+.co-input:focus-visible, .co-textarea:focus-visible {
+  outline: 2px solid var(--accent-ink); outline-offset: 2px;
+}
+
+.co-amount { display: inline-flex; align-items: center; gap: 6px; }
+.co-amount__unit { font-size: 13px; color: var(--text-muted); }
+
+.co-chip {
+  display: inline-block; font-size: 12px; font-weight: 600;
+  padding: 4px 10px; border-radius: 999px; white-space: nowrap;
+  background: var(--bg-elevated); color: var(--text-secondary);
+  border: 1px solid var(--border-dim);
+}
+.co-chip--on { background: var(--success-dim); color: var(--text-primary); border-color: var(--success); }
+
+.co-savebar {
+  position: sticky; bottom: 0; z-index: 5;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin-top: 24px; padding: 12px 16px;
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-card);
+}
+.co-savebar[hidden] { display: none; }
+.co-savebar__msg { font-size: 13px; color: var(--text-secondary); }
+.co-savebar__actions { display: flex; gap: 8px; }
+
+/* A phone: every row stacks, the control under its label, full width. */
+@media (max-width: 600px) {
+  .co-card__body { padding: 4px 14px 8px; }
+  .co-row { flex-direction: column; align-items: stretch; gap: 8px; }
+  .co-row__side { padding-top: 0; flex-wrap: wrap; }
+  .co-select, .co-input { width: 100%; min-width: 0; box-sizing: border-box; }
+  .co-amount { width: 100%; }
+  .co-amount .co-input--num { flex: 1; width: auto; }
+  .co-savebar { flex-direction: column; align-items: stretch; }
+  .co-savebar__actions { justify-content: flex-end; }
+}

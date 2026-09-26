@@ -60,6 +60,7 @@ const RECEIPT_ERRORS = {
   VARIANT_REQUIRED:  'errors.receiving.variantRequired',
   SCAN_NOT_FOUND:    'errors.receiving.scanNotFound',
   INCOMPLETE:        'errors.receiving.incomplete',
+  VARIANT_ARCHIVED:  'errors.receiving.variantArchived',
   TOO_MANY_LINES:    'errors.receiving.tooManyLines',
   NO_LINES:          'errors.admin.importNoDataRows',
 };

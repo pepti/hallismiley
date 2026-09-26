@@ -26,6 +26,12 @@ data/
 !.claude/commands/
 .claude.zip
 
+# Estate sync / graft worktrees (site-factory engine-sync creates
+# .wt/engine-sync-<date> in a downstream). Engine-owned: reaches every
+# downstream by engine-sync, so a sync's own worktree never reads as stray
+# untracked files (LESSONS.md 2026-09-25).
+.wt/
+
 # Codex CLI local tooling (hooks reference local .claude/ scripts)
 .codex/
 

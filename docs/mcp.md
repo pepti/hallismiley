@@ -68,7 +68,7 @@ on top of the per-call owner check that already refused them.
 
 ## Tools (v1 — read-only, `server/mcp/tools/system.js`)
 
-Exactly two tools are registered on this instance:
+Two system tools answer on every instance (the sales tools below need the shop and the owner's views):
 
 | Tool | Scope | Answers |
 |---|---|---|
@@ -77,9 +77,30 @@ Exactly two tools are registered on this instance:
 
 Every response carries `_environment` (`server/mcp/envTag.js`). Leads are
 deliberately NOT queryable yet — that needs its own sign-off (ENHANCEMENTS
-#13 note) — and customer/order/bookkeeping tools wait for a real need. The
+#13 note) — and customer/bookkeeping tools wait for a real need (the order tools are the sales pair below). The
 icelandicstore connector this was ported from ships fourteen commerce and
 finance tools besides `environment_info`; none of them exist here.
+
+## Sales tools (read; harvest 2 lane 5, 2026-09-26)
+
+`server/mcp/tools/orders.js` — the engine's first order tools (icelandicstore
+has `sales_report` / `list_orders`). Scope `read`, the `shop` module, and a
+FOURTH gate: each names an admin `view`, and it is listed and callable only
+when the token's OWNER holds that view on this instance
+(`server/mcp/owner.js` `ownerViewAccess` — the admin home's rule: the role's
+views, minus a switched-off module's, minus the product's
+`identity.surface.hiddenAdminViews` for an all-views holder). **orangesmiley.is
+hides its shop from the admin nav, so neither tool is listed here**; a shop
+downstream (rekstrarkerfid, icelandicstore) gets both. A refusal reads like an
+unknown tool, as for the other gates.
+
+| Tool | View | Answers |
+|---|---|---|
+| `sales_report` | `sales` | the `/admin/sales` report for `from`/`to` (YYYY-MM-DD, INCLUSIVE; omitted → the last 30 days): paid orders by PAYMENT date, per currency (never summed across) `orders`, `revenue` (GROSS), `vat`, `revenue_net`, average order gross/net; the series and top products; with `compare_from`/`compare_to` the same KPIs as `kpisPrev`. Orders from before migration 121 carry an approximate VAT |
+| `recent_orders` | `orders` | newest first, `limit` 1–50 (default 10); `open_only` = the orders waiting to be fulfilled (the "Í dag" card's list): order number, placed/paid, the checkout's guest name or `registered`, currency, total (gross), `vat_total`, items, statuses |
+
+Neither returns a customer's e-mail, postal address, phone, the order note or
+a Stripe id.
 
 ## Write tools (R5b)
 
@@ -108,6 +129,18 @@ module on. orangesmiley.is keeps all three off.
 | `create_product` | `productCreate` | creates a product — ALWAYS a Draft (`active: false`) — slug from the name unless given; opening stock recorded as an `opening` adjustment | no name or price; a bad or taken slug |
 | `update_product` | `productUpdate` | changes the fields given on a product found by id or product-level SKU/barcode | stock (that is `set_stock`); unknown fields |
 | `set_stock` | `stock` | sets on hand of a product or variant (a SKU/barcode resolves variant first) through the audited writer: reason, `MCP: <note>` and the token owner on the `inventory_adjustments` row | a negative count; a variant product by id |
+| `add_variants` | `variantCreate` | adds variants to a product that has options (found by `product_id`, `slug` or product-level `sku`): each row `{ attributes: { <option>: <value>, … }, sku, barcode?, price_isk?, price_eur?, bin? }`, up to 200, **all or none**, created INACTIVE at stock 0 (an admin switches them on in the variant grid; stock via `set_stock`); `dry_run: true` checks and writes nothing — the same writer as the admin bulk route (`services/variantAdd.js`) | an option missing or unknown; a combination the product already has; a SKU or barcode used anywhere in the live catalogue (as either code, case-blind) or twice in the list; a product without options; any unknown key, at any depth (e.g. `stock`) — every problem listed in one answer |
+| `list_variants` | `variantCreate` | READ (scope `read`, writes nothing): a product's option names and every variant with its values, SKU, barcode, shelf, price overrides, on hand and active — read it before `add_variants` | an unknown product |
+
+Harvest 2 lane 6c (2026-09-26, icelandicstore #432) added the last two. Both
+ride the ONE switch `mcp.write.variantCreate` (env
+`CLIENT_CONFIG_MCP_WRITE_VARIANT_CREATE`, OFF by default): `list_variants` is a
+read tool, but it only exists to serve `add_variants`, and the default read
+surface stays the v1 system tools. The registry's `validateArgs` checks arrays
+(`minItems` / `maxItems` / `items`) and nested objects (`properties`,
+`required`, `additionalProperties` as a schema) since then, and refuses an
+unknown key at every level. History:
+[harvest2-lane6c-2026-09-26](history.d/2026-09-26-harvest2-lane6c-variants.md#harvest2-lane6c-2026-09-26).
 
 ## OAuth 2.1 (R5a)
 

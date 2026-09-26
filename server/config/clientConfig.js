@@ -154,7 +154,7 @@ const SCHEMA = {
       // the resolved list, so a typo cannot silently hide nothing.
       hiddenAdminViews: {
         type: 'string[]',
-        default: ['products', 'collections', 'bins', 'inventory', 'receiving', 'orders', 'discounts', 'sales', 'pos', 'background', 'projects'],
+        default: ['products', 'collections', 'bins', 'inventory', 'receiving', 'checkout', 'orders', 'discounts', 'sales', 'pos', 'background', 'projects'],
         validate: validateViewIds,
       },
     },
@@ -253,6 +253,23 @@ const SCHEMA = {
       enrolment: { type: 'string', default: 'optional', enum: ['optional', 'required'] },
     },
   },
+  billing: {
+    // The product's pass-through terms (D-022, 2026-09-26): hosting beyond
+    // the tier's standard pattern is billed at cost + markup, and AI inside
+    // the customer's system is included up to an allowance a month, the rest
+    // at cost + markup. Read by invoiceService.createServiceInvoice (kind
+    // `passthrough`, which carries NO seller commission) and handed to the
+    // admin's live preview by GET /api/v1/admin/accounts/:id. The defaults
+    // are Rekstrarkerfið's D-022 values; a product with other terms sets them
+    // in config/client.json. Env: CLIENT_CONFIG_BILLING_PASSTHROUGH_MARKUP_BP,
+    // CLIENT_CONFIG_BILLING_PASSTHROUGH_AI_ALLOWANCE_ISK.
+    passthrough: {
+      // Basis points on the cost, like the commission rates: 1500 = 15 %.
+      markupBp:       { type: 'int', default: 1500, min: 0, max: 10000 },
+      // Whole ISK of AI cost included per account per month (ex VSK).
+      aiAllowanceIsk: { type: 'int', default: 2000, min: 0, max: 10000000 },
+    },
+  },
   mcp: {
     // The MCP catalogue write tools (harvest-ice-c-2026-09-24; icelandicstore
     // #248/#250/#361). Each kind of write is its own switch and every switch
@@ -264,12 +281,16 @@ const SCHEMA = {
     //   productUpdate → update_product (never stock — that is set_stock's)
     //   stock         → set_stock (audited in inventory_adjustments, actor =
     //                   the token's owner)
+    //   variantCreate → add_variants (harvest 2 lane 6c, ice #432): several
+    //                   variants of an existing product, all or none; they
+    //                   start INACTIVE and at stock 0
     // Read per call by server/mcp/registry.js, so flipping the env var bites
     // without a restart. Env: CLIENT_CONFIG_MCP_WRITE_PRODUCT_CREATE etc.
     write: {
       productCreate: { type: 'boolean', default: false },
       productUpdate: { type: 'boolean', default: false },
       stock:         { type: 'boolean', default: false },
+      variantCreate: { type: 'boolean', default: false },
     },
   },
   modules: {

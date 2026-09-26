@@ -9,14 +9,18 @@ const Order   = require('../models/Order');
 const Inventory = require('../models/Inventory');
 const { WebhookEvent } = require('../models/Order');
 const db = require('../config/database');
-const { SHIPPING_METHODS, getShippingPrice } = require('../config/shipping');
+const { SHIPPING_METHODS, shippingRates, computeShippingPrice } = require('../config/shipping');
 const { isConfigured: stripeIsConfigured } = require('../config/stripe');
 const stripeService = require('../services/stripeService');
-const { sendOrderReceipt, sendBookingNotification } = require('../services/emailService');
+const emailService = require('../services/emailService');
+const { sendBookingNotification } = emailService;
+const Setting = require('../models/Setting');
+const checkoutRules = require('../services/checkoutRules');
 const { t }                = require('../i18n');
 const { AnalyticsEvent }   = require('../models/Analytics');
 const { computeForCode, computeForCheckout } = require('../services/discountEngine');
 const Discount             = require('../models/Discount');
+const { decorateColorImages } = require('../utils/colorMatch');
 
 const MAX_QTY_PER_ITEM   = 50;
 const MAX_ITEMS_PER_ORDER = 20;
@@ -121,19 +125,35 @@ function customerOrderView(order) {
 
 const shopController = {
   // GET /api/v1/shop/config — returns the publishable key for Stripe.js (if used)
-  async getConfig(req, res) {
-    return res.json({
-      enabled: process.env.SHOP_ENABLED === 'true',
-      currencies: ['ISK', 'EUR'],
-      shipping: {
-        flat_rate:    { priceIsk: SHIPPING_METHODS.flat_rate.priceIsk, priceEur: SHIPPING_METHODS.flat_rate.priceEur },
-        local_pickup: { priceIsk: 0, priceEur: 0 },
-      },
-      stripe: {
-        configured: stripeIsConfigured(),
-        publishableKey: process.env.STRIPE_PUBLISHABLE_KEY || null,
-      },
-    });
+  // plus what the cart/checkout need to SHOW the checkout settings (harvest2-
+  // lane7a): the pause + its message, the minimum, the field rules and the
+  // live delivery rates. Display only — createCheckoutSession enforces every
+  // one of them. The owner alert list is admin-only and never sent here.
+  async getConfig(req, res, next) {
+    try {
+      const [checkout, rates] = await Promise.all([Setting.getCheckoutSettings(), shippingRates()]);
+      return res.json({
+        enabled: process.env.SHOP_ENABLED === 'true',
+        currencies: ['ISK', 'EUR'],
+        shipping: {
+          flat_rate:    { priceIsk: rates.flatRateIsk, priceEur: rates.flatRateEur },
+          local_pickup: { priceIsk: 0, priceEur: 0 },
+          free_over_isk: rates.freeOverIsk, // 0 = no threshold (utils/shipping.js twin)
+        },
+        checkout: {
+          ordering_paused:         checkout.ordering_paused,
+          // Only while paused: a drafted message is not public before it is used.
+          ordering_paused_message: checkout.ordering_paused
+            ? checkout.ordering_paused_message : { en: '', is: '' }, // '' → i18n default
+          min_order_value_isk:     checkout.min_order_value_isk,
+          fields:                  checkout.fields,
+        },
+        stripe: {
+          configured: stripeIsConfigured(),
+          publishableKey: process.env.STRIPE_PUBLISHABLE_KEY || null,
+        },
+      });
+    } catch (err) { next(err); }
   },
 
   // GET /api/v1/shop/products — public list of active products (+ variants)
@@ -207,6 +227,9 @@ const shopController = {
         ProductVariant.listForProduct(product.id, { activeOnly: true }),
       ]);
       const full = await Inventory.decorate({ ...product, images, variants });
+      // `color_images` — which photo each colour shows, matched HERE, never in
+      // the browser (utils/colorMatch.js; ported from icelandicstore #265).
+      decorateColorImages(full);
       return res.json({ product: stripStockInternals(full) });
     } catch (err) { next(err); }
   },
@@ -223,6 +246,12 @@ const shopController = {
   // POST /api/v1/shop/checkout — create an order + Stripe Checkout Session
   async createCheckoutSession(req, res, next) {
     try {
+      // ── Checkout settings: the pause answers before ANY order work ─────
+      // (services/checkoutRules.js; harvest2-lane7a, ported from ice #151).
+      const checkout = await Setting.getCheckoutSettings();
+      const paused = checkoutRules.orderingPausedResponse(checkout, req.locale);
+      if (paused) return res.status(paused.status).json(paused.body);
+
       if (!stripeIsConfigured()) {
         return res.status(503).json({ error: t(req.locale, 'errors.shop.checkoutUnavailable'), code: 503 });
       }
@@ -274,6 +303,15 @@ const shopController = {
         }
       }
 
+      // Field rules (phone / company / kennitala / note): a hidden field's
+      // value is dropped, a required one must be there. The address that goes
+      // on the order is the one the rules hand back (phone cleared if hidden).
+      const fieldRes = checkoutRules.applyFieldRules({
+        checkout, body: req.body, locale: req.locale,
+        address: method.requiresAddress ? shippingAddress : null,
+      });
+      if (fieldRes.error) return res.status(fieldRes.error.status).json(fieldRes.error.body);
+
       // ── Re-fetch prices from DB (A04: never trust client prices) ──────
       // Each item is either { variantId, quantity } (variant-backed SKU) or
       // { productId, quantity } (single-SKU product with no variants).
@@ -312,6 +350,9 @@ const shopController = {
             variantAttributes: variant.attributes,
             name: buildLineName(product, variant),
             price: variantPriceForCurrency(variant, product, currency),
+            // The ISK price of the same line: the minimum and the free-over
+            // threshold are ISK settings, whatever the charge currency.
+            priceIsk: variantPriceForCurrency(variant, product, 'ISK'),
             quantity: qty,
           });
         } else if (it.productId) {
@@ -335,6 +376,7 @@ const shopController = {
             variantAttributes: null,
             name: product.name,
             price: priceForCurrency(product, currency),
+            priceIsk: priceForCurrency(product, 'ISK'),
             quantity: qty,
           });
         } else {
@@ -361,10 +403,17 @@ const shopController = {
         });
       }
 
-      const shippingAmount = getShippingPrice(shippingMethod, currency);
+      // Delivery price from the admin settings (env = the fallback), the same
+      // rule the cart/checkout display runs (config/shipping.js, twin
+      // public/js/utils/shipping.js): free over the ISK threshold, measured on
+      // the basket before discounts.
+      const subtotal = resolvedItems.reduce((s, it) => s + Number(it.price) * Number(it.quantity), 0);
+      const iskSubtotal = resolvedItems.reduce((s, it) => s + Number(it.priceIsk) * Number(it.quantity), 0);
+      const shippingAmount = computeShippingPrice({
+        method: shippingMethod, currency, rates: await shippingRates(), iskSubtotal,
+      });
 
       // ── Resolve a discount (typed code, or the best live automatic one) ──
-      const subtotal = resolvedItems.reduce((s, it) => s + Number(it.price) * Number(it.quantity), 0);
       const discountCode = typeof req.body?.discount_code === 'string' ? req.body.discount_code.trim() : '';
       const applied = await computeForCheckout({ code: discountCode, subtotal, shippingAmount, currency });
       // A bad code the customer typed is a hard error; automatic discovery is silent.
@@ -376,6 +425,13 @@ const shopController = {
       }
       const appliedDiscount = (!applied.error && applied.discount) ? applied : null;
 
+      // Minimum order value: the DB-trusted subtotal AFTER the order
+      // discount, in ISK (services/checkoutRules.js).
+      const belowMin = checkoutRules.minimumOrderResponse(checkout, checkoutRules.iskNetAfterDiscount({
+        iskSubtotal, subtotal, discountAmount: appliedDiscount ? appliedDiscount.discountAmount : 0,
+      }), req.locale);
+      if (belowMin) return res.status(belowMin.status).json(belowMin.body);
+
       // ── Insert order (status=pending) in a transaction ────────────────
       const order = await Order.createWithItems({
         userId: user?.id || null,
@@ -383,13 +439,14 @@ const shopController = {
         guestName,
         currency,
         shippingMethod,
-        shippingAddress: method.requiresAddress ? shippingAddress : null,
+        shippingAddress: fieldRes.address,
         items: resolvedItems,
         shipping: shippingAmount,
         appliedDiscount,
         // The buyer's order note (ice #213, migration 115); Order.normaliseNote
         // trims and caps it. Staff-only: never echoed in a public payload.
-        notes: req.body?.note,
+        // Null when the admin hid the note field (checkoutRules).
+        notes: fieldRes.values.note,
       });
 
       // Consume one use of the discount (atomic, guarded by usage_limit).
@@ -639,7 +696,11 @@ async function handleCheckoutCompleted(session) {
   // best-effort; failures log but never poison the webhook response.
   try {
     const items = await Order.listItems(order.id);
-    const finalOrder = await Order.findById(order.id);
+    // findDetailById, not findById: the receipt goes to `guest_email ||
+    // user_email`, and only the detail row joins the signed-in buyer's email —
+    // with findById a signed-in buyer never got a receipt (review pass,
+    // harvest2-lane7a).
+    const finalOrder = await Order.findDetailById(order.id);
     let locale = 'en';
     if (finalOrder.user_id) {
       const { rows: uRows } = await db.query(
@@ -649,7 +710,7 @@ async function handleCheckoutCompleted(session) {
       if (uRows[0]?.preferred_locale) locale = uRows[0].preferred_locale;
     }
     const bookableItems = items.filter(it => it.is_bookable);
-    const sends = [sendOrderReceipt(finalOrder, items, locale, { hasBookableItems: bookableItems.length > 0 })];
+    const sends = [emailService.sendOrderReceipt(finalOrder, items, locale, { hasBookableItems: bookableItems.length > 0 })];
 
     if (bookableItems.length > 0) {
       // Admin recipients — same query shape used by the party notification
@@ -683,6 +744,31 @@ async function handleCheckoutCompleted(session) {
   } catch (emailErr) {
     logger.error({ err: emailErr, orderNumber: order.order_number }, '[stripeWebhook] Receipt email block failed');
   }
+
+  await alertOwnerOfPaidOrder(order.id, order.order_number);
+}
+
+// The owner's "new paid order" alert (Admin → Afgreiðsla → order alerts;
+// harvest2-lane7a, ported from icelandicstore #151's owner notification).
+// Fired where the order BECOMES paid (above, after the committed transition)
+// and never allowed to hold up or fail the webhook: the recipient list and the
+// order are read here (local, bounded queries inside a catch-all), and the
+// SEND is not awaited — a stalled mail endpoint cannot delay Stripe's 200. The
+// sender goes through emailService.deliver, so EMAIL_ALLOWLIST and the demo
+// instance's no-send rule apply. Exported for the integration test.
+async function alertOwnerOfPaidOrder(orderId, orderNumber) {
+  try {
+    const to = checkoutRules.ownerAlertRecipients(await Setting.getCheckoutSettings());
+    if (!to.length) return;
+    // The detail row carries the signed-in buyer's email (user_email).
+    const [finalOrder, items] = await Promise.all([Order.findDetailById(orderId), Order.listItems(orderId)]);
+    if (!finalOrder) return;
+    Promise.resolve()
+      .then(() => emailService.sendOrderOwnerAlert({ order: finalOrder, items, to }))
+      .catch((err) => logger.error({ err, orderNumber }, '[stripeWebhook] Owner order alert failed'));
+  } catch (err) {
+    logger.error({ err, orderNumber }, '[stripeWebhook] Owner order alert skipped');
+  }
 }
 
 async function handlePaymentFailed(paymentIntent) {
@@ -700,3 +786,4 @@ async function handlePaymentFailed(paymentIntent) {
 }
 
 module.exports = shopController;
+module.exports.alertOwnerOfPaidOrder = alertOwnerOfPaidOrder;
