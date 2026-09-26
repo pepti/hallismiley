@@ -1221,6 +1221,11 @@
 .admin-shop__var-input:focus { outline: none; border-color: var(--gold); }
 
 /* ── Inline edit (Shop + Product pages) ─────────────────────────────────── */
+/* The inline-edit controls are filled accent controls: label --on-accent,
+   hover fill --accent-hover (harvest 2 lane 6c, the lane 4a leftover). The
+   light --gold-light fill under a near-white --bg-nav label failed contrast
+   on Bjart; --on-accent/--accent-hover are the per-theme pair built for it
+   (tests/unit/themeTokenContrast.test.js measures them on every theme). */
 .shop-view__edit-btn {
   position: fixed;
   top: 80px;
@@ -1229,7 +1234,7 @@
   padding: 10px 16px;
   background: var(--gold);
   border: 1px solid var(--gold);
-  color: var(--bg-nav);
+  color: var(--on-accent);
   font-family: var(--font-sans);
   font-size: 0.72rem;
   font-weight: 700;
@@ -1240,7 +1245,8 @@
   transition: background var(--transition), transform var(--transition);
 }
 .shop-view__edit-btn:hover {
-  background: var(--gold-light);
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
   transform: translateY(-1px);
 }
 .shop-view__edit-btn--hidden { display: none; }
@@ -1266,7 +1272,7 @@
 }
 .shop-view__add-btn:hover {
   background: var(--gold);
-  color: var(--bg-nav);
+  color: var(--on-accent);
   transform: translateY(-1px);
 }
 /* Hide Add Product while in copy-edit mode so it doesn't compete with the
@@ -1304,9 +1310,9 @@
 }
 .shop-view__save-btn {
   background: var(--gold);
-  color: var(--bg-nav);
+  color: var(--on-accent);
 }
-.shop-view__save-btn:hover  { background: var(--gold-light); }
+.shop-view__save-btn:hover  { background: var(--accent-hover); border-color: var(--accent-hover); }
 .shop-view__cancel-btn:hover { background: rgba(200, 170, 110, 0.1); }
 .shop-view__edit-status {
   font-family: var(--font-sans);
@@ -1328,7 +1334,7 @@
 .shop-view--editing [data-product-field]:focus,
 .shop-view--editing [data-chrome-field]:focus {
   outline-style: solid;
-  outline-color: var(--gold-light);
+  outline-color: var(--accent-ink);
   background: rgba(200, 170, 110, 0.06);
 }
 
