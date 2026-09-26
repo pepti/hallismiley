@@ -249,6 +249,66 @@ The jobs are otherwise not gated on each other. A shard has a 45-minute ceiling
 because a contended 2-vCPU runner showed a 3.7× run-to-run spread on an
 identical tree.
 
+## After a deploy — the deployed-environment walkthrough (2026-09-26)
+
+Everything above verifies the **code**. After a deploy (or a self-update, or a
+new customer instance) the question is different: does *this box, with this
+data and this configuration* behave? Ported from icelandicstore #128
+([harvest2-lane0](history.d/2026-09-26-harvest2-lane0-history.md#harvest2-lane0-2026-09-26)),
+whose release gate passed 46 routes, zero console errors and four matching
+data counts, and still missed a checkout that **quoted 4,421 kr. and booked
+4,039 kr.** The stored order was internally consistent; only comparing what
+the UI *quoted* with what was *booked* showed it.
+
+**The rule: exercise each write path and read back what was stored — quoted
+vs booked.** A read-only sweep tests the reader, not the producer. Note what
+the UI shows before you submit, then read the stored record back (admin view
+or API) and compare field by field. Label every test record obviously
+(`PRÓFUN — <date>`), and remove it the way the product allows (delete a lead,
+cancel an order) — never by SQL.
+
+Where writing is acceptable depends on the instance: a canary, the demo or a
+fresh customer instance before hand-over take the full list; the live public
+site and the ops books take only the reversible writes (a lead, a setting). **A
+statutory invoice is never a test on a live ledger** — the invoice series is
+gapless and a posted entry is only ever reversed, so that check runs on a
+non-production instance.
+
+| Write path | Do | Read back and compare |
+|---|---|---|
+| Contact form → Fyrirspurnir | send one enquiry from the public contact page | the lead in Admin → Fyrirspurnir (name, email, message, locale); the notification email arrived, from `EMAIL_FROM` with the right Reply-To |
+| Signup / sign-in (when the module is on) | create an account, verify, sign in | the verification email's link host is `APP_URL`; the user row's role |
+| Invoice (non-production only) | issue one invoice in Bókhald | PDF total = invoice record = the journal lines (balanced) = the VSK report line; the number is the next in the series |
+| Accounts + commission | record a service invoice on a test account | the commission event = rate × base, and the statement shows the same amount |
+| Seller area | `npm run publish:sellers` on ops | the public instance's `/solusvaedi` shows exactly the ops numbers for that seller |
+| Change request / MCP write tool | file one through the widget, and one `file_feature_request` through the connector | both rows in the `/admin/feedback` inbox with the text as sent; the MCP write's security-log line (who and what) |
+| Uploads | upload one image | it is served at its URL at full size (proves the `UPLOAD_ROOT` mount) |
+| Settings / theme | change one setting and the theme | both survive a reload and a new session |
+| Shop (hidden surface, Stripe test mode only) | one order with a plain product and a variant | cart / checkout / button totals vs the stored order's subtotal, VAT and total, and each line's VAT rate |
+
+**Judge each page on three things, not one.** Admin views swallow a failed
+data load into an in-page `.admin-error` banner **without a console error**,
+so shell-plus-clean-console is a false green. Per route: the URL reached the
+intended route, the view's content rendered, and the `.admin-error` count is 0.
+
+**Deployment checks a local suite cannot make:**
+- `/ready` answers 200, its `uptime` is younger than the swap, and the
+  `X-App-Build` header names the build that was deployed (a restart answers
+  from the OLD process first — poll until `uptime` drops).
+- The environment is this instance's: `APP_URL`, `EMAIL_FROM`/`EMAIL_REPLY_TO`,
+  `INSTANCE_ROLE` (`public` vs `ops`), the release channel. Read them with
+  `az` (prefix `MSYS_NO_PATHCONV=1` in Git Bash when an argument is a
+  `/unix/path`), not through the UI.
+- No served page or request names another instance's host, registry or storage.
+- Indexability per host: `robots.txt`, the page's `<meta name="robots">` and
+  `sitemap.xml` refuse on any host that is not the real public site.
+- Hidden surfaces stay hidden (nav, sitemap, SSR), and a module that is off
+  answers 404.
+
+**Harness traps:** a backgrounded browser tab never loads `loading="lazy"`
+images (check `document.visibilityState` before believing "images broken");
+heavy admin browsing spends the rate-limit budget, so pace the walk.
+
 ## Measuring the suite
 
 The counts in the tier table are static declarations, not runtime totals:
