@@ -13,6 +13,8 @@ const { applyMfaPolicy } = require('../auth/mfaPolicy');
 // user row lived here until 2026-09-03 — the same copy changeRequestRoutes had
 // deleted for 404ing every admin granted through Admin → Roles.
 const { softAuth } = require('../middleware/softAuth');
+// Postcode + phone shape on the shipping address (utils/contactFormat.js).
+const { validateCheckoutContact } = require('../middleware/validate');
 
 // Still private on purpose, for now: the shared auth/middleware.js requireAuth
 // also rotates fresh cookies, re-resolves req.locale and answers 403 (not 401)
@@ -65,6 +67,7 @@ router.post('/checkout',
   checkoutLimiter,
   softAuth,
   csrfProtect,
+  validateCheckoutContact,
   shopController.createCheckoutSession);
 
 // Discount-code preview (display-only; checkout re-validates server-side).
