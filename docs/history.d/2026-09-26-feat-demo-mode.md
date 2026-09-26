@@ -137,3 +137,33 @@ Efnishöfundur's wording made generic; the `errors.demo.*` keys are in
   `DEMO_KEEP_ROLES=admin,kynning`, a single instance, the health check on
   `/health`, the database role owning only its own database);
 - a check on TEST that the exit-and-restart is not counted as a crash loop.
+
+**Re-review (Öryggisvörður, after the rewrite): PASS.** Every earlier finding
+is closed, except the two below, which are provisioning conditions. The
+re-review's new findings were fixed on this branch:
+- **N-1 (medium).** Boot recovery and the first-boot seed took no reset
+  lock, so a second process booting mid-reset could consume the snapshot and
+  lose the accounts after all. Both now take the lock and skip while it is
+  held. The first-boot seed also skips while an unrecovered snapshot exists.
+  The fixture tests this with the lock held on another connection.
+- **N-2.** `DROP SCHEMA public` and `CREATE SCHEMA public` now run in one
+  transaction, and a boot that finds a snapshot but no `public` recreates it.
+- **N-3.** A failed boot recovery raises a critical alert, not just a log line.
+- **N-4.** The roles restore is `DO NOTHING`: a reset returns the system roles
+  to their migrated definition, and a custom role comes back as saved (the
+  product seed may re-assert it).
+
+**Provisioning conditions (Ský), from the review:**
+- a single instance, with the health check on `/health` (`/ready` answers 503
+  during a reset);
+- the app role owns the database and every object in `public`, and no
+  extension is owned by another role (otherwise the nightly DROP fails);
+- `BOOKS_UPLOAD_ROOT` set outside the app (unset, it is refused and never
+  wiped);
+- no Anthropic key, managed-identity federation or Google/Facebook client ids
+  on the demo app, since the translator and social login have no demo guard;
+- `DEMO_KEEP_ROLES` exactly `admin,kynning`, and `kynning` never holds the
+  `users`/`roles` views.
+
+Still to check on TEST: that App Service restarts the container after the
+reset's exit rather than counting a crash loop.

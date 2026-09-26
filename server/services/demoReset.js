@@ -58,7 +58,10 @@ const ADMIN_COOLDOWN_MS = 15 * 60 * 1000;
 // What a snapshot holds, in restore order. `where` runs at SNAPSHOT time over
 // public.<table>: $1 = the kept user ids, $2 = those whose login never expires.
 const PLAN = [
-  { table: 'roles',               where: 'TRUE',                           conflict: '(name) DO UPDATE SET description = EXCLUDED.description, view_access = EXCLUDED.view_access' },
+  // A role the migrations just (re)created keeps its migrated definition, so a
+  // reset returns the system roles to a known state; a custom role (the
+  // product's prospect role) comes back as saved — its seed may re-assert it.
+  { table: 'roles',               where: 'TRUE',                           conflict: '(name) DO NOTHING' },
   { table: 'users',               where: 'id = ANY($1::text[])',           conflict: 'DO NOTHING' },
   { table: 'user_roles',          where: 'user_id = ANY($1::text[])',      conflict: 'DO NOTHING', restoreWhere: 'role_name IN (SELECT name FROM public.roles)' },
   { table: 'user_recovery_codes', where: 'user_id = ANY($1::text[])',      conflict: 'DO NOTHING' },
@@ -319,8 +322,17 @@ async function resetDemo({ trigger = 'admin', exit = process.env.NODE_ENV !== 't
 
     await snapshotAccounts(client);
     setAside = true;
-    await client.query('DROP SCHEMA public CASCADE');
-    await client.query('CREATE SCHEMA public');
+    // One transaction: a connection lost between the two must never leave a
+    // database without `public` (the next boot's migrate() could not start).
+    await client.query('BEGIN');
+    try {
+      await client.query('DROP SCHEMA public CASCADE');
+      await client.query('CREATE SCHEMA public');
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw err;
+    }
     const { migrate } = require('../scripts/migrate');
     await migrate();
     const restored = await restoreFromSnapshot(client);
@@ -362,6 +374,7 @@ async function verifyDemoBoot({ allowTestDatabase = false } = {}) {
   const client = await db.pool.connect();
   try {
     await assertDemoEnvironment(client, { allowTestDatabase });
+    if (await schemaExists(client, KEEP_SCHEMA)) await client.query('CREATE SCHEMA IF NOT EXISTS public');
   } finally { client.release(); }
   return true;
 }
@@ -371,16 +384,27 @@ async function verifyDemoBoot({ allowTestDatabase = false } = {}) {
  * aside left the snapshot. Restore from it (idempotent), then drop it.
  * Resolves with the restore summary, or null when there was nothing to do.
  */
+// Both boot steps below take the reset lock: a second process booting while a
+// reset runs (an overlapped restart, a scale-out, an image swap near the
+// nightly hour) must not consume the snapshot under it. Held → skip.
+async function withResetLock(client, what, fn) {
+  const { rows } = await client.query('SELECT pg_try_advisory_lock($1) AS ok', [RESET_LOCK_KEY]);
+  if (!rows[0].ok) { logger.warn(`[demoReset] ${what} skipped: a reset holds the lock`); return null; }
+  try { return await fn(); } finally { await client.query('SELECT pg_advisory_unlock($1)', [RESET_LOCK_KEY]).catch(() => {}); }
+}
+
 async function recoverInterruptedReset({ allowTestDatabase = false } = {}) {
   if (!isDemoInstance()) return null;
   const client = await db.pool.connect();
   try {
     await assertDemoEnvironment(client, { allowTestDatabase });
-    if (!(await schemaExists(client, KEEP_SCHEMA))) return null;
-    const restored = await restoreFromSnapshot(client);
-    await client.query(`DROP SCHEMA ${KEEP_SCHEMA} CASCADE`);
-    logger.warn(restored, '[demoReset] recovered the accounts of an interrupted reset');
-    return restored;
+    return await withResetLock(client, 'boot recovery', async () => {
+      if (!(await schemaExists(client, KEEP_SCHEMA))) return null;
+      const restored = await restoreFromSnapshot(client);
+      await client.query(`DROP SCHEMA ${KEEP_SCHEMA} CASCADE`);
+      logger.warn(restored, '[demoReset] recovered the accounts of an interrupted reset');
+      return restored;
+    });
   } finally { client.release(); }
 }
 
@@ -391,12 +415,17 @@ async function seedIfFresh({ allowTestDatabase = false } = {}) {
   const client = await db.pool.connect();
   try {
     await assertDemoEnvironment(client, { allowTestDatabase });
-    const { rows } = await client.query(`SELECT 1 FROM app_settings WHERE key = 'demo.last_reset'`);
-    if (rows.length) return null;
-    const seeded = await runProductSeed();
-    await recordReset(client, 'boot');
-    logger.warn({ seeded }, '[demoReset] fresh demo database seeded');
-    return seeded;
+    return await withResetLock(client, 'first-boot seed', async () => {
+      // An unrecovered snapshot means the accounts are not back yet: seeding
+      // now would hide that. Recovery must succeed first.
+      if (await schemaExists(client, KEEP_SCHEMA)) return null;
+      const { rows } = await client.query(`SELECT 1 FROM app_settings WHERE key = 'demo.last_reset'`);
+      if (rows.length) return null;
+      const seeded = await runProductSeed();
+      await recordReset(client, 'boot');
+      logger.warn({ seeded }, '[demoReset] fresh demo database seeded');
+      return seeded;
+    });
   } finally { client.release(); }
 }
 

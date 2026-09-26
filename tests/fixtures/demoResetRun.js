@@ -1,5 +1,5 @@
 'use strict';
-// Child-process half of tests/integration/demoReset.test.js. The reset renames
+// Child-process half of tests/integration/demoReset.test.js. The reset drops
 // and rebuilds the public schema, so it runs in its own process against a
 // database the test created for it (DATABASE_URL = …/demo_reset_<pid>_test,
 // DEMO_DATABASE_NAME = the same) — never a Jest worker database. Prints one
@@ -82,6 +82,14 @@ async function main() {
   await db.query('CREATE SCHEMA public');
   await migrate();
   const preflightInterrupted = await demoReset.preflight({ trigger: 'nightly', ...T }).then(() => null, (e) => e.reason);
+  // A second process booting while a reset holds the lock must not touch the snapshot.
+  const holder = await db.pool.connect();
+  await holder.query('SELECT pg_advisory_lock(7421026926)');
+  const recoverWhileLocked = await demoReset.recoverInterruptedReset(T);
+  const seedWhileLocked = await demoReset.seedIfFresh(T);
+  const snapshotKeptWhileLocked = (await q(`SELECT 1 FROM pg_namespace WHERE nspname = 'demo_keep'`)).length;
+  await holder.query('SELECT pg_advisory_unlock(7421026926)');
+  holder.release();
   const recovered = await demoReset.recoverInterruptedReset(T);
   const seededAfterRecovery = await demoReset.seedIfFresh(T);
   const afterRecovery = await snapshot();
@@ -95,7 +103,7 @@ async function main() {
   fs.rmSync(upB, { recursive: true, force: true });
   process.stdout.write(JSON.stringify({
     bootChecked, first, heapOrder, summary, afterReset, uploads, cooldownRefusal,
-    preflightInterrupted, recovered, seededAfterRecovery, afterRecovery, insideApp,
+    preflightInterrupted, recoverWhileLocked, seedWhileLocked, snapshotKeptWhileLocked, recovered, seededAfterRecovery, afterRecovery, insideApp,
   }) + '\n');
 }
 

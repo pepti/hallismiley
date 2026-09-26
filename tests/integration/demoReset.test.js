@@ -82,6 +82,10 @@ test('an upload root inside the app is never wiped', () => {
 
 test('an interrupted reset blocks new resets until the boot recovers its accounts', () => {
   expect(out.preflightInterrupted).toBe('interrupted');
+  // While a reset holds the lock, boot recovery and the first-boot seed skip.
+  expect(out.recoverWhileLocked).toBeNull();
+  expect(out.seedWhileLocked).toBeNull();
+  expect(out.snapshotKeptWhileLocked).toBe(1);
   expect(out.recovered.keptUsers).toBe(3);
   expect(out.seededAfterRecovery).toEqual(ENGINE_STUB);
   expect(out.afterRecovery.prev).toBe(0);

@@ -112,15 +112,21 @@ async function start() {
     })
     .catch((err) => logger.error({ err }, '[server] could not load the admin module switches — keeping the contract'));
 
-  // The demo instance (R2b): an interrupted reset left its accounts in schema
-  // demo_prev — copy them back; then a database with no demo data yet (first
+  // The demo instance (R2b): an interrupted reset left its accounts in the
+  // demo_keep snapshot — copy them back; then a database with no demo data yet (first
   // boot, or after that recovery) gets the product's seed. A failure is logged,
   // never fatal — the site still serves, and an admin can reset from
   // /admin/general.
   {
     const demoReset = require('./services/demoReset');
     await demoReset.recoverInterruptedReset()
-      .catch((err) => logger.error({ err }, '[server] recovering an interrupted demo reset failed'));
+      .catch((err) => {
+        logger.error({ err }, '[server] recovering an interrupted demo reset failed');
+        // The staff logins are not back and every reset is refused until they
+        // are: someone must look.
+        require('./observability/alerts').alert('critical', 'Demo reset recovery failed',
+          { error: err.message, snapshot: 'demo_keep.demo_keep_snapshot' }).catch(() => {});
+      });
     await demoReset.seedIfFresh()
       .catch((err) => logger.error({ err }, '[server] demo seed on first boot failed'));
   }
