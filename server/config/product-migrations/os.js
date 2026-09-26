@@ -279,6 +279,23 @@ const OS_003_EDITS = [
     to: '<li>Hvort ónotaðar einingar flytjist milli mánaða er ekki ákveðið — þú lofar engu um það.</li>\n<li><strong>Samstarf hefur ekkert verð fyrr en eftir ókeypis úttektina.</strong> Þú nefnir enga tölu, ekki heldur „svona í kringum“, og lofar hvorki hvað verður smíðað né hvenær.</li>' },
 ];
 
+// os_004 — follow-up to os_003 (Halli, 2026-09-26). Verk sizes stay 1/5/20 but
+// the D-022 monthly quotas are 2/3/5, so the queue promise "a verk nobody is
+// waiting for can wait for next month and take its units, at no extra cost"
+// cannot hold for a verk bigger than one month's units. It now says such a verk
+// is paid with the units of the coming months, spread over several if one month
+// cannot hold it, and a worked example follows (a stórt verk of 20 einingar on
+// Rekstur, 5/mán: four months, or start now and pay the rest at the einingaverð
+// 6.000 kr.; the customer chooses, agreed before work starts). Same helper and
+// guard as os_001/os_003; the seed carries the result;
+// tests/integration/salesGuidesQueueSpread.test.js checks os_003 text + this
+// edit == seed text. DRÖG; the guides stay unpublished.
+const OS_004_EDITS = [
+  { slug: 'threpin-thrju', field: 'body',
+    from: '<li><strong>Verk sem ekkert liggur á</strong> má geyma til næsta mánaðar og taka af einingum hans, án aukakostnaðar. Nýjar einingar bætast við um mánaðamót.</li>',
+    to: '<li><strong>Verk sem ekkert liggur á</strong> má geyma og greiða með einingum næstu mánaða — stærra verk en einn mánuður rúmar má dreifa á fleiri mánuði, án aukakostnaðar. Nýjar einingar bætast við um mánaðamót.</li>\n<li><strong>Dæmi:</strong> viðskiptavinur í Rekstri (5 einingar á mánuði) vill stórt verk (20 einingar). Annaðhvort dreifist verkið á fjóra mánuði og einingar þeirra mánaða fara í það, eða það hefst strax og hann greiðir það sem er umfram einingar mánaðarins á einingaverði: 15 × 6.000 kr. = 90.000 kr. án VSK. Viðskiptavinurinn velur, og samið er um valið áður en vinnan hefst.</li>' },
+];
+
 module.exports = {
   product: 'os',
   legacy: [
@@ -410,6 +427,15 @@ module.exports = {
     name: 'os_003_sales_guides_d022_pricing',
     edits: OS_003_EDITS,
     statements: OS_003_EDITS.map(guideEdit),
+  },
+  {
+    // The queue promise spreads a verk over several months (see OS_004_EDITS
+    // above). Pure data, no schema, expand-only: text in rows nobody saved,
+    // `published` untouched. `edits` is carried for the test.
+    // Reference copy: server/migrations/product/os_004_sales_guides_queue_spread.sql
+    name: 'os_004_sales_guides_queue_spread',
+    edits: OS_004_EDITS,
+    statements: OS_004_EDITS.map(guideEdit),
   },
   ],
   aliases: {},

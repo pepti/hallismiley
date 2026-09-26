@@ -37,4 +37,5 @@ server/scripts/seed-sales-guides.js
 tests/integration/contactContentOs002.test.js
 tests/integration/salesGuidesD001.test.js
 tests/integration/salesGuidesD022.test.js
+tests/integration/salesGuidesQueueSpread.test.js
 tests/integration/salesGuidesServicesPage.test.js
