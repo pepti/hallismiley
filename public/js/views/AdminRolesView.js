@@ -10,6 +10,7 @@ import { t, href } from '../i18n/i18n.js';
 import { navigateReplace } from '../navigate.js';
 import { renderAdminShell, ADMIN_NAV } from '../components/AdminSidebar.js';
 import { showToast } from '../components/Toast.js';
+import { attachCombobox } from '../components/Combobox.js';
 
 // Map each admin view id → its sidebar group (i18n key + nav order) so the roles
 // page can present view-access grouped the same way as the sidebar.
@@ -45,6 +46,7 @@ export class AdminRolesView {
     this._filter = '';                   // client-side board filter text
     this._dragUserId = null;
     this._searchSeq = 0;                 // guards against out-of-order search responses
+    this._detachSearch = null;           // the member-search Combobox
     this._persisting = false;            // ignore overlapping assigns during a reconcile
   }
 
@@ -321,12 +323,21 @@ export class AdminRolesView {
   }
 
   _bindMembers(root) {
-    // Server search (debounced) → draggable result chips.
-    root.querySelector('#member-search').addEventListener('input', (e) => {
-      clearTimeout(this._searchDebounce);
-      const v = e.target.value;
-      this._searchDebounce = setTimeout(() => this._runSearch(v), 250);
-    });
+    // Server search → the shared Combobox (a real listbox with arrow keys and
+    // aria-activedescendant instead of a bare div of chips; Ported from
+    // icelandicstore #351 — async source, debounceMs, minQuery, meta). Picking a
+    // person puts them in the panel as ONE draggable chip, which is dropped on a
+    // role column exactly as before.
+    if (this._detachSearch) this._detachSearch();
+    this._detachSearch = attachCombobox(
+      root.querySelector('#member-search'),
+      (query) => this._runSearch(query),
+      {
+        debounceMs: 250,
+        minQuery: 1,
+        onPick: (entry) => this._showPicked(entry.value),
+      },
+    );
 
     // Client-side board filter (debounced) — narrows cards already shown.
     root.querySelector('#member-filter').addEventListener('input', (e) => {
@@ -381,23 +392,44 @@ export class AdminRolesView {
     root.querySelectorAll('.role-column--drop').forEach(c => c.classList.remove('role-column--drop'));
   }
 
+  // The Combobox source: the server's hits as { value: id, label: name, meta:
+  // email }. The server matches on name, username and email, and the combobox
+  // re-ranks on the label, so username and email ride along as hidden keywords
+  // or an email-only hit would be dropped. The combobox discards a stale answer
+  // itself; the sequence guard covers the side effects here (results cache, the
+  // empty/error note).
   async _runSearch(q) {
     const box = this._el.querySelector('#member-search-results');
-    if (!box) return;
-    const term = q.trim();
-    if (!term) { this._searchResults = []; box.innerHTML = ''; return; }
+    const term = String(q || '').trim();
+    if (!term) { this._searchResults = []; if (box) box.innerHTML = ''; return []; }
     const seq = ++this._searchSeq; // a newer search supersedes this one
     try {
       const results = await searchUsers(term);
-      if (seq !== this._searchSeq) return; // stale response — discard
+      if (seq !== this._searchSeq) return []; // stale response — discard
       this._searchResults = results;
-      box.innerHTML = results.length
-        ? results.map(u => this._searchChip(u)).join('')
-        : `<p class="role-search__empty">${t('adminRoles.searchNoResults')}</p>`;
+      if (box) {
+        box.innerHTML = results.length
+          ? ''
+          : `<p class="role-search__empty">${t('adminRoles.searchNoResults')}</p>`;
+      }
+      return results.map(u => ({
+        value: String(u.id),
+        label: u.display_name || u.username || String(u.id),
+        meta: u.email || '',
+        keywords: [u.username, u.email, String(u.id)].filter(Boolean),
+      }));
     } catch (err) {
-      if (seq !== this._searchSeq) return;
-      box.innerHTML = `<p class="admin-error">${escHtml(err.message)}</p>`;
+      if (seq !== this._searchSeq) return [];
+      if (box) box.innerHTML = `<p class="admin-error">${escHtml(err.message)}</p>`;
+      return [];
     }
+  }
+
+  // The picked person as one draggable chip, the drag source for a role column.
+  _showPicked(userId) {
+    const box = this._el.querySelector('#member-search-results');
+    const user = this._searchResults.find(u => String(u.id) === String(userId));
+    if (box && user) box.innerHTML = this._searchChip(user);
   }
 
   _findUser(userId) {
@@ -460,5 +492,9 @@ export class AdminRolesView {
     }
   }
 
-  destroy() {}
+  destroy() {
+    this._searchSeq += 1;
+    clearTimeout(this._filterDebounce);
+    if (this._detachSearch) { this._detachSearch(); this._detachSearch = null; }
+  }
 }

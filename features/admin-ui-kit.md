@@ -37,6 +37,8 @@ paths:
   - e2e/admin-list-kit.spec.js
   - public/js/components/ErrorDialog.js
   - public/js/utils/stickyHScroll.js
+  - public/js/components/Combobox.js
+  - tests/unit/combobox.client.test.js
 migrations: []
 since: 2026-09-08
 origin: null

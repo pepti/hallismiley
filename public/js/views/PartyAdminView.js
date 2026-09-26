@@ -5,10 +5,18 @@ import { escHtml }      from '../utils/escHtml.js';
 import { formatMoney }  from '../utils/format.js';
 import { t, href } from '../i18n/i18n.js';
 import { PartyAdminStatModal } from '../components/PartyAdminStatModal.js';
+import { attachCombobox } from '../components/Combobox.js';
 
 export class PartyAdminView {
   constructor() {
     this._el = null;
+    // Live assignee comboboxes: [{ input, detach }] (see _wireAssigneeCombos).
+    this._assigneeCombos = [];
+  }
+
+  destroy() {
+    for (const c of this._assigneeCombos) c.detach();
+    this._assigneeCombos = [];
   }
 
   async render() {
@@ -3225,11 +3233,14 @@ export class PartyAdminView {
     });
 
     // Enter in the assignee input adds a chip (the control isn't a <form>).
+    // A defaultPrevented Enter was the combobox picking a row; its change event
+    // already added the chip.
     section.addEventListener('keydown', (e) => {
-      if (e.key !== 'Enter') return;
+      if (e.key !== 'Enter' || e.defaultPrevented) return;
       const asg = e.target.closest?.('.party-admin__assignee-input');
       if (asg) { e.preventDefault(); this._addAssignee(asg); }
     });
+    this._wireAssigneeCombos(section);
 
     this._bindPlanDrag(section);
   }
@@ -3549,9 +3560,9 @@ export class PartyAdminView {
   // A collaborative checklist for the planning team. Each TODO has notes, an
   // optional due date + assignees, and breaks down into subtasks that carry
   // their own due date + assignees. Assignee names are suggested from the guest
-  // list (a <datalist>) but free text is accepted too.
+  // list (the shared Combobox) but free text is accepted too.
 
-  // Unique, sorted suggestion list for the assignee datalist — built from
+  // Unique, sorted suggestion list for the assignee combobox — built from
   // invited guests, RSVPs, and any names already assigned.
   _collectPeopleNames() {
     const names = new Set();
@@ -3576,10 +3587,6 @@ export class PartyAdminView {
       <section class="party-admin__section" id="party-admin-todos">
         <h2 class="party-admin__section-title">✅ ${t('party.admin.todoTitle')}</h2>
         <p class="party-admin__logistics-help">${t('party.admin.todoHelp')}</p>
-
-        <datalist id="party-admin-people">
-          ${(this._peopleNames || []).map(n => `<option value="${escHtml(n)}"></option>`).join('')}
-        </datalist>
 
         <form class="party-admin__todo-add" id="party-admin-todo-add" novalidate>
           <input type="text" class="lol-input party-admin__todo-add-input"
@@ -3704,7 +3711,7 @@ export class PartyAdminView {
         <div class="party-admin__assignees" ${attrs}>
           <span class="party-admin__assignees-label">${t('party.admin.todoAssignedTo')}</span>
           <div class="party-admin__chips">${chips}</div>
-          <input type="text" class="lol-input party-admin__assignee-input" list="party-admin-people"
+          <input type="text" class="lol-input party-admin__assignee-input"
                  placeholder="${escHtml(t('party.admin.todoAssigneePh'))}" maxlength="100"
                  aria-label="${t('party.admin.todoAssigneePh')}" />
         </div>`;
@@ -3777,11 +3784,14 @@ export class PartyAdminView {
     });
 
     // Enter in the assignee input adds a chip (the control isn't a <form>).
+    // A defaultPrevented Enter was the combobox picking a row; its change event
+    // already added the chip.
     section.addEventListener('keydown', (e) => {
-      if (e.key !== 'Enter') return;
+      if (e.key !== 'Enter' || e.defaultPrevented) return;
       const asg = e.target.closest?.('.party-admin__assignee-input');
       if (asg) { e.preventDefault(); this._addAssignee(asg); }
     });
+    this._wireAssigneeCombos(section);
 
     this._bindTodoDrag(section);
   }
@@ -3973,6 +3983,28 @@ export class PartyAdminView {
       current = td?.assignees || [];
     }
     return { scope, todoId, subtaskId, current: [...current] };
+  }
+
+  // Assignee names are suggested by the shared Combobox instead of a native
+  // <datalist> (Ported from icelandicstore #194). Every mutation re-renders the
+  // inputs, so a combobox is attached lazily on first focus, and any whose input
+  // has left the DOM is detached then — each one holds a document listener.
+  _wireAssigneeCombos(section) {
+    section.addEventListener('focusin', (e) => {
+      const input = e.target.closest?.('.party-admin__assignee-input');
+      if (!input || input.dataset.combobox === 'on') return;
+      this._assigneeCombos = this._assigneeCombos.filter((c) => {
+        if (c.input.isConnected) return true;
+        c.detach();
+        return false;
+      });
+      const detach = attachCombobox(input, () => this._peopleNames || []);
+      this._assigneeCombos.push({ input, detach });
+      // Wrapping the input moves it in the DOM, which can drop focus. Put it
+      // back; the combobox's own focus handler then opens the full list.
+      if (document.activeElement === input) input.dispatchEvent(new FocusEvent('focus'));
+      else input.focus();
+    });
   }
 
   async _addAssignee(input) {
