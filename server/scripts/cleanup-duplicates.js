@@ -1,11 +1,22 @@
 // Removes duplicate projects created by running the seed script multiple times.
 // For each title that appears more than once, keeps the row with the LOWEST id
 // and deletes the rest (along with their project_media rows).
-// Run: node server/scripts/cleanup-duplicates.js
-require('dotenv').config();
+// Run: node server/scripts/cleanup-duplicates.js --allow-dev-db   (or against a local _test DB)
+//
+// DESTRUCTIVE: guarded by server/scripts/targetGuard.js (harvest 2, 2026-09-26) —
+// a local `_test` database, or the local dev database with --allow-dev-db;
+// never a deployed or Azure database.
+require('dotenv').config({ path: require('path').join(__dirname, '../../.env'), quiet: true });
 const { query, pool } = require('../config/database');
+const { assertSafeTarget } = require('./targetGuard');
 
 async function main() {
+  assertSafeTarget({
+    databaseUrl: pool.options?.connectionString || process.env.DATABASE_URL,
+    env: process.env,
+    allowDevDb: process.argv.includes('--allow-dev-db'),
+  }, { label: 'cleanup-duplicates' });
+
   // Find all titles that have more than one row
   const { rows: dupes } = await query(`
     SELECT title, COUNT(*) AS cnt, MIN(id) AS keep_id, ARRAY_AGG(id ORDER BY id) AS all_ids

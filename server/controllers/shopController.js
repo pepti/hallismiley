@@ -3,6 +3,7 @@
 const logger = require('../logger');
 const Product = require('../models/Product');
 const ProductVariant = require('../models/ProductVariant');
+const ProductMerge = require('../models/ProductMerge');
 const Collection = require('../models/Collection');
 const Order   = require('../models/Order');
 const Inventory = require('../models/Inventory');
@@ -77,20 +78,44 @@ function buildLineName(product, variant) {
 // them would let any visitor read how much is on order, so they are stripped
 // for every viewer (harvested from icelandicstore #243). Inventory.decorate must
 // have run first.
+//
+// The warehouse codes go too (icelandicstore #62, harvest 2, 2026-09-26): `bin`
+// is the shelf location, and `sku` / `barcode` are the internal product number
+// and the scanner code. The storefront (ShopView, ProductView, the cart) reads
+// none of them — they belong to the admin product editor and the scanner, which
+// read /api/v1/admin/shop — and these public routes attach no session, so every
+// caller here is a visitor. An allow-list would be tighter still; the
+// deny-list mirrors ice's shape so the two stay mergeable.
+const PRODUCT_INTERNALS = ['stock', 'on_hand', 'committed', 'bin', 'sku', 'barcode'];
 function stripStockInternals(product) {
   const out = { ...product };
-  delete out.stock;
-  delete out.on_hand;
-  delete out.committed;
+  for (const k of PRODUCT_INTERNALS) delete out[k];
   if (Array.isArray(out.variants)) {
     out.variants = out.variants.map((v) => {
       const vc = { ...v };
-      delete vc.stock;
-      delete vc.on_hand;
-      delete vc.committed;
+      for (const k of PRODUCT_INTERNALS) delete vc[k];
       return vc;
     });
   }
+  return out;
+}
+
+// What a CUSTOMER may see of their own order row (icelandicstore #416 G5,
+// `customerOrderView`, harvest 2). Order.COLUMNS is the staff shape: it
+// carries staff tags, the Stripe session and payment-intent ids and the
+// stock-settlement stamp. An ALLOW-list, so a column added to COLUMNS later
+// stays staff-only until someone decides otherwise here. OrderHistoryView
+// reads order_number, created_at, status, total and currency. `vat_total` is
+// not here yet: Order.COLUMNS does not select it (harvest 2 lane 5 adds the
+// column) — name it here in the same change that selects it.
+const CUSTOMER_ORDER_FIELDS = [
+  'id', 'order_number', 'user_id', 'guest_email', 'guest_name', 'currency',
+  'subtotal', 'shipping', 'total', 'status', 'payment_status', 'fulfillment_status',
+  'shipping_method', 'shipping_address', 'paid_at', 'fulfilled_at', 'created_at', 'updated_at',
+];
+function customerOrderView(order) {
+  const out = {};
+  for (const k of CUSTOMER_ORDER_FIELDS) if (k in order) out[k] = order[k];
   return out;
 }
 
@@ -167,7 +192,16 @@ const shopController = {
   async getProduct(req, res, next) {
     try {
       const product = await Product.findBySlug(req.params.slug, { activeOnly: true, locale: req.locale });
-      if (!product) return res.status(404).json({ error: t(req.locale, 'errors.shop.productNotFound'), code: 404 });
+      if (!product) {
+        // A product merged into another (migration 120) answers 301 to its
+        // survivor, never cached: the survivor may be re-merged or switched off.
+        const moved = await ProductMerge.movedTo(req.params.slug);
+        if (moved) {
+          res.set('Cache-Control', 'no-store');
+          return res.redirect(301, `/api/v1/shop/products/${encodeURIComponent(moved.slug)}`);
+        }
+        return res.status(404).json({ error: t(req.locale, 'errors.shop.productNotFound'), code: 404 });
+      }
       const [images, variants] = await Promise.all([
         Product.listImages(product.id),
         ProductVariant.listForProduct(product.id, { activeOnly: true }),
@@ -353,6 +387,9 @@ const shopController = {
         items: resolvedItems,
         shipping: shippingAmount,
         appliedDiscount,
+        // The buyer's order note (ice #213, migration 115); Order.normaliseNote
+        // trims and caps it. Staff-only: never echoed in a public payload.
+        notes: req.body?.note,
       });
 
       // Consume one use of the discount (atomic, guarded by usage_limit).
@@ -425,7 +462,7 @@ const shopController = {
   // GET /api/v1/shop/orders/mine — logged-in user's order history
   async getMyOrders(req, res, next) {
     try {
-      const orders = await Order.findByUserId(req.user.id, { limit: 50 });
+      const orders = (await Order.findByUserId(req.user.id, { limit: 50 })).map(customerOrderView);
       return res.json({ orders });
     } catch (err) { next(err); }
   },

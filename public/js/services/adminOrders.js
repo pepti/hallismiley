@@ -1,5 +1,6 @@
 // Admin orders API client — list/search, detail, status + tag updates.
 import { getCSRFToken } from './auth.js';
+import { downloadBlob } from '../utils/downloadCsv.js';
 
 async function csrfHeaders() {
   const token = await getCSRFToken();
@@ -73,14 +74,8 @@ export async function downloadOrdersXlsx(params = {}) {
   }
   const disposition = res.headers.get('Content-Disposition') || '';
   const filename = (disposition.match(/filename="([^"]+)"/) || [])[1] || 'orders.xlsx';
-  const blob = await res.blob();
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  // Revoke after a beat: Safari and older Firefox cancel a download whose URL
-  // is revoked straight after click() (ice #325 review).
-  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  // The kit's downloadBlob revokes the object URL after 30 s, not straight
+  // after click() — Safari and older Firefox cancel the download otherwise
+  // (Ported from icelandicstore #325).
+  downloadBlob(filename, await res.blob());
 }

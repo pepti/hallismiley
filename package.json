@@ -24,6 +24,10 @@
     "test:related": "jest --findRelatedTests --passWithNoTests",
     "test:ci": "node --max-old-space-size=8192 node_modules/jest/bin/jest.js --ci --forceExit --coverage",
     "test:db:clean": "node scripts/drop-test-dbs.js",
+    "test:pg:init": "node scripts/test-pg.js init",
+    "test:pg:start": "node scripts/test-pg.js start",
+    "test:pg:status": "node scripts/test-pg.js status",
+    "test:pg:stop": "node scripts/test-pg.js stop",
     "test:e2e": "playwright test",
     "test:e2e:smoke": "playwright test e2e/auth.spec.js e2e/navigation.spec.js e2e/business-routes.spec.js",
     "test:e2e:ui": "playwright test --ui",
@@ -86,7 +90,9 @@
     "husky": "^9.1.7",
     "istanbul-lib-coverage": "3.2.2",
     "jest": "^30.4.2",
+    "js-yaml": "3.15.2",
     "nodemon": "^3.1.0",
+    "pdf-lib": "1.17.1",
     "supertest": "^7.0.0"
   },
   "overrides": {

@@ -1,13 +1,17 @@
 const express = require('express');
-const multer  = require('multer');
 const router  = express.Router();
 
 const adminShop                = require('../controllers/adminShopController');
+const Product                  = require('../models/Product');
+const { t }                    = require('../i18n');
+const productMerge             = require('../controllers/adminProductMergeController');
+const productImportAi          = require('../controllers/adminProductImportAiController');
+const adminInventory           = require('../controllers/adminInventoryController');
 const { requireAuth }          = require('../auth/middleware');
 const { requireView }          = require('../auth/requireView');
 const { csrfProtect }          = require('../middleware/csrf');
 const { sanitizeBody }         = require('../middleware/sanitize');
-const { createProductUpload, createProductImportUpload } = require('../middleware/upload');
+const { uploadSingle, createProductUpload, createProductImportUpload } = require('../middleware/upload');
 const { verifyImageBytes } = require('../middleware/verifyImageBytes');
 
 // Admin shop routes require auth; per-view access is gated by path below, so a
@@ -16,8 +20,30 @@ const { verifyImageBytes } = require('../middleware/verifyImageBytes');
 router.use(requireAuth);
 router.use('/products',    requireView('products'));
 router.use('/collections', requireView('collections'));
+// Inventory Watch (harvest2-lane6a) is its own view, so it is answered HERE,
+// before the /reports prefix demands 'sales'.
+router.get('/reports/inventory', requireView('inventory'), adminInventory.getInventoryReport);
 router.use('/reports',     requireView('sales'));
 router.use('/orders',      requireView('orders'));
+
+// Resolve :id BEFORE the upload middleware writes anything. Ported from
+// icelandicstore #150 (harvest 2, 2026-09-26): multer streams the file to
+// UPLOAD_ROOT/products/<id>/ as it parses, so without this a POST to an unknown
+// id created the directory and an orphan file that the controller's own 404
+// then left behind — unreferenced growth on the Azure Files share. A
+// path-shaped or NUL-bearing id is not a product id: 404 before Postgres,
+// which rejects NUL in a text parameter (22021) and would surface it as a 500.
+async function requireProduct(req, res, next) {
+  const notFound = () => res.status(404).json({ error: t(req.locale, 'errors.admin.productNotFound'), code: 404 });
+  const id = req.params.id;
+  if (typeof id !== 'string' || !/^[A-Za-z0-9._-]+$/.test(id) || id.includes('..')) return notFound();
+  try {
+    const product = await Product.findById(id);
+    if (!product) return notFound();
+    req.product = product;
+    return next();
+  } catch (err) { return next(err); }
+}
 
 // ── Products ────────────────────────────────────────────────────────────────
 router.get('/products',           adminShop.listProducts);
@@ -33,20 +59,36 @@ router.get('/products/export.csv',      adminShop.exportProducts);
 // only, 10 MB) and returns rows for preview/apply — the one reader for every
 // product file (harvest-ice-d-2026-09-24). CSRF: it only parses, but it is a
 // POST with a body, so it carries the same header check as apply.
-const productImportUpload = (req, res, next) => {
-  createProductImportUpload().single('file')(req, res, (err) => {
-    if (err instanceof multer.MulterError) {
-      const tooBig = err.code === 'LIMIT_FILE_SIZE';
-      return res.status(tooBig ? 413 : 400).json({ error: `Upload error: ${err.message}`, code: tooBig ? 413 : 400 });
-    }
-    if (err) return res.status(400).json({ error: err.message, code: 400 });
-    next();
-  });
-};
+// The shared wrapper (harvest 2, 2026-09-26) — a too-large file keeps its
+// documented 413; the text is translated now instead of multer's raw English.
+const productImportUpload = uploadSingle(createProductImportUpload, {
+  LIMIT_FILE_SIZE: 'errors.upload.productImport.tooLarge',
+  INVALID_TYPE:    'errors.upload.productImport.invalidType',
+}, { tooLargeStatus: 413 });
 router.post('/products/import/parse-file', csrfProtect, productImportUpload, adminShop.parseProductImportFile);
+// "Read with AI" (PRODUCT_IMPORT_AI_ENABLED, off by default; ice #306/#314 —
+// controllers/adminProductImportAiController). /ai-config is always 200.
+// /ai-extract is the PAID call: CSRF, then the flag (404), then today's page
+// budget (429), and only THEN multer, so a dark or spent endpoint never
+// buffers an upload. (Uses the same inline multer wrapper as parse-file; move
+// both to lane 1a's uploadSingle when it lands.)
+router.get('/products/import/ai-config', productImportAi.productImportAiConfig);
+router.post('/products/import/ai-extract', csrfProtect, productImportAi.requireProductImportAi,
+  productImportAi.requireAiPageBudget, productImportUpload, productImportAi.productImportAiExtract);
 router.post('/products/import/preview', ...importBody, adminShop.previewProductImport);
 router.post('/products/import/apply',   csrfProtect, ...importBody, adminShop.applyProductImport);
 router.post('/products/bulk',           csrfProtect, adminShop.bulkUpdateProducts);
+// Products → Duplicates and the merge (migration 120, ported from
+// icelandicstore #309/#311/#312/#315; controllers/adminProductMergeController).
+// Literal paths, so before /products/:id. The preview writes nothing but is a
+// POST with a body, so it carries CSRF like the merge.
+router.get('/products/duplicates',      productMerge.getProductDuplicates);
+router.post('/products/merge/preview',  csrfProtect, productMerge.previewProductMerge);
+router.post('/products/merge',          csrfProtect, productMerge.mergeProducts);
+// A merged product is frozen: every WRITE through its own id (the product, its
+// images, variants and collections) answers 409 product_merged + movedTo.
+router.use('/products/:id', (req, res, next) =>
+  (req.method === 'GET' || req.method === 'HEAD' ? next() : productMerge.refuseMergedProduct(req, res, next)));
 router.get('/products/:id',       adminShop.getProduct);
 router.get('/products/:id/adjustments', adminShop.productAdjustments);
 router.post('/products',          csrfProtect, adminShop.createProduct);
@@ -61,16 +103,11 @@ router.patch('/products/:id/images/reorder',
 
 router.post('/products/:id/images',
   csrfProtect,
-  (req, res, next) => {
-    const upload = createProductUpload(req.params.id);
-    upload.single('file')(req, res, (err) => {
-      if (err instanceof multer.MulterError) {
-        return res.status(400).json({ error: `Upload error: ${err.message}`, code: 400 });
-      }
-      if (err) return res.status(400).json({ error: err.message, code: 400 });
-      next();
-    });
-  },
+  requireProduct,
+  uploadSingle((req) => createProductUpload(req.product.id), {
+    LIMIT_FILE_SIZE: 'errors.upload.productImage.tooLarge',
+    INVALID_TYPE:    'errors.upload.productImage.invalidType',
+  }),
   verifyImageBytes,
   adminShop.uploadImage);
 

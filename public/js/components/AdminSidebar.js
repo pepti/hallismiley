@@ -23,6 +23,7 @@
 import { t, href, SUPPORTED_LOCALES } from '../i18n/i18n.js';
 import { isAdmin, canSeeView, hasAllViews } from '../services/auth.js';
 import { getBuildInfo } from '../services/buildInfo.js';
+import { formatDateTime } from '../utils/format.js';
 import { showToast } from './Toast.js';
 import { HIDDEN_ADMIN_VIEWS } from './adminSurface.js';
 import { renderMfaReminder } from './mfaReminder.js';
@@ -99,6 +100,9 @@ export const ADMIN_NAV = [
   { key: 'site', group: 'admin.navGroup.site', items: [
     { id: 'analytics',  route: '/admin/analytics',    labelKey: 'admin.nav.analytics',  icon: 'activity' },
     { id: 'background', route: '/admin/background',    labelKey: 'admin.nav.background', icon: 'image' },
+    // The projects board (AdminProjectsView), listed since the "Í dag" home
+    // replaced the overview whose header linked to it (2026-09-26).
+    { id: 'projects',   route: '/admin/projects',      labelKey: 'admin.nav.projects',   icon: 'folder' },
   ] },
   { key: 'settings', group: 'admin.navGroup.settings', items: [
     { id: 'general', route: '/admin/general', labelKey: 'admin.nav.general', icon: 'gear' },
@@ -111,6 +115,8 @@ export const ADMIN_NAV = [
     { id: 'products',    route: '/admin/shop/products',    labelKey: 'admin.nav.products',    icon: 'tag' },
     { id: 'collections', route: '/admin/shop/collections', labelKey: 'admin.nav.collections', icon: 'layers' },
     { id: 'bins',        route: '/admin/bins',             labelKey: 'admin.nav.bins',        icon: 'box' },
+    { id: 'inventory',   route: '/admin/inventory',        labelKey: 'admin.nav.inventory',   icon: 'activity' },
+    { id: 'receiving',   route: '/admin/receiving',        labelKey: 'admin.nav.receiving',   icon: 'inbox' },
     { id: 'orders',      route: '/admin/shop/orders',      labelKey: 'admin.nav.orders',      icon: 'receipt' },
     { id: 'discounts',   route: '/admin/discounts',        labelKey: 'admin.nav.discounts',   icon: 'percent' },
     { id: 'sales',       route: '/admin/sales',            labelKey: 'admin.nav.sales',       icon: 'chart' },
@@ -134,6 +140,7 @@ const ICONS = {
   chart:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><line x1="8" y1="17" x2="8" y2="12"/><line x1="13" y1="17" x2="13" y2="7"/><line x1="18" y1="17" x2="18" y2="10"/></svg>',
   activity:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>',
   image:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>',
+  folder:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>',
   inbox:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11Z"/></svg>',
   gear:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>',
   // Download-into-tray: 'a new version lands here', not a gear.
@@ -142,6 +149,10 @@ const ICONS = {
   key:       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="3.5"/><path d="m10.5 12.5 8-8"/><path d="m15 6 2.5 2.5"/><path d="m18 3 2.5 2.5"/></svg>',
   people:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
 };
+
+/** A sidebar glyph by name (the "Í dag" feed marks each row with its source
+ *  screen's own icon). Trusted static markup; '' for an unknown name. */
+export function adminIcon(name) { return ICONS[name] || ''; }
 
 // Pencil (edit toggle) + grip (drag handle). The grip is filled dots, distinct
 // from the stroke-based nav ICONS above.
@@ -939,7 +950,7 @@ export function renderAdminShell({ activePath, content, wide = false, widthKey }
     stamp.textContent = b.version === 'dev'
       ? t('admin.build.dev')
       : `${t('admin.build.label')} ${b.version} · ${String(b.gitSha || '').slice(0, 12)}`;
-    const built = b.builtAt ? new Date(b.builtAt).toLocaleString() : null;
+    const built = b.builtAt ? formatDateTime(b.builtAt) : null; // app locale (ice #324)
     stamp.title = [b.channel, built].filter(Boolean).join(' · ');
     stamp.hidden = false;
   });

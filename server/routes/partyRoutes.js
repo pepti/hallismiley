@@ -1,7 +1,6 @@
 const express   = require('express');
 const multer    = require('multer');
 const rateLimit = require('express-rate-limit');
-const fs        = require('fs');
 const router    = express.Router();
 
 const partyController              = require('../controllers/partyController');
@@ -11,7 +10,7 @@ const { requireRole }              = require('../auth/roles');
 const { csrfProtect }              = require('../middleware/csrf');
 const { validatePartyRequest }     = require('../middleware/validate');
 const { partyUploadDir }           = require('../config/paths');
-const { MIME_TO_EXT }              = require('../middleware/upload');
+const { MIME_TO_EXT, ensureDestination } = require('../middleware/upload');
 const { verifyImageBytes } = require('../middleware/verifyImageBytes');
 
 const isTest = () => process.env.NODE_ENV === 'test';
@@ -45,10 +44,9 @@ const emailBlastLimiter = rateLimit({
 const PARTY_PHOTO_DIR = partyUploadDir();
 
 const partyPhotoStorage = multer.diskStorage({
-  destination(req, file, cb) {
-    fs.mkdirSync(PARTY_PHOTO_DIR, { recursive: true });
-    cb(null, PARTY_PHOTO_DIR);
-  },
+  // ensureDestination: an mkdir failure goes to multer's callback, never an
+  // uncaught throw from busboy's handler (icelandicstore #150, harvest 2).
+  destination: ensureDestination(PARTY_PHOTO_DIR),
   filename(req, file, cb) {
     // Derive extension from the accepted MIME type (not originalname) to
     // prevent attackers from storing files with attacker-chosen extensions.

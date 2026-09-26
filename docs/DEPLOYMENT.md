@@ -126,7 +126,7 @@ for the version being promoted.
 | `ALLOWED_ORIGINS` | comma-separated CORS origins |
 | `CSRF_SECRET` | 32+ random chars |
 | `NODE_ENV` | `production` on every deployed stack (also on TEST stacks — it is not the environment label) |
-| `RESEND_API_KEY` | **required when `APP_ENV=production`** — a silent mail transport would no-op verification, resets and receipts while returning 200 |
+| `RESEND_API_KEY` | **required when `APP_ENV=production`** on the default transport — a silent mail transport would no-op verification, resets and receipts while returning 200. With `EMAIL_TRANSPORT=graph` the rule moves to the four Graph settings below instead (`services/mailTransport.js` `missingSettings`) |
 | `UPLOAD_ROOT` | required when `NODE_ENV=production` (`server/config/paths.js` throws) — the persistent uploads mount, e.g. `/app/uploads` |
 
 Also set on any real instance:
@@ -135,7 +135,9 @@ Also set on any real instance:
 |---|---|
 | `APP_ENV` | `production` / `test` — the environment label (`server/config/appEnv.js`); drives the RESEND rule above, the MCP `[TEST]/[PROD]` tag and the change-request gate |
 | `APP_URL` | canonical origin: email links, sitemap, SSR canonical/og/JSON-LD, the canonical-host 301, `{siteHost}` in the email strings. **The code fallback (`https://www.orangesmiley.is` since 2026-09-22; before that the base's hallismiley.is) is the ENGINE's origin, not the instance's** — it is not part of the identity seam, so every downstream sets `APP_URL` on its App Service (or `deploy.yml`); a product that forgets inherits the engine's host in its canonical tags, sitemap and email links, and its canonical-host 301 sends traffic to the engine's site |
-| `EMAIL_FROM` | sender. Production = `orangesmiley@mail.orangesmiley.is` (D-015 fleet sending domain, verified in Resend); code default `info@orangesmiley.is` |
+| `EMAIL_FROM` | sender address; the display name is `identity.brand.name`. Production = `orangesmiley@mail.orangesmiley.is` (D-015 fleet sending domain, verified in Resend); code default `identity.organization.email` (`info@orangesmiley.is` here) |
+| `EMAIL_TRANSPORT` | `resend` (default) or `graph` — the ONE switch for the mail transport (`server/services/mailTransport.js`). The Graph settings alone never switch it; an unknown value counts as "not configured" and every send fails loudly |
+| `GRAPH_TENANT_ID`, `GRAPH_CLIENT_ID`, `GRAPH_CLIENT_SECRET`, `GRAPH_SENDER`, `GRAPH_SAVE_TO_SENT_ITEMS` | only with `EMAIL_TRANSPORT=graph`: send through Microsoft Graph `sendMail` from a Microsoft 365 mailbox in the CUSTOMER's tenant (icelandicstore #173). Needs an **Entra app registration in that tenant** with the application permission `Mail.Send` (admin consent), narrowed to the one mailbox by an Exchange application access policy (`New-ApplicationAccessPolicy -AccessRight RestrictAccess`). `GRAPH_SENDER` is the mailbox (default: the address in `EMAIL_FROM`); the secret is a Key Vault reference and lives at most 24 months — put its expiry on the watch. icelandicstore's names `M365_TENANT_ID` / `M365_CLIENT_ID` / `M365_CLIENT_SECRET` are read as a fallback. Messages are not saved to Sent Items unless `GRAPH_SAVE_TO_SENT_ITEMS=true`; the id a sender returns is the minted `client-request-id`, the value an Exchange message trace finds. `EMAIL_ALLOWLIST` applies exactly as on Resend |
 | `EMAIL_REPLY_TO` | where replies go — the sending domain has no inbox. Added to every message that does not set its own (lead notifications reply to the enquirer). Unset = no Reply-To |
 | `LEAD_NOTIFY_EMAIL` | inbox for `/hafa-samband` leads (defaults to `EMAIL_FROM`, which on production is not a mailbox — set it) |
 | `CLIENT_CONFIG_MODULES_SELF_UPDATE_ENABLED` | `false` on orangesmiley.is until the release host exists (D-014); `config/client.json` points at a manifest URL nothing serves yet |
@@ -152,11 +154,11 @@ Also set on any real instance:
 | `APPLICATIONINSIGHTS_ROLE_NAME` | optional cloud-role name in the Application Map; default the App Service site name (`WEBSITE_SITE_NAME`), else the package name — set it when several instances share one App Insights resource and the site names do not say which is which |
 
 Do **not** set `SMTP_USER` / `SMTP_PASS` / `REQUIRE_EMAIL_VERIFICATION` —
-nothing reads them (the mail transport is Resend).
+nothing reads them (the mail transport is Resend, or Graph by `EMAIL_TRANSPORT`).
 
 ### Anthropic authentication (workload identity, no stored secret)
 
-Every Claude call (today: auto-translate, `TRANSLATE_ENABLED`) authenticates
+Every Claude call (today: auto-translate, `TRANSLATE_ENABLED`, and the products import's dark "Read with AI", below) authenticates
 through `server/services/anthropicAuth.js` (harvested from icelandicstore #326,
 2026-09-24). It ships **dark**: with nothing set, Claude features stay off.
 When **all** of `ANTHROPIC_FEDERATION_RULE_ID`, `ANTHROPIC_ORGANIZATION_ID` and
@@ -186,6 +188,36 @@ call, or `authenticating with the static API key`.
   Authentication events tab. The per-tenant ids (issuer, rules, service
   account) are Orange Smiley's own and are set up when Halli turns Claude on for
   an instance.
+
+### Products import: "Read with AI" (OFF — costs money per page)
+
+The products import can read a free-form supplier PDF with Claude
+(harvest 2 lane 6b, [history](history.d/2026-09-26-harvest2-lane6b-merge-ai.md#harvest2-lane6b-2026-09-26)).
+It ships **dark** and stays off until Halli decides otherwise for an instance:
+it needs `PRODUCT_IMPORT_AI_ENABLED=true` **and** the Claude credentials above
+(`TRANSLATE_ENABLED` does not switch it on). **Every page read is billed by
+Anthropic** (the whole PDF chunk goes to the model as a document, plus the
+JSON reply); the admin sees how many pages are left today before reading.
+
+| Variable | Default | What it bounds |
+|---|---|---|
+| `PRODUCT_IMPORT_AI_ENABLED` | unset (off) | the feature itself |
+| `PRODUCT_IMPORT_AI_MODEL` | the engine's model (`TRANSLATE_MODEL`, else its default) | which Claude model reads |
+| `PRODUCT_IMPORT_AI_TIMEOUT_MS` | 90000 | one read |
+| `PRODUCT_IMPORT_AI_MAX_PAGES` | 10 | pages in one request |
+| `PRODUCT_IMPORT_AI_CHUNK_PAGES` | 3 | pages the browser sends per request |
+| `PRODUCT_IMPORT_AI_MAX_FILE_PAGES` | 40 | pages of one file |
+| `PRODUCT_IMPORT_AI_USER_DAY_PAGES` | 60 | pages per user per UTC day |
+| `PRODUCT_IMPORT_AI_DAY_PAGES` | 200 | pages per instance per UTC day — **the spend cap** |
+| `PRODUCT_IMPORT_AI_MAX_CONCURRENT` | 2 | of the `AI_MAX_CONCURRENT` slots |
+
+**Cost note.** The day caps are the bill's ceiling per container: at most
+`PRODUCT_IMPORT_AI_DAY_PAGES` pages a day are ever sent. They are counted in
+memory, so a restart (or a second container) starts its own count — size the
+cap with that in mind, and watch the log line `product import ai: extracted`
+(pages, input/output tokens, model) and the Anthropic console for the real
+figure. A failed read gives its pages back; a read the admin stopped keeps
+them charged (the model may have processed them).
 
 **Canonical host = `APP_URL`'s host** (since 2026-09-12): in production
 `server/app.js` 301-redirects every request whose `Host` differs from the host

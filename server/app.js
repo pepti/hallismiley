@@ -356,6 +356,16 @@ app.use('/api/v1/admin/bins', (req, res, next) => {
   }
   next();
 });
+// Inventory Watch / stock count and goods receiving (harvest2-lane6a). A
+// receiving SCAN is exempt here: it has its own per-user limiter in
+// adminReceivingRoutes.js, because a pallet is hundreds of one-unit POSTs.
+app.use(['/api/v1/admin/inventory', '/api/v1/admin/receiving'], (req, res, next) => {
+  if (req.method === 'POST' && req.baseUrl === '/api/v1/admin/receiving' && /^\/[^/]+\/scan$/.test(req.path)) return next();
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+    return writeLimiter(req, res, next);
+  }
+  next();
+});
 app.use('/api/v1/admin/handbok', (req, res, next) => {
   if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
     return writeLimiter(req, res, next);
@@ -456,6 +466,28 @@ app.get('/health', (req, res) => {
     timestamp: new Date().toISOString(),
   });
 });
+
+// ── The demo instance (R2b, config/demoInstance.js) ───────────────────────────
+// Sample data, never indexed: every response says noindex. And while a reset
+// rebuilds the database (services/demoReset.js), everything but /health gets a
+// 503 with Retry-After — the schema requests would read no longer exists. Both
+// are one boolean check when this is not a demo instance.
+{
+  const { isDemoInstance } = require('./config/demoInstance');
+  const { isResetting } = require('./services/demoReset');
+  app.use((req, res, next) => {
+    if (!isDemoInstance()) return next();
+    res.set('X-Robots-Tag', 'noindex, nofollow');
+    if (isResetting()) {
+      res.set('Retry-After', '60');
+      // An expected outage, not a failure: keep it out of event_logs (and out
+      // of the schema being rebuilt).
+      res.locals.eventLogRecorded = true;
+      return res.status(503).json({ error: require('./i18n').t(req.locale, 'errors.demo.resetting'), code: 503, reason: 'demo_reset' });
+    }
+    return next();
+  });
+}
 
 // Who may read process internals (/metrics, and the `checks` detail of /ready):
 // a bearer METRICS_TOKEN when one is configured, otherwise localhost only in
@@ -654,6 +686,8 @@ app.use('/api/v1/admin/change-requests', adminChangeRequestRoutes); // must come
 app.use('/api/v1/admin/nav-config', adminNavRoutes); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin/roles', adminRolesRoutes); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin/bins', adminBinsRoutes); // must come before /api/v1/admin catch-all
+app.use('/api/v1/admin/inventory', require('./routes/adminInventoryRoutes')); // harvest2-lane6a; before the catch-all
+app.use('/api/v1/admin/receiving', require('./routes/adminReceivingRoutes')); // harvest2-lane6a; before the catch-all
 app.use('/api/v1/admin/customers', adminCustomerRoutes); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin/customer-notes', adminCustomerNotesRoutes); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin/bookkeeping', adminBookkeepingRoutes); // must come before /api/v1/admin catch-all
@@ -664,6 +698,8 @@ app.use('/api/v1/admin/accounts', require('./routes/adminAccountRoutes')); // mu
 app.use('/api/v1/admin/commission', require('./routes/adminCommissionRoutes')); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin/audit', require('./routes/adminAuditRoutes')); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin/modules', require('./routes/adminModulesRoutes')); // R5b: the admin's module switches; before the catch-all
+app.use('/api/v1/admin/home', require('./routes/adminHomeRoutes')); // "Í dag": the admin home, per-view blocks; before the catch-all
+app.use('/api/v1/admin/demo', require('./routes/adminDemoRoutes')); // R2b: the demo instance's reset (404 unless DEMO_INSTANCE); before the catch-all
 app.use('/api/v1/admin',      adminRoutes);
 app.use('/api/v1/content',    contentRoutes);
 // Seller area (D-020): read-only, published copy; 404 unless INSTANCE_ROLE=public.

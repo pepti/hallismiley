@@ -61,7 +61,7 @@ const ORANGE_SMILEY = {
       { route: '/hafa-samband', labelKey: 'nav.hafaSamband' },
     ],
     hiddenRoutes: ['/party', '/halli', '/about', '/news', '/shop', '/projects', '/contact', '/privacy', '/verkefni'],
-    hiddenAdminViews: ['products', 'collections', 'bins', 'orders', 'discounts', 'sales', 'pos', 'background'],
+    hiddenAdminViews: ['products', 'collections', 'bins', 'inventory', 'receiving', 'orders', 'discounts', 'sales', 'pos', 'background', 'projects'],
     navSignIn: true,
   },
   // The engine has no routes of its own beyond ROUTE_META (identity-seam-3).
@@ -77,6 +77,15 @@ const ORANGE_SMILEY = {
     areaServed: 'Iceland',
     knowsAbout: ['Web Development', 'E-commerce', 'Inventory Management', 'Invoicing', 'VAT Accounting', 'Shopify Migration', 'Node.js', 'PostgreSQL'],
     sameAs: [],
+  },
+  // Transactional email (harvest 2 lane 2, 2026-09-26): the header logo under
+  // public/assets/brand/ and optional palette overrides.
+  email: {
+    logo: 'orangesmiley-emblem.png',
+    logoWidth: 48,
+    logoHeight: 48,
+    logoWordmark: false,
+    palette: {},
   },
 };
 

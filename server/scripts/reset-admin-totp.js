@@ -12,6 +12,11 @@
 // an admin who owes enrolment: it gets a session, is held out of every admin
 // route (auth/mfaPolicy.js) and is walked through setting up a new authenticator.
 //
+// NOT behind server/scripts/targetGuard.js, deliberately (harvest 2,
+// 2026-09-26): the whole point of this break-glass is to run against the REAL
+// instance's database, deployed or not. Its deletes are scoped to one named
+// account's second factor and sessions, inside one transaction.
+//
 // Run: node server/scripts/reset-admin-totp.js <username>
 // Requires DATABASE_URL in environment (or .env file).
 require('dotenv').config({ path: require('path').join(__dirname, '../../.env'), quiet: true });

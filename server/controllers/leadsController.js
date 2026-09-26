@@ -13,6 +13,9 @@ const db   = require('../config/database');
 const { t } = require('../i18n');
 const { toCsv, csvHeaders } = require('../utils/csv');
 const { RETENTION_DAYS } = require('../services/leadsCleanup');
+// The admin home caches its feed briefly, and the feed names enquirers: an
+// erased lead must not outlive its erasure there.
+const { clearHomeCache } = require('../services/adminHomeCache');
 
 function _noStore(res) {
   res.setHeader('Cache-Control', 'no-store');
@@ -99,6 +102,7 @@ const leadsController = {
       if (!id) return res.status(400).json({ error: t(req.locale, 'errors.leads.invalidId'), code: 400 });
       const gone = await Lead.remove(id);
       if (!gone) return res.status(404).json({ error: t(req.locale, 'errors.leads.notFound'), code: 404 });
+      clearHomeCache();
       return res.status(204).end();
     } catch (err) { next(err); }
   },

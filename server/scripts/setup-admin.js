@@ -25,6 +25,8 @@ async function main() {
        ON CONFLICT (username) DO UPDATE
          SET email         = EXCLUDED.email,
              password_hash = EXCLUDED.password_hash,
+             -- An admin's login is never time-limited (migration 114).
+             expires_at    = NULL,
              updated_at    = NOW()
        RETURNING id, username, email, role`,
       [email, username, hash]

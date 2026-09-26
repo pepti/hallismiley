@@ -136,7 +136,16 @@ const userController = {
       if (rows.length === 0) {
         return res.status(404).json({ error: t(req.locale, 'errors.user.userNotFound'), code: 404 });
       }
-      return res.json(rows[0]);
+      // The roles this SESSION holds, with their display names (116_role_label),
+      // for the Profile badge (harvest 2 G3; ice #421 did the same for staff
+      // badges). req.user.roles is attachRoles' set — after the 2FA
+      // withholding, so the badge never names a role the session cannot use.
+      const held = Array.isArray(req.user.roles) && req.user.roles.length ? req.user.roles : [rows[0].role];
+      const { rows: named } = await dbQuery(
+        'SELECT name, label, is_system FROM roles WHERE name = ANY($1::text[])', [held]);
+      const byName = new Map(named.map(r => [r.name, r]));
+      const roles = held.map(n => byName.get(n) || { name: n, label: '', is_system: false });
+      return res.json({ ...rows[0], roles });
     } catch (err) { next(err); }
   },
 

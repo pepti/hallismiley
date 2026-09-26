@@ -23,12 +23,28 @@ function pathOf(input) {
   } catch { return ''; }
 }
 
+// A time-limited login that ran out mid-session (migration 114) answers 401
+// with reason 'account_expired' — worth its own message: signing in again
+// will not help, the person who made the login has to extend it. Read from a
+// CLONE so the caller still gets the body; any read failure falls back to
+// the plain "session expired".
+async function expiredReason(res) {
+  try {
+    const body = await res.clone().json();
+    return body && body.reason === 'account_expired';
+  } catch { return false; }
+}
+
 function inspect(res, input) {
   if (res.status !== 401 || _handling || !isAuthenticated()) return;
   if (!pathOf(input).startsWith('/api/v1/')) return; // only our own data API
   _handling = true;
   clearSession();
-  try { showToast(t('auth.sessionExpired'), 'error', 6000); } catch { /* toast is best-effort */ }
+  expiredReason(res).then((expired) => {
+    try {
+      showToast(t(expired ? 'auth.errors.accountExpired' : 'auth.sessionExpired'), 'error', expired ? 8000 : 6000);
+    } catch { /* toast is best-effort */ }
+  });
   navigate(href('/'));
   // Re-arm after the redirect settles so a later genuine expiry is caught too.
   setTimeout(() => { _handling = false; }, 2000);

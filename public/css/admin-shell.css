@@ -611,3 +611,6 @@
 .hscroll-sticky__track { height: 1px; }
 .admin-table-wrap.has-sticky-hscroll { scrollbar-width: none; }
 .admin-table-wrap.has-sticky-hscroll::-webkit-scrollbar { display: none; }
+/* While it overflows the wrap is a focusable region (stickyHScroll.js, the
+   pattern of ice #279), so arrow keys scroll it; show where focus is. */
+.admin-table-wrap[tabindex]:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }

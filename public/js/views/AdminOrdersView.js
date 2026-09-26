@@ -4,6 +4,7 @@
 import { fetchOrders, paymentBadge, fulfillmentBadge, bulkDeliveryNotesUrl, downloadOrdersXlsx } from '../services/adminOrders.js';
 import * as cart from '../services/cart.js';
 import { t, href } from '../i18n/i18n.js';
+import { formatDateTime } from '../utils/format.js';
 import { attachStickyHScroll } from '../utils/stickyHScroll.js';
 import { renderAdminShell } from '../components/AdminSidebar.js';
 import { showToast } from '../components/Toast.js';
@@ -14,9 +15,11 @@ function _esc(s) {
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+// The kit formatter follows the app locale (Icelandic built by hand — Chrome has
+// no is ICU data); was toLocaleString('en-GB'). Ported from icelandicstore #324.
 function _formatDate(iso) {
   if (!iso) return '';
-  return new Date(iso).toLocaleString('en-GB', {
+  return formatDateTime(iso, {
     day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
   });
 }
@@ -122,7 +125,7 @@ export class AdminOrdersView {
     // the window (utils/stickyHScroll.js, ice #325). The wrap is rebuilt on
     // every paint, so the mirror is too.
     this._hscroll?.detach();
-    this._hscroll = attachStickyHScroll(body.querySelector('#orders-table-wrap'));
+    this._hscroll = attachStickyHScroll(body.querySelector('#orders-table-wrap'), { label: t('adminOrders.title') });
     body.querySelectorAll('.admin-orders__row-check').forEach(cb => {
       cb.addEventListener('change', () => {
         if (cb.checked) this._selected.add(cb.dataset.id); else this._selected.delete(cb.dataset.id);
