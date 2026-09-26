@@ -15,6 +15,8 @@ const { createTestAdminUser } = require('../helpers');
 const m = migrations.find(x => x.name === 'os_001_sales_guides_d001_pricing');
 const m3 = migrations.find(x => x.name === 'os_003_sales_guides_d022_pricing');
 const m4 = migrations.find(x => x.name === 'os_004_sales_guides_queue_spread');
+// os_005 (the demo persona renamed) is undone first: the seed is the newest text.
+const m5 = migrations.find(x => x.name === 'os_005_sales_guides_persona_hraunbaun');
 const run = async () => { for (const sql of m.statements) await db.query(sql); };
 const SLUGS = GUIDES.map(g => g.slug);
 
@@ -31,7 +33,8 @@ function undo(row, edits) {
   return row;
 }
 const seedRow = (g) => ({ slug: g.slug, section: g.section, sort_order: g.sort_order, title: g.title, summary: g.summary, body: g.body.trim() });
-const s3Guide = (g) => (m4 ? undo(seedRow(g), m4.edits) : seedRow(g));
+const s4Guide = (g) => (m5 ? undo(seedRow(g), m5.edits) : seedRow(g));
+const s3Guide = (g) => (m4 ? undo(s4Guide(g), m4.edits) : s4Guide(g));
 const d001Guide = (g) => (m3 ? undo(s3Guide(g), m3.edits) : s3Guide(g));
 const oldGuide = (g) => undo(d001Guide(g), m.edits);
 // Filled inside the gated describe (beforeAll), not at module load: on a

@@ -17,6 +17,9 @@ const { createTestAdminUser } = require('../helpers');
 const m1 = migrations.find(x => x.name === 'os_001_sales_guides_d001_pricing');
 const m3 = migrations.find(x => x.name === 'os_003_sales_guides_d022_pricing');
 const m4 = migrations.find(x => x.name === 'os_004_sales_guides_queue_spread');
+// os_005 (the demo persona renamed) is undone first: the seed is the newest text.
+const m5 = migrations.find(x => x.name === 'os_005_sales_guides_persona_hraunbaun');
+const s4Of = (g) => (m5 ? undo(seedRow(g), m5.edits) : seedRow(g));
 const runAll = async (mig) => { for (const sql of mig.statements) await db.query(sql); };
 const SLUGS = GUIDES.map(g => g.slug);
 
@@ -73,7 +76,7 @@ const describe = describeForSpec(__filename);
 
 describe('os_003 — sales guides on the D-022 price model, with Samstarf', () => {
   beforeAll(() => {
-    S3.push(...GUIDES.map(g => (m4 ? undo(seedRow(g), m4.edits) : seedRow(g))));
+    S3.push(...GUIDES.map(g => (m4 ? undo(s4Of(g), m4.edits) : s4Of(g))));
     D001.push(...S3.map(g => undo({ ...g }, m3.edits)));
     ORIG.push(...D001.map(g => undo({ ...g }, m1.edits)));
   });
