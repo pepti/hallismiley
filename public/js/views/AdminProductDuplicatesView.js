@@ -309,9 +309,15 @@ export class AdminProductDuplicatesView {
       s.stockMoved ? t('adminProductDuplicates.sumStock', { n: s.stockMoved }) : '',
     ].filter(Boolean);
     const survivor = data.master;
+    // A refusal names its unit by key; the admin reads the row it is about.
+    const unitLabel = (key) => {
+      const u = key && plan.units.find(x => x.key === key);
+      if (!u) return '';
+      return `${u.name} (${u.variantId ? attrsText(u.attributes) : t('adminProductDuplicates.noVariant')}${u.sku ? ` · ${u.sku}` : ''})`;
+    };
     const refusals = plan.refusals.length
       ? `<div class="pdup-refusals" role="alert"><p class="pdup-refusals__lead">${escHtml(t('adminProductDuplicates.refused'))}</p>
-           <ul>${plan.refusals.map(r => `<li>${escHtml(reasonText(r.code))}${r.unit ? ` <code>${escHtml(r.unit)}</code>` : ''}</li>`).join('')}</ul></div>`
+           <ul>${plan.refusals.map(r => `<li>${escHtml(reasonText(r.code))}${unitLabel(r.unit) ? ` — ${escHtml(unitLabel(r.unit))}` : ''}</li>`).join('')}</ul></div>`
       : '';
     const warnings = plan.warnings.length
       ? `<ul class="pdup-warnings">${plan.warnings.map(w => `<li>${escHtml(reasonText(w.code))}</li>`).join('')}</ul>`
