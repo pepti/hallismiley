@@ -23,6 +23,7 @@ paths:
   - tests/integration/observability.test.js
   - tests/unit/httpMetrics.test.js
   - tests/unit/loggerScrub.test.js
+  - tests/unit/loggerRedact.test.js
   - tests/unit/aiLogStream.test.js
   - tests/unit/trackedFetch.test.js
   - e2e/admin-monitoring.spec.js
@@ -36,6 +37,7 @@ Event logs (087) with the public error beacon, the `/health`, `/ready` and Prome
 
 **Rules**
 - Logs scrub secrets and the `q` param; pino only, no `console.log` (invariant 6).
+- pino's `*` matches ONE level, so every credential field is redacted at the top level AND one level down (`logger.js` `REDACT`: password, password_hash, current_password/new_password and camelCase, token, secret, totp_secret(_enc), kennitala; the TOTP `code` under `req.body` only). `loggerRedact.test.js` builds a pino with the same config (harvest 2, lane 1a; icelandicstore #382).
 - The client rate-limit toast ignores the error beacon and stays silent before the dictionary loads.
 - `/ready` details (`checks`) follow the `/metrics` access rule; `uptime` stays public for `deploy.yml`; admins read the full report at `GET /api/v1/admin/events/health` ([history](../docs/HISTORY.md#ready-and-import-order-2026-09-23)).
 - Full rules: [../docs/ARCHITECTURE.md#13-monitoring--event-logs-metrics-analytics](../docs/ARCHITECTURE.md#13-monitoring--event-logs-metrics-analytics).
