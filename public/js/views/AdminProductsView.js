@@ -12,6 +12,7 @@ import {
 } from '../services/adminProducts.js';
 import { showToast } from '../components/Toast.js';
 import { dragHasFiles, dragHasUsableFile } from '../utils/dragFiles.js';
+import { mountImportAi } from '../components/ProductImportAi.js';
 
 // The image types the product-image upload takes: the drop filter and the
 // drag-time check share this pattern; the file input's accept lists the same.
@@ -52,6 +53,7 @@ export class AdminProductsView {
           <div class="admin-shop__header-actions">
             <button type="button" id="admin-products-export" class="admin-shop__primary-btn">${t('adminProducts.export')}</button>
             <button type="button" id="admin-products-import" class="admin-shop__primary-btn">${t('adminProducts.import')}</button>
+            <a class="admin-shop__primary-btn" href="${href('/admin/shop/products/duplicates')}" data-route="/admin/shop/products/duplicates">${t('adminProducts.duplicates')}</a>
             <button type="button" id="admin-new-product" class="admin-shop__primary-btn">${t('adminProducts.newProduct')}</button>
           </div>
         </header>
@@ -532,11 +534,13 @@ export class AdminProductsView {
             ${t('adminProducts.importCreate')}
           </label>
           <p class="admin-shop__error" id="prod-import-error" role="alert"></p>
+          <div id="prod-import-ai"></div>
           <div id="prod-import-preview"></div>
         </div>
       </div>`;
     document.body.appendChild(modal);
-    const close = () => modal.remove();
+    let ai = null;
+    const close = () => { if (ai) ai.destroy(); modal.remove(); };
     modal.querySelector('.admin-shop__modal-close').addEventListener('click', close);
     modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
 
@@ -562,6 +566,15 @@ export class AdminProductsView {
       }
     };
     createBox.addEventListener('change', preview);
+    // "Read with AI" (dark unless the server enables it; components/ProductImportAi.js):
+    // its rows go through the same preview → apply, always with create on.
+    ai = mountImportAi(modal.querySelector('#prod-import-ai'), {
+      onRows: (rows) => {
+        parsed = { source: 'ai', rows, ignored: [], orderQtyColumns: [], truncated: false };
+        createBox.checked = true;
+        preview();
+      },
+    });
     modal.querySelector('#prod-import-file').addEventListener('change', async (e) => {
       errorEl.textContent = '';
       previewEl.innerHTML = '';
@@ -569,11 +582,13 @@ export class AdminProductsView {
       const file = e.target.files && e.target.files[0];
       if (!file) return;
       previewEl.innerHTML = `<p class="admin-shop__hint">${t('adminProducts.importReading')}</p>`;
+      ai.setFile(file);
       try {
         parsed = await adminParseProductImportFile(file);
       } catch (err) {
         previewEl.innerHTML = '';
         errorEl.textContent = err.message;
+        ai.setFile(file, { readerFailed: true });
         return;
       }
       await preview();

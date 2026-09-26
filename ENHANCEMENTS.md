@@ -283,6 +283,13 @@ The survey's headline is that **the harvest is not one-directional**. This repo'
 **What.** Inventory Watch (ice #13/#15): every stocked unit, velocity over 90 days of paid order lines, months of cover, a status bucket on Available, and an audited "Fix stock". The stock count (ice #18): scan or search, per-line Set / Add / Remove, saved as ONE audited batch (`Inventory.applyBatch`, all or nothing, below zero refused). Goods receiving (ice #23): a receipt read from the supplier's file through the one product-file reader, scanned in, shorts / overs / not-on-invoice, finalised once into stock, a receipt PDF. Migration `118_goods_receipts` (provisional number).
 **Why.** A shop that counts, receives and re-orders on paper is the job the retail tiers are sold to replace; icelandicstore already runs these screens.
 **Effort.** L. **Risk.** Medium, contained: every write goes through the one audited writer, under its lock order, and the engine keeps `stock >= 0`.
+### 29. ✅ DONE 2026-09-26 (on its branch) — Merge duplicate products; AI reads a supplier PDF into the import (dark)
+
+**Status.** Approved 2026-09-26 (harvest 2) by Halli; built on `harvest2/lane6b-merge-ai` from icelandicstore `941cf51d` (#309/#311/#312/#315, #306/#314). Products → Duplicates suggests duplicates with their evidence and merges them in one transaction (engine migration 120, provisional number); "Read with AI" ships dark behind `PRODUCT_IMPORT_AI_ENABLED` — **switching it on costs money per page** (budgets and the cost note in `docs/DEPLOYMENT.md`). [history](docs/history.d/2026-09-26-harvest2-lane6b-merge-ai.md#harvest2-lane6b-2026-09-26).
+
+**What.** (a) Duplicate suggestions (same barcode, same SKU, same name, colourway, similar name) and a merge that moves variants, stock (through `Inventory`, audited), images, collection links and order lines to the product kept, leaves issued invoices alone, and redirects the merged product's URL. (b) Claude reads a free-form supplier price list into create-only import rows, verified against the PDF's own text, priced by the admin's markup and EUR rate.
+**Why.** Every catalogue that came from an import has duplicates; and a supplier's price list is rarely a spreadsheet.
+**Effort.** L. **Risk.** Money/stock path (merge) and spend (AI) — both behind review, tests and, for the AI, a switch that is off. The merge itself is **admin-only** (the default taken, since it cannot be undone; Halli may loosen it to the `products` view); the suggestions and the preview are on the `products` view.
 
 ### Reverse queue — this repo → icelandicstore and the base
 

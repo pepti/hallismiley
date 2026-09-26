@@ -495,6 +495,10 @@ module.exports = {
   translate,
   translateTree,
   isEnabled,
+  // The engine's configured Claude model (TRANSLATE_MODEL, else the default):
+  // other Claude features fall back to it instead of hard-coding their own
+  // (productImport/aiExtract.js).
+  getModel,
   // exported for tests
   _internal: { BLOCK_KEYS, MAX_TREE_DEPTH, collectLeaves, setPath, parseJsonArray },
 };

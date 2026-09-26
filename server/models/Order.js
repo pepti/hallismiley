@@ -133,6 +133,19 @@ class Order {
       // lock order (models/Inventory.js), or a cart listing two rows the other
       // way round from a fulfilment's sorted FOR UPDATE can deadlock with it.
       await Inventory.lockReferences(client, items);
+      // A checkout that waited on those locks behind a product merge
+      // (services/productMerge/engine.js holds them FOR UPDATE) now finds the
+      // product merged away: its lines would land on a hidden row the merge
+      // has already emptied. Refused as a 409 the cart can act on.
+      const { rows: merged } = await client.query(
+        'SELECT id FROM products WHERE id = ANY($1::text[]) AND merged_into_id IS NOT NULL',
+        [[...new Set(items.map(it => String(it.productId)))]]
+      );
+      if (merged.length) {
+        const e = new Error('A product in the order was merged into another');
+        e.status = 409; e.messageKey = 'errors.shop.productMerged'; e.reason = 'PRODUCT_MERGED';
+        throw e;
+      }
       for (const it of items) {
         await client.query(
           `INSERT INTO order_items (
