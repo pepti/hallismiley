@@ -108,11 +108,23 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | CSS | `public/css/user-system.css`, `admin-roles.css`, `mfa-reminder.css` |
 | Jest | `tests/integration/auth.test.js`, `auth.google.test.js`, `auth.facebook.test.js`, `auth.socialKillSwitch.test.js`, `users.test.js`, `adminRoles.test.js`, `adminTotp.test.js`, `adminTotpEnforcement.test.js`, `mfaReminder.test.js`, `security.test.js`, `adminOuterGuard.test.js`, `adminNameOnlyLogin.test.js`; `tests/unit/totp.test.js`, `totpFailure.client.test.js`, `mfaPolicy.test.js`, `mfaProtected.test.js`, `mfaProtectedClient.test.js`, `oauthHelpers.test.js`, `csrf.test.js`, `safeReturnTo.client.test.js`, `rateLimit.test.js`, `rateLimitDecide.test.js`, `rateLimitGuard.client.test.js`, `nameOnlyHelpers.test.js`, `generatePassword.test.js` |
 | e2e | `e2e/auth.spec.js`, `signup-flow.spec.js`, `profile.spec.js`, `admin-totp-enrolment.spec.js` (on the second, `required` e2e server), `mfa-reminder.spec.js` |
+| Route matrix | `tests/integration/adminRouteMatrix.test.js` — every staff route, read from `app.js` + the routers, refuses a plain `user` (403) and an anonymous caller (401/403) |
 | Migrations | 002, 003, 009, 012, 020, 021, 041, 056, 060, 061, 065, 082 (admin TOTP), 083/084 (per-account theme), 107 (TOTP secret sealed at rest, expand phase), 109 (`users.mfa_reminder_dismissed_at`, the two-step reminder's "don't show again") |
 | Features | [admin-2fa](../features/admin-2fa.md), [auth-sessions](../features/auth-sessions.md), [rbac-roles](../features/rbac-roles.md), [signup](../features/signup.md), [social-login](../features/social-login.md), [users-admin](../features/users-admin.md) |
 | Feature doc | `docs/API.md` (Authentication), `docs/ADMIN-2FA.md` (mandatory enrolment, the secret at rest, break-glass) |
 
 **Rules that must hold**
+- **Every staff route refuses a non-staff caller, and a test proves it**
+  (harvest 2, lane 1a; modelled on icelandicstore #416 G6):
+  `adminRouteMatrix.test.js` parses every `app.use('/api/v1/admin…', router)` and
+  `app.use('/api/v1/system', router)` mount from `server/app.js`, walks each
+  router's `stack` for method + path (params → a dummy id), and asserts 403 for a
+  signed-in plain `user` and 401/403 for an anonymous caller on every one. A new
+  mount or route is covered without editing the test; a deliberate exception is an
+  entry in its `EXEMPT` map with the reason; the only automatic exemption is a
+  module this instance switched off (the module gate's 404, before auth). The
+  outer guard (`requireAuth` + `requireStaff` on `/api/v1/admin`) is not the only
+  gate: every router carries its own `requireView`/`requireRole`.
 - **Public signup is a module; signing in is not** ([signup-switch-2026-09-24](HISTORY.md#signup-switch-2026-09-24)):
   `modules.signup.enabled` (R4 catalogue, Verslun/Rekstur) owns `/signup`,
   `/auth/signup` and the availability checks; off, they are absent and a
@@ -290,18 +302,28 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Routes | `server/routes/contactRoutes.js` → `/api/v1/contact` · `server/routes/sitemapRoutes.js` (`/sitemap.xml` with `<lastmod>`, `/llms.txt`) · `server/routes/manifestRoutes.js` (`/manifest.json`, named after the identity) · `server/routes/robotsRoutes.js` (`/robots.txt`, Disallow lines from `hiddenRoutes`; `public/robots.txt` is the engine default it replaces) |
 | Controllers | `server/controllers/contactController.js` |
 | Services | `server/services/indexNow.js`, `server/services/outboundAllowlist.js` |
-| Config / middleware | `server/config/publicSurface.js`, `clientConfig.js`, `identity.js` (the resolved `identity.*` + the head helpers), `appEnv.js`, `version.js`, `paths.js`; `server/middleware/ssrMeta.js` (`ROUTE_META`, `DEFAULT_META` page parts, `SERVICE_OFFERINGS`, JSON-LD incl. the Organization) |
+| Config / middleware | `server/config/publicSurface.js`, `clientConfig.js`, `identity.js` (the resolved `identity.*` + the head helpers), `appEnv.js`, `version.js`, `paths.js`; `server/middleware/ssrMeta.js` (`ROUTE_META`, `DEFAULT_META` page parts, `SERVICE_OFFERINGS`, JSON-LD incl. the Organization); `server/utils/indexability.js` (who may be indexed — robots.txt, the robots meta and the sitemap all read it) |
 | Views | `public/js/views/HomeView.js`, `ThjonustaView.js`, `UmOkkurView.js`, `ContactView.js`, `PrivacyView.js`, `TermsView.js`, `NotFoundView.js`; `HalliView.js` serves the hidden `/about`/`/halli` (`AboutView.js` is dead — see Ownership notes) |
 | Components | `public/js/components/NavBar.js` |
 | Client | `public/js/router.js` (lazy `VIEWS` table + `make()`), `routePatterns.json` (the route list the server 404s against; `server/utils/spaRoutes.js` reads it), `navigate.js`, `main.js`, `consent.js`; `public/js/utils/identity.js` (the client half of the identity seam), `reveal.js`, `motion.js`, `productSite.js`, `sanitizeHtml.js`, `slug.js`, `features.js` |
 | CSS | `public/css/home.css`, `business-pages.css`, `contact.css`, `video-section.css`, `fonts.css` |
-| Jest | `tests/integration/contact.test.js`, `sitemap.test.js`, `llms.test.js`, `ssrMeta.test.js`, `identityDownstream.test.js`, `spaStatus.test.js`; `tests/unit/routePatterns.test.js`, `routerLazyViews.test.js`; `tests/unit/clientConfig.test.js`, `identityConfig.test.js`, `appEnv.test.js`, `slug.test.js`, `slug.client.test.js`, `outboundAllowlist.test.js`, `version.test.js`, `buildManifest.test.js` |
+| Jest | `tests/integration/contact.test.js`, `sitemap.test.js`, `llms.test.js`, `ssrMeta.test.js`, `identityDownstream.test.js`, `spaStatus.test.js`, `indexability.test.js`; `tests/unit/routePatterns.test.js`, `routerLazyViews.test.js`, `indexability.test.js`; `tests/unit/clientConfig.test.js`, `identityConfig.test.js`, `appEnv.test.js`, `slug.test.js`, `slug.client.test.js`, `outboundAllowlist.test.js`, `version.test.js`, `buildManifest.test.js` |
 | e2e | `e2e/business-routes.spec.js`, `lazy-views.spec.js`, `contact.spec.js`, `navigation.spec.js`, `responsive.spec.js`, `responsive-screenshots.spec.js`, `editable-homepage.spec.js` |
 | Migrations | 005, 017, 091, 092 (seeded company copy) |
 | Features | [public-site](../features/public-site.md), [company-content](../features/os/company-content.md) (os) |
 | Feature doc | `docs/API.md` (Contact); `docs/SALES-STAFF.md` for what a submission becomes |
 
 **Rules that must hold**
+- **Only production on a public host is indexable** (harvest 2, lane 1a; ported from
+  icelandicstore #123): `server/utils/indexability.js` `isIndexableRequest(req)` is
+  false when `APP_ENV` is set to anything but `production`, or the request Host is an
+  infrastructure host (`*.azurewebsites.net`, localhost / `*.localhost`, a bare IPv4 or
+  IPv6 literal). Then `/robots.txt` is `User-agent: *` + `Disallow: /`, every page's
+  robots meta is `noindex, nofollow`, and `/sitemap.xml` is a valid EMPTY urlset — the
+  three read the one helper and send `Vary: Host`. Keyed on the Host, never on
+  `APP_URL`, so it is right before and after a custom domain is bound. A suite that
+  asserts indexability sends the public Host (`new URL(process.env.APP_URL).host`);
+  supertest's default `127.0.0.1` is an infrastructure host.
 - **Unknown paths answer 404** ([harvest-ice-e](HISTORY.md#harvest-ice-e-2026-09-24)): the shell (same body, `noindex`)
   with status 404 for a path no SPA route matches (`public/js/routePatterns.json`
   via `server/utils/spaRoutes.js`, or a product route in `ROUTE_META`) and for a
@@ -745,12 +767,24 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Client | `public/js/services/adminBookkeeping.js`; `public/js/utils/money.js`; `public/js/components/ScanInput.js` (the till's USB barcode scanner, harvested from icelandicstore) + `public/css/scan.css` |
 | Scripts | `server/scripts/books-replay.js`, `books-archive-export.js`, `books-backfill-orders.js`, `books-fetch-fx.js`, `seed-books-demo.js` |
 | CSS | `public/css/admin-bookkeeping.css` |
-| Jest | `tests/integration/adminBookkeeping.test.js`, `booksInvoice.test.js`, `booksExpenses.test.js`, `booksLedger.test.js`, `booksVatReturn.test.js`, `booksPeppolUbl.test.js`, `booksIntake.test.js`, `booksPos.test.js`, `booksPayroll.test.js`, `booksReconciliation.test.js`, `booksReports.test.js`, `booksReplay.test.js`, `booksBackfill.test.js`, `booksDeferredRevenue.test.js`; `tests/unit/booksVat.test.js`, `booksVatPeriod.test.js`, `booksCsv.test.js`, `booksDate.test.js`, `booksFx.test.js`, `booksPdf.test.js`, `booksPayroll.test.js`, `booksReplay.test.js`, `booksIntakeShape.test.js`, `booksControllerParse.test.js`, `ublInvoice.test.js`, `money.client.test.js` |
+| Jest | `tests/integration/adminBookkeeping.test.js`, `booksInvoice.test.js`, `booksExpenses.test.js`, `booksLedger.test.js`, `booksVatReturn.test.js`, `booksPeppolUbl.test.js`, `booksIntake.test.js`, `booksPos.test.js`, `booksPayroll.test.js`, `booksReconciliation.test.js`, `booksReports.test.js`, `booksReplay.test.js`, `booksBackfill.test.js`, `booksDeferredRevenue.test.js`, `seedBooksDemo.test.js`; `tests/unit/booksVat.test.js`, `booksVatPeriod.test.js`, `booksCsv.test.js`, `booksDate.test.js`, `booksFx.test.js`, `booksPdf.test.js`, `booksPayroll.test.js`, `booksReplay.test.js`, `booksIntakeShape.test.js`, `booksControllerParse.test.js`, `ublInvoice.test.js`, `money.client.test.js` |
 | Migrations | 072–079, 095, 096, 099, 101, 103 |
 | Features | [bookkeeping-core](../features/bookkeeping-core.md), [books-intake](../features/books-intake.md), [books-replay](../features/books-replay.md), [books-settings](../features/books-settings.md), [invoices](../features/invoices.md), [payroll](../features/payroll.md), [peppol-outbound](../features/peppol-outbound.md), [pos](../features/pos.md), [vsk](../features/vsk.md) |
 | Feature doc | `docs/BOOKKEEPING-SYSTEM.md`, `docs/BOOKS-PARALLEL-RUN.md`, `docs/ACCOUNTANT-QUESTIONS.md` |
 
 **Rules that must hold**
+- **The demo seed never touches real books** (harvest 2, lane 1a; ported from
+  icelandicstore #427): `npm run seed:books` passes `server/scripts/targetGuard.js`
+  first (a local `_test` database, or the local dev one with `--allow-dev-db`; never
+  a `*_books` / ops / prod name, an Azure host or a deployed environment), and
+  `--wipe` finds the rows the seed created (demo orders → their invoices,
+  payments, credit notes and journal entries; the demo expenses by supplier +
+  invoice number + description + amount; the `demo/demo-*` receipts), REFUSES
+  with `UNSEEDED_BOOKS` — deleting nothing — while any other books row, VAT
+  return or intake item exists, and otherwise deletes exactly those ids in one
+  transaction (the trigger switch included, so a crash cannot leave the
+  immutability triggers off). Restarting the number series is safe only because
+  of the refusal. `seedBooksDemo.test.js` pins it.
 - Statutory documents are never deleted, only credited (505/2013); service
   invoices are deduplicated by partial unique indexes (one build half per
   account, one recurring per account per month; cancelled rows excluded;
@@ -836,7 +870,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Client | `public/js/services/cart.js`, `adminProducts.js`, `adminOrders.js`, `adminCollections.js`, `adminDiscounts.js`, `adminBins.js`; `public/js/utils/availability.js` (the basket's sold-out gate), `imageUrl.js` (the `.thumb.webp` URL) |
 | Scripts | `server/scripts/seed-shop.js`, `import-products-csv.js` |
 | CSS | `public/css/shop.css`, `admin-products.css`, `admin-orders.css`, `admin-collections.css`, `admin-discounts.css`, `admin-bins.css`, `admin-sales.css`, `barcode-scanner.css` |
-| Jest | `tests/integration/shop.test.js`, `discounts.test.js`, `adminOrderBulk.test.js`, `adminProductImportExport.test.js`, `sections.test.js`, `inventoryThreeNumbers.test.js`, `adminProductImportFile.test.js`, `adminOrderExport.test.js`; `tests/unit/discountEngine.test.js`, `shopFilters.test.js`, `bins-grid.test.js`, `qr.test.js`, `availability.client.test.js`, `productImportParseFile.test.js`, `productImportVariantCell.test.js`, `productImportVariantGroups.test.js`, `parsePdfWorker.test.js`, `imageUrl.test.js` (fixture `tests/fixtures/pdfFixture.js`) |
+| Jest | `tests/integration/shop.test.js`, `discounts.test.js`, `adminOrderBulk.test.js`, `adminProductImportExport.test.js`, `sections.test.js`, `inventoryThreeNumbers.test.js`, `adminProductImportFile.test.js`, `adminOrderExport.test.js`, `shopPublicPrivacy.test.js`; `tests/unit/discountEngine.test.js`, `shopFilters.test.js`, `bins-grid.test.js`, `qr.test.js`, `availability.client.test.js`, `productImportParseFile.test.js`, `productImportVariantCell.test.js`, `productImportVariantGroups.test.js`, `parsePdfWorker.test.js`, `imageUrl.test.js` (fixture `tests/fixtures/pdfFixture.js`) |
 | e2e | `e2e/admin-product-group.spec.js`, `cart-sold-out.spec.js` |
 | Migrations | 022–025, 045, 048, 049, 050, 054, 055, 057, 074, 112, 113 |
 | Features | [cart-checkout](../features/cart-checkout.md), [discounts](../features/discounts.md), [orders](../features/orders.md), [shop-catalog](../features/shop-catalog.md) |
@@ -845,6 +879,15 @@ company/                  gitignored: plans, decisions, logs, market-research st
 **Rules that must hold**
 - Hidden, never deleted: `/shop` in `publicSurface.js`, every admin line in
   `HIDDEN_ADMIN_VIEWS`; routes live, Stripe inert without keys.
+- **The public shop API carries no warehouse internals** (harvest 2, lane 1a;
+  ported from icelandicstore #62 and #416 G5): `GET /api/v1/shop/products` and
+  `/:slug` strip `bin` (the shelf), `sku`, `barcode` and the raw stock figures
+  from every product and variant (`shopController` `PRODUCT_INTERNALS`) — the
+  storefront reads none of them, staff read them through `/api/v1/admin/shop`.
+  `GET /api/v1/shop/orders/mine` answers the `CUSTOMER_ORDER_FIELDS` ALLOW-list
+  (`customerOrderView`): no Stripe session / payment-intent ids, no
+  `stock_deducted_at`, no `tags`; a column added to `Order.COLUMNS` stays
+  staff-only until it is named there. `shopPublicPrivacy.test.js` pins both.
 - **Three numbers, one writer** ([harvest-ice-c-2026-09-24](HISTORY.md#harvest-ice-c-2026-09-24)):
   `stock` is On hand; Committed is DERIVED from PAID orders whose stock has
   not moved (`orders.stock_deducted_at IS NULL`; pending, cancelled, failed and
@@ -951,13 +994,21 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Views | `public/js/views/AdminMonitoringView.js`, `AdminAnalyticsView.js` |
 | Client | `public/js/services/adminEvents.js`, `errorReporter.js`, `usage.js`; `public/js/analytics.js`, `public/js/consent.js`, `public/js/services/cookieConsent.js` (the banner's account side); `public/js/api/rateLimitDecide.js`, `rateLimitGuard.js` |
 | CSS | `public/css/admin-monitoring.css`, `analytics-admin.css` |
-| Jest | `tests/integration/eventLog.test.js`, `analytics.test.js`, `observability.test.js`, `uploadVolumeAlert.test.js`; `tests/unit/analyticsSalt.test.js`, `httpMetrics.test.js`, `loggerScrub.test.js`, `maintenanceWindow.test.js`, `aiLogStream.test.js`, `trackedFetch.test.js`, `cookieConsent.client.test.js`; `tests/integration/cookieConsent.test.js` |
+| Jest | `tests/integration/eventLog.test.js`, `analytics.test.js`, `observability.test.js`, `uploadVolumeAlert.test.js`; `tests/unit/analyticsSalt.test.js`, `httpMetrics.test.js`, `loggerScrub.test.js`, `loggerRedact.test.js`, `maintenanceWindow.test.js`, `aiLogStream.test.js`, `trackedFetch.test.js`, `cookieConsent.client.test.js`; `tests/integration/cookieConsent.test.js` |
 | e2e | `e2e/admin-monitoring.spec.js`, `cookie-consent-account.spec.js` |
 | Migrations | 046 (analytics), 087 (event logs), 111 (`users.cookie_consent`) |
 | Features | [analytics](../features/analytics.md), [monitoring](../features/monitoring.md) |
 | Feature doc | `RUNBOOK.md` (Analytics, Health), `docs/SLO.md` |
 
 **Rules that must hold**
+- **Credentials are redacted at every depth pino can see** (harvest 2, lane 1a; ported
+  from icelandicstore #382): pino's `*` matches exactly ONE level, so
+  `server/observability/logger.js` `REDACT` names each credential field at the top
+  level AND as `*.<field>` — password, password_hash, current_password /
+  new_password (+ camelCase), token, secret, totp_secret(_enc), kennitala — plus
+  `req.body.code` (the TOTP code; a bare `code` is an error code and stays).
+  A new credential-shaped field joins both lists; `tests/unit/loggerRedact.test.js`
+  builds a pino with the exported config.
 - **The cookie choice follows the account** ([harvest-ice-b](HISTORY.md#harvest-ice-b-2026-09-24)): a signed-in answer is
   `users.cookie_consent` (111, `PUT /api/v1/users/me/cookie-consent`);
   `consent.js` shows the banner only after `consent:ready` (fired by
@@ -1178,7 +1229,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Middleware | `server/middleware/upload.js`, `verifyImageBytes.js`, `sanitize.js`, `validate.js`; `server/utils/imageType.js`, `staticAsset.js` |
 | Services | `server/services/uploadVolumeAlert.js`, `productImages.js` (normalise on upload, lazy `.thumb.webp`) |
 | Config | `server/config/paths.js` |
-| Jest | `tests/integration/media.test.js`, `uploadImageBytes.test.js`, `newsMedia.test.js`, `uploadVolumeAlert.test.js`, `productImages.test.js`; `tests/unit/uploadPaths.test.js`, `uploadRoot.test.js`, `imageType.test.js`, `verifyImageBytes.test.js`, `sanitize.test.js`, `validate.test.js` |
+| Jest | `tests/integration/media.test.js`, `uploadImageBytes.test.js`, `newsMedia.test.js`, `uploadVolumeAlert.test.js`, `productImages.test.js`, `uploadWrapper.test.js`; `tests/unit/uploadPaths.test.js`, `uploadRoot.test.js`, `imageType.test.js`, `verifyImageBytes.test.js`, `sanitize.test.js`, `validate.test.js`, `uploadSingle.test.js` |
 | Migrations | 004, 016, 051 |
 | Features | [uploads-media](../features/uploads-media.md) |
 | Feature doc | `SECURE_SDLC.md` |
@@ -1193,6 +1244,23 @@ company/                  gitignored: plans, decisions, logs, market-research st
 - Brand assets carry the CORP (cross-origin resource policy) exemption
   [harvest-1](HISTORY.md#harvest-1). `avatarHint` must match the enforced 5 MB avatar limit [ui-kit](HISTORY.md#ui-kit).
 - Alert on volume, never block (domain 13).
+- **One upload wrapper, one destination helper** (harvest 2, lane 1a; ported from
+  icelandicstore #141/#142/#150/#314). Every multer disk storage takes
+  `destination: ensureDestination(dir | (req, file) => dir)` from
+  `middleware/upload.js` — multer calls `destination()` inside busboy's handler, so
+  a bare `fs.mkdirSync` that throws (ENOSPC/EACCES on the uploads mount) is an
+  UNCAUGHT exception that exits the process; `ensureDestination` hands it to
+  multer's callback. Every upload route wraps multer in
+  `uploadSingle(builder, errorKeys, { tooLargeStatus })`: multer's own errors and
+  the fileFilter's `INVALID_TYPE` are translated `errors.upload.*` 4xx (by
+  `err.code`, falling back to `default`, then `errors.upload.failed`) in the
+  standard envelope; any other error goes to the central error middleware (500);
+  a client hang-up (`Request aborted` / `Request closed`) ends **499**, logged at
+  info — never a 5xx that burns the SLO. The product-image route runs
+  `requireProduct` BEFORE multer (404 for an unknown, path-shaped or NUL-bearing
+  id, nothing written) and the controller unlinks the file if the row insert fails.
+  The news and project routes still hand-roll a wrapper (hidden surfaces; their
+  builders already use `ensureDestination`).
 - **Product images are normalised on upload** ([harvest-ice-d-2026-09-24](HISTORY.md#harvest-ice-d-2026-09-24)): EXIF auto-orient, long
   edge ≤ 2000 px, metadata stripped, same format; bytes sharp cannot decode are
   a localised 400 with nothing kept. Rewrite from a BUFFER, never a temp file
@@ -1248,6 +1316,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | App | `server/app.js`, `server/server.js`, `server/config/database.js`, `server/middleware/errorHandler.js`, `server/middleware/forwardedFor.js`; `server/utils/safeEqual.js` (constant-time compare for header credentials — the `/metrics` bearer) |
 | Module switches (R4) | `server/config/moduleCatalog.js` (what each switchable module owns: routes, API + upload prefixes, admin views, registry features, tiers), `server/config/modules.js` (the resolved state: the pre-auth `moduleGate`, `isDisabledRoute`, the `<script id="modules">` hand-off), `public/js/utils/modules.js` (its client half); `server/routes/adminModulesRoutes.js` → `/api/v1/admin/modules` (the admin's switches, R5b); `tests/unit/moduleCatalog.test.js`, `tests/integration/moduleFlags.test.js` · e2e `e2e/admin-modules.spec.js` |
 | Migrations tooling | `server/config/schema.js`, `server/scripts/migrate.js`, `bootstrap.js`, `setup-admin.js`, `seed.js`, `cleanup-duplicates.js`, `capture-site-screenshots.js` |
+| Destructive-script guard | `server/scripts/targetGuard.js` (`checkTarget` / `assertSafeTarget`) — called first by `seed-books-demo.js`, `seed-shop.js --reset`, `cleanup-duplicates.js`, `books-replay.js`, `tests/globalSetup.js`, `scripts/drop-test-dbs.js`, `e2e/global-setup.js`; `tests/unit/targetGuard.test.js` |
 | Tests infra | `tests/workerDb.js`, `tests/lib/featureGate.js` (the feature gate core), `tests/lib/locale.js` (the visitor-default helper), `e2e/global-setup.js`, `e2e/helpers.js`, `e2e/lib/dbUrl.js`, `e2e/lib/featureGate.js`, `e2e/lib/identity.js`, `e2e/lib/locale.js`; `scripts/drop-test-dbs.js` |
 | Jest | `tests/unit/schema-integrity.test.js`, `database.test.js`, `workerDb.test.js`, `featureGate.test.js`, `errorHandlerDeadlock.test.js`, `migrationIdempotent.test.js`, `ciSkippedShim.test.js`, `workflowsParse.test.js`; `tests/integration/migrateRunner.test.js` |
 | CI / deploy | `.github/workflows/ci.yml` (lint · 3 Jest shards · the aggregator), `ci-skipped.yml` (docs-only PR shim), `deploy.yml` (dispatch-only, by digest, production only), `promote.yml`; `scripts/merge-coverage.js`; `Dockerfile` |
@@ -1256,6 +1325,21 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Feature doc | `RUNBOOK.md`, `SECURE_SDLC.md`, `docs/TESTING.md`, `docs/DEPLOYMENT.md` |
 
 **Rules that must hold**
+- **A destructive script proves its target first** (harvest 2, lane 1a; generalised
+  from icelandicstore #370's e2e fixtures guard): anything that deletes, truncates,
+  drops or rewrites rows calls `server/scripts/targetGuard.js` before its first
+  query (the pool is lazy, so a refusal opens no connection). An ALLOW-list:
+  every host local (localhost / 127.0.0.1 / ::1, `?host=` overrides included; an
+  `*.postgres.database.azure.com` host is named), every database name (path and
+  `?dbname=` / `?database=`) matching the caller's pattern (`_test`; `_replay`
+  for books:replay) or — only with an explicit `--allow-dev-db` — a plain
+  identifier that is not reserved for real records (`*_books`, `*_books_restore`,
+  `*_ops`, `*_prod`, `*_production`, `*_live`); and never `NODE_ENV=production`,
+  `APP_ENV=production|staging` or an App Service process (`WEBSITE_SITE_NAME` /
+  `WEBSITE_INSTANCE_ID`). `NODE_ENV` alone was never a guard: a shell holding a
+  live `DATABASE_URL` has it unset. `APP_ENV=test` is allowed (a downstream's dev
+  `.env` sets it). Known limit: the port is not judged. The one exemption is
+  `reset-admin-totp.js`, whose job is the real instance — its header says so.
 - **A module that is off is absent, not hidden** ([module-flags-2026-09-24](HISTORY.md#module-flags-2026-09-24)):
   `modules.preset` (`all` default · `vefur` · `verslun` · `rekstur`) plus
   `modules.<id>.enabled`; an explicit switch beats the preset. What a module
