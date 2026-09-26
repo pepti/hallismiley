@@ -630,3 +630,16 @@ input[type=checkbox]:focus-visible {
 }
 .update-banner__msg { flex: 1; }
 .update-banner__reload { flex: none; }
+
+/* The demo instance's banner (components/DemoBanner.js, R2b). Above the sticky
+   nav, in the flow, so it scrolls away. Tokens only: the warning wash with the
+   body ink reads on all three themes. */
+.demo-banner {
+  padding: 6px 16px;
+  background: var(--warning-dim);
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--warning);
+  font-size: 0.85rem;
+  line-height: 1.4;
+  text-align: center;
+}

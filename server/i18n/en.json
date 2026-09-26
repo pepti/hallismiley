@@ -490,5 +490,10 @@
   "meta.privacy.title": "Privacy Policy",
   "meta.terms.title": "Terms of Service",
   "meta.party.title": "Halli's 40th Birthday Party",
-  "meta.party.description": "You're invited to Halli's 40th birthday — July 25, Mýrarkot & SPA. Tap here to see the schedule and RSVP."
+  "meta.party.description": "You're invited to Halli's 40th birthday — July 25, Mýrarkot & SPA. Tap here to see the schedule and RSVP.",
+  "errors.demo.resetting": "The demo data is being reset. Try again in about a minute.",
+  "errors.demo.busy": "A reset is already running.",
+  "errors.demo.cooldown": "The demo data was reset less than 15 minutes ago. Try again later.",
+  "errors.demo.interrupted": "The last reset did not finish. Restart the site to complete it.",
+  "errors.demo.refused": "This system cannot be reset."
 }

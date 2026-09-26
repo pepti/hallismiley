@@ -8,6 +8,7 @@ import { installSessionGuard } from './services/sessionGuard.js';
 import { initCookieConsent } from './services/cookieConsent.js';
 import { installBuildGuard } from './services/buildGuard.js';
 import { ThemeSwitcher } from './components/ThemeSwitcher.js';
+import { mountDemoBanner } from './components/DemoBanner.js';
 import { initTheme, getEffectiveEnv, getDemoMode } from './services/themePrefs.js';
 import { syncBodyClass as syncAmbienceClass } from './services/ambiencePrefs.js';
 import {
@@ -46,6 +47,11 @@ for (const el of document.querySelectorAll('body > [data-i18n]')) {
 const navBar = new NavBar();
 const navEl  = navBar.render();
 document.body.insertBefore(navEl, document.getElementById('app'));
+
+// The demo instance's banner (R2b): only where ssrMeta marked <html
+// data-demo-instance>. Above the nav, in the flow; re-worded on a locale switch.
+mountDemoBanner();
+window.addEventListener('localechange', () => mountDemoBanner());
 
 // ── Floating theme switcher — mounted outside #app so it survives SPA nav ──
 // theme-boot.js already applied the saved theme pre-paint; initTheme() re-syncs

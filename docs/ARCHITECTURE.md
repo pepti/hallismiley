@@ -1246,16 +1246,28 @@ company/                  gitignored: plans, decisions, logs, market-research st
 |---|---|
 | Release delivery | `server/middleware/versionedStatic.js` (`/js/_<tag>/`, `/css/_<tag>/`, immutable a year, 404 `no-store` under another tag), `server/utils/staticCacheControl.js` (unstamped JS/CSS/JSON `no-cache`); client `public/js/services/buildGuard.js`, `public/js/utils/buildCheck.js`, `public/js/utils/assetBase.js`, `public/js/components/UpdateBanner.js`; `tests/integration/versionedShell.test.js`, `tests/unit/versionedStatic.test.js`, `staticCacheControl.test.js`, `buildCheck.client.test.js`, `noAbsoluteJsUrls.test.js` · e2e `e2e/build-reload.spec.js` |
 | App | `server/app.js`, `server/server.js`, `server/config/database.js`, `server/middleware/errorHandler.js`, `server/middleware/forwardedFor.js`; `server/utils/safeEqual.js` (constant-time compare for header credentials — the `/metrics` bearer) |
+| Demo instance (R2b) | `server/config/demoInstance.js` (`DEMO_INSTANCE`, the reset hour, the `<html>` hand-off), `server/services/demoReset.js` (the rebuild, the nightly timer, first-boot seed), `server/demo/seed.js` (PRODUCT-OWNED seed; the engine stub seeds nothing), `server/routes/adminDemoRoutes.js` → `/api/v1/admin/demo` (status + reset), `public/js/components/DemoBanner.js`; the guards in `emailService.js`, `server/config/stripe.js`, the three MCP gates, `robotsRoutes.js`, `app.js`; `tests/integration/demoInstance.test.js`, `tests/integration/demoReset.test.js` (+ `tests/fixtures/demoResetRun.js`) |
 | Module switches (R4) | `server/config/moduleCatalog.js` (what each switchable module owns: routes, API + upload prefixes, admin views, registry features, tiers), `server/config/modules.js` (the resolved state: the pre-auth `moduleGate`, `isDisabledRoute`, the `<script id="modules">` hand-off), `public/js/utils/modules.js` (its client half); `server/routes/adminModulesRoutes.js` → `/api/v1/admin/modules` (the admin's switches, R5b); `tests/unit/moduleCatalog.test.js`, `tests/integration/moduleFlags.test.js` · e2e `e2e/admin-modules.spec.js` |
 | Migrations tooling | `server/config/schema.js`, `server/scripts/migrate.js`, `bootstrap.js`, `setup-admin.js`, `seed.js`, `cleanup-duplicates.js`, `capture-site-screenshots.js` |
 | Tests infra | `tests/workerDb.js`, `tests/lib/featureGate.js` (the feature gate core), `tests/lib/locale.js` (the visitor-default helper), `e2e/global-setup.js`, `e2e/helpers.js`, `e2e/lib/dbUrl.js`, `e2e/lib/featureGate.js`, `e2e/lib/identity.js`, `e2e/lib/locale.js`; `scripts/drop-test-dbs.js` |
 | Jest | `tests/unit/schema-integrity.test.js`, `database.test.js`, `workerDb.test.js`, `featureGate.test.js`, `errorHandlerDeadlock.test.js`, `migrationIdempotent.test.js`, `ciSkippedShim.test.js`, `workflowsParse.test.js`; `tests/integration/migrateRunner.test.js` |
 | CI / deploy | `.github/workflows/ci.yml` (lint · 3 Jest shards · the aggregator), `ci-skipped.yml` (docs-only PR shim), `deploy.yml` (dispatch-only, by digest, production only), `promote.yml`; `scripts/merge-coverage.js`; `Dockerfile` |
 | Migrations | 001, 043 (housekeeping) |
-| Features | [client-config](../features/client-config.md), [platform-core](../features/platform-core.md), [rate-limits-security](../features/rate-limits-security.md), [testing-infra](../features/testing-infra.md) |
+| Features | [client-config](../features/client-config.md), [demo-instance](../features/demo-instance.md), [platform-core](../features/platform-core.md), [rate-limits-security](../features/rate-limits-security.md), [testing-infra](../features/testing-infra.md) |
 | Feature doc | `RUNBOOK.md`, `SECURE_SDLC.md`, `docs/TESTING.md`, `docs/DEPLOYMENT.md` |
 
 **Rules that must hold**
+- **A demo instance throws its data away, never a real database** ([demo-instance-2026-09-26](HISTORY.md#demo-instance-2026-09-26)):
+  `DEMO_INSTANCE=true` is accepted only with `APP_ENV=demo` and `DEMO_DATABASE_NAME`
+  equal to the connected database (whose name carries "demo"); `server.js` exits at
+  boot otherwise. While on, email, payments (`isConfigured` AND `getStripe`), MCP and
+  IndexNow are off and crawlers are shut out. The reset snapshots the kept accounts
+  (`DEMO_KEEP_ROLES`, unexpired) as JSON in `demo_keep` BEFORE dropping `public`,
+  never as a renamed copy of the tables (unqualified `information_schema` checks in
+  migrations would see it); restores one statement per table in one transaction;
+  drops the snapshot only after the seed; recovers an interrupted reset at boot. A
+  `*_test` database only with `allowTestDatabase` (the reset test's own). The seed
+  file `server/demo/seed.js` is product-owned.
 - **A module that is off is absent, not hidden** ([module-flags-2026-09-24](HISTORY.md#module-flags-2026-09-24)):
   `modules.preset` (`all` default · `vefur` · `verslun` · `rekstur`) plus
   `modules.<id>.enabled`; an explicit switch beats the preset. What a module
