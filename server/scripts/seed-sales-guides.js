@@ -243,7 +243,7 @@ const GUIDES = [
 <li><strong>Meðalstórt verk = 5 einingar</strong> — t.d. ný síða eða nýtt yfirlit í stjórnborði.</li>
 <li><strong>Stórt verk = 20 einingar</strong> — t.d. nýr eiginleiki eða tenging við annað kerfi.</li>
 </ul>
-<p>Til að gera þetta áþreifanlegt: 2 einingar í Vef duga fyrir tveimur litlum verkum á mánuði; 5 einingar í Rekstri duga fyrir fimm litlum verkum eða einu meðalstóru. Stórt verk (20 einingar) er stærra en mánaðarskammtur nokkurs þreps, svo það sem umfram er greiðist á einingaverði — og viðskiptavinurinn sér upphæðina áður en hann samþykkir verkið.</p>
+<p>Til að gera þetta áþreifanlegt: 2 einingar í Vef duga fyrir tveimur litlum verkum á mánuði; 5 einingar í Rekstri duga fyrir fimm litlum verkum eða einu meðalstóru. Stórt verk (20 einingar) er stærra en mánaðarskammtur nokkurs þreps, svo viðskiptavinurinn velur: að dreifa því á einingar næstu mánaða án aukakostnaðar, eða að hefja það strax og greiða það sem umfram er á einingaverði — og hann sér upphæðina áður en hann samþykkir verkið.</p>
 <ul>
 <li><strong>Tilkynning við 80%:</strong> viðskiptavinurinn fær að vita þegar 80% af einingum mánaðarins eru notuð.</li>
 <li><strong>Umfram einingarnar:</strong> klárist einingar mánaðarins greiðir hann fast <strong>einingaverð</strong> fyrir það sem umfram er: <strong>6.000 kr. á einingu án VSK</strong> (DRÖG — Halli staðfestir). Hann fær upphæðina alltaf gefna upp áður en verkið hefst.</li>
@@ -650,6 +650,8 @@ if (require.main === module) {
 // 1/5/20 but the D-022 quotas are 2/3/5, so "a verk nobody is waiting for can
 // wait for next month's units" could not hold for a stórt verk. The queue note in
 // threpin-thrju now says such a verk is paid with the units of the coming months,
-// spread over several months if one month cannot hold it, plus a worked example
+// spread over several months if one month cannot hold it; the "Stórt verk"
+// sentence above it names both paths (spread, or start now and pay the rest at
+// the einingaverð); plus a worked example
 // (20 einingar on Rekstur: four months, or start now and pay the rest at the
 // einingaverð; the customer chooses before work starts). Halli, 2026-09-26.

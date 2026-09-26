@@ -3,7 +3,8 @@
 // the queue note "a verk nobody is waiting for can wait for next month and take
 // its units, at no extra cost" could not hold for a stórt verk. It now says the
 // verk is paid with the units of the coming months, spread over several months
-// if one cannot hold it, with a worked example (20 einingar on Rekstur: four
+// if one cannot hold it; the "Stórt verk" sentence above the list names both
+// paths (spread, or start now and pay the rest); and a worked example (20 einingar on Rekstur: four
 // months, or start now and pay the rest at the einingaverð). The seed carries
 // the same text; os_004 turns the text os_003 left into it.
 const db = require('../../server/config/database');
@@ -61,20 +62,22 @@ describe('os_004 — the queue note spreads a verk over several months', () => {
     }
   });
 
-  test('the old passage occurs once in the os_003 text, the new one once in the seed', () => {
+  test('every old passage occurs once in the os_003 text, every new one once in the seed', () => {
     for (const e of m4.edits) {
       expect(count(s3Of(e.slug)[e.field], e.from)).toBe(1);
       expect(count(seedOf(e.slug)[e.field], e.to)).toBe(1);
     }
   });
 
-  test('the seed no longer promises next month, and carries the spread and the example', () => {
+  test('the seed no longer promises next month, and carries both paths and the example', () => {
     const all = GUIDES.map(g => [g.title, g.summary, g.body].join('\n')).join('\n');
     expect(all).not.toContain(OLD_PROMISE);
     const body = seedOf('threpin-thrju').body;
     expect(body).toContain('má geyma og greiða með einingum næstu mánaða — stærra verk en einn mánuður rúmar má dreifa á fleiri mánuði, án aukakostnaðar.');
     expect(body).toContain('<li><strong>Dæmi:</strong> viðskiptavinur í Rekstri (5 einingar á mánuði) vill stórt verk (20 einingar).');
     expect(body).toContain('dreifist verkið á fjóra mánuði');
+    expect(body).toContain('svo viðskiptavinurinn velur: að dreifa því á einingar næstu mánaða án aukakostnaðar, eða að hefja það strax og greiða það sem umfram er á einingaverði — og hann sér upphæðina áður en hann samþykkir verkið.</p>');
+    expect(body).not.toContain('svo það sem umfram er greiðist á einingaverði');
     expect(body).toContain('15 × 6.000 kr. = 90.000 kr. án VSK');
     expect(body).toContain('Viðskiptavinurinn velur, og samið er um valið áður en vinnan hefst.');
     // The verk sizes are unchanged.

@@ -284,7 +284,8 @@ const OS_003_EDITS = [
 // waiting for can wait for next month and take its units, at no extra cost"
 // cannot hold for a verk bigger than one month's units. It now says such a verk
 // is paid with the units of the coming months, spread over several if one month
-// cannot hold it, and a worked example follows (a stórt verk of 20 einingar on
+// cannot hold it, the "Stórt verk" sentence above the list names both paths
+// (spread, or start now and pay the rest), and a worked example follows (a stórt verk of 20 einingar on
 // Rekstur, 5/mán: four months, or start now and pay the rest at the einingaverð
 // 6.000 kr.; the customer chooses, agreed before work starts). Same helper and
 // guard as os_001/os_003; the seed carries the result;
@@ -294,6 +295,9 @@ const OS_004_EDITS = [
   { slug: 'threpin-thrju', field: 'body',
     from: '<li><strong>Verk sem ekkert liggur á</strong> má geyma til næsta mánaðar og taka af einingum hans, án aukakostnaðar. Nýjar einingar bætast við um mánaðamót.</li>',
     to: '<li><strong>Verk sem ekkert liggur á</strong> má geyma og greiða með einingum næstu mánaða — stærra verk en einn mánuður rúmar má dreifa á fleiri mánuði, án aukakostnaðar. Nýjar einingar bætast við um mánaðamót.</li>\n<li><strong>Dæmi:</strong> viðskiptavinur í Rekstri (5 einingar á mánuði) vill stórt verk (20 einingar). Annaðhvort dreifist verkið á fjóra mánuði og einingar þeirra mánaða fara í það, eða það hefst strax og hann greiðir það sem er umfram einingar mánaðarins á einingaverði: 15 × 6.000 kr. = 90.000 kr. án VSK. Viðskiptavinurinn velur, og samið er um valið áður en vinnan hefst.</li>' },
+  { slug: 'threpin-thrju', field: 'body',
+    from: 'Stórt verk (20 einingar) er stærra en mánaðarskammtur nokkurs þreps, svo það sem umfram er greiðist á einingaverði — og viðskiptavinurinn sér upphæðina áður en hann samþykkir verkið.</p>',
+    to: 'Stórt verk (20 einingar) er stærra en mánaðarskammtur nokkurs þreps, svo viðskiptavinurinn velur: að dreifa því á einingar næstu mánaða án aukakostnaðar, eða að hefja það strax og greiða það sem umfram er á einingaverði — og hann sér upphæðina áður en hann samþykkir verkið.</p>' },
 ];
 
 module.exports = {
