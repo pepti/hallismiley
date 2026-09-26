@@ -129,7 +129,7 @@ Paste the single-line output as the `PRIVATE_KEY` value in Railway.
 ```
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/halliprojects
 ADMIN_USERNAME=admin
-ADMIN_PASSWORD_HASH=$2b$12$qLKtT9MCcy2ncESdmQsqEO.ocDRYYD0zpyy6tQWHCBNUkzm6/Hgii
+ADMIN_PASSWORD_HASH=<redacted 2026-09-26: a bcrypt hash, removed from the published docs>
 ```
 
 Three problems:

@@ -177,7 +177,8 @@ company/                  gitignored: plans, decisions, logs, market-research st
   say why. Session payloads carry the same downgrade plus
   `mfa_enrolment_required`; the SPA's `mfaEnrolmentRequired()` is UX. An
   account that owes enrolment is always enrolment-eligible. `ADMIN_TOTP_EXEMPT`
-  is ignored under `NODE_ENV=production`; the break-glass is
+  is honoured ONLY under `NODE_ENV=development` or `test` — an allow-list, so
+  staging or any other label fails closed ([security-hygiene-2026-09-26](history.d/2026-09-26-fix-security-hygiene-2026-09-26.md#security-hygiene-2026-09-26)); the break-glass is
   `server/scripts/reset-admin-totp.js` ([harvest-rk-totp-2026-09-23](HISTORY.md#harvest-rk-totp-2026-09-23)).
 - The TOTP secret is sealed at rest (`utils/secretBox.js`, AES-256-GCM under
   `TOTP_ENC_KEY`, user id as associated data) in the EXPAND phase of migration
@@ -1975,6 +1976,17 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Feature doc | `RUNBOOK.md`, `SECURE_SDLC.md`, `docs/TESTING.md`, `docs/DEPLOYMENT.md`, `docs/history.d/README.md` |
 
 **Rules that must hold**
+- **Test runs never write into the working tree, and an image never carries local-only files** ([security-hygiene-2026-09-26](history.d/2026-09-26-fix-security-hygiene-2026-09-26.md#security-hygiene-2026-09-26)):
+  globalSetup gives each Jest run an upload base in the OS temp dir
+  (`tests/lib/testUploads.js`, `<product>-test-uploads-<pid>`, pinned in
+  `TEST_UPLOAD_BASE`); `tests/env.js` points `UPLOAD_ROOT`/`BOOKS_UPLOAD_ROOT` at a
+  per-worker folder under it; teardown removes it and the next setup sweeps a dead
+  run's. A test that checks a file on disk derives the path from
+  `server/config/paths.js` (`UPLOAD_ROOT`, `contentUploadDir()`…), never
+  `public/assets`. `.dockerignore` mirrors `.gitignore`'s local-only paths
+  (company/, keys/, *.pem, upload folders) so a local `docker build .` gets what CI
+  gets — never a folder that holds committed files the image needs
+  (`public/assets/backgrounds/`).
 - **Test databases live on the throwaway test server, carry the product's name and a label, and clean themselves up** ([test-db-hygiene](history.d/2026-09-26-feat-test-db-hygiene.md#test-db-hygiene-2026-09-26)):
   `TEST_PG_URL` (process env or `.env`) is where Jest + e2e create them —
   never a server holding a real database; `TEST_DATABASE_URL` /
