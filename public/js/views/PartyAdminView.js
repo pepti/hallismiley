@@ -4445,7 +4445,12 @@ export class PartyAdminView {
         e.stopPropagation();
         const userId = btn.dataset.revokeUserId;
         const name   = btn.dataset.revokeUserName || 'this guest';
-        if (!confirm(t('party.admin.confirmRevoke', { name }))) return;
+        // A cancelled confirm says so (ported from icelandicstore #199): a
+        // silent return reads as a dead button.
+        if (!confirm(t('party.admin.confirmRevoke', { name }))) {
+          showToast(t('admin.actionCancelled'), 'info');
+          return;
+        }
 
         btn.disabled = true;
         btn.textContent = '…';   // icon button — spinner-ish glyph, not text

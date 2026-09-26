@@ -58,9 +58,12 @@ engine's own kit (domain 2) and, for the contrast test, the theme engine (domain
      are the admin views listed in the lane brief plus `AdminSidebar` (the build stamp), `ToastLog`
      (time of day, `hourCycle: 'h23'`), `ArticleView`, `NewsView` and `HomeView`.
      `AdminCustomersView`'s spent column uses `formatMoney` instead of `toLocaleString('is-IS')`.
-   - **`AdminUsersView.js:22` is left for lane 1b**, which owns that file. It is on the `PENDING`
-     list of the new guard in `tests/unit/adminPageTitle.client.test.js`, which fails on any other
-     raw `toLocale*` call under `public/js`.
+   - A new guard in `tests/unit/adminPageTitle.client.test.js` fails on any raw `toLocale*` call
+     under `public/js` outside `utils/format.js`. It has **no exceptions**.
+     - `AdminUsersView`'s "joined" date was first left for lane 1b, which owns that file. Lane 1b
+       did not change it, so it moved to `formatDate` when this branch merged master (9ec2279).
+     - `ExpiryPicker.js`, which the login-expiry chunk added, moved to `formatDateTime` in the same
+       merge.
 7. **Theme contrast test** (ice #313 219d33e, #324 8e977ae):
    - `tests/themeTokens.js` reads `variables.css` and `themes.css` the way the cascade does,
      resolves `var()`, composites alpha and computes WCAG contrast. The theme set comes from

@@ -60,10 +60,6 @@ describe('the admin detail views set documentTitle through adminPageTitle', () =
 // goes through utils/format.js formatDate/formatDateTime, which follow the app
 // locale and build Icelandic by hand.
 describe('no raw toLocale* date formatting outside utils/format.js', () => {
-  // Owned by another harvest-2 lane at the time of the sweep (lane 1b); remove
-  // the entry once that file moves to the kit formatter.
-  const PENDING = new Set(['public/js/views/AdminUsersView.js']);
-
   const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((d) => {
     const p = path.join(dir, d.name);
     return d.isDirectory() ? walk(p) : (p.endsWith('.js') ? [p] : []);
@@ -73,7 +69,9 @@ describe('no raw toLocale* date formatting outside utils/format.js', () => {
     const hits = [];
     for (const file of walk(path.join(ROOT, 'public/js'))) {
       const rel = path.relative(ROOT, file).split(path.sep).join('/');
-      if (rel === 'public/js/utils/format.js' || PENDING.has(rel)) continue;
+      // No exceptions: AdminUsersView (lane 1b's file) and ExpiryPicker
+      // (login-expiry) moved to the kit formatter in the master merge.
+      if (rel === 'public/js/utils/format.js') continue;
       fs.readFileSync(file, 'utf8').split(/\r?\n/).forEach((line, i) => {
         const code = line.replace(/\/\/.*$/, '');
         if (/\.toLocale(Date|Time)?String\(/.test(code)) hits.push(`${rel}:${i + 1}`);
