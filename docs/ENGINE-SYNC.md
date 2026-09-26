@@ -130,8 +130,10 @@ engine commit absent from a downstream's `engine.json.rev..upstream/master`
   (the tool does this). When `package.json` conflicted too, npm cannot read it
   yet: the tool writes its state, stops with exit 3 and asks you to resolve
   `package.json` and rerun with `--continue`, which regenerates the lock from
-  your resolution (site-factory, 2026-09-26). A failed regeneration is exit 3
-  as well — fix the cause, then `--continue`.
+  your resolution (site-factory, 2026-09-26). The lock is always regenerated
+  last, once every conflict is resolved; a failed regeneration is exit 3 as
+  well — fix the cause, then `--continue`. Every exit-3 message prints the
+  exact command, with `--repo <the worktree>` after a `--worktree` sync.
 - **`.engine-paths`, `.gitattributes`, `features/README.md`** are DERIVED —
   written by `scripts/features-index.js` from `features/**/*.md` — and differ
   per repo (a product's own feature paths), so they conflict on every sync.

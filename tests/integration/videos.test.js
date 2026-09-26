@@ -8,7 +8,6 @@ const {
   createTestModeratorUser,
   createTestRegularUser,
   cleanTables,
-  workerScopedProjectIds,
   validProject,
 } = require('../helpers');
 const { parseYouTubeId } = require('../../server/utils/youtube');
@@ -30,7 +29,6 @@ function cleanupUploadDir(id) {
 
 beforeEach(async () => {
   await cleanTables();
-  await workerScopedProjectIds(); // the upload dir is keyed by project id, shared by every worker
   adminCookie = await getTestSessionCookie();
 
   const modId  = await createTestModeratorUser();

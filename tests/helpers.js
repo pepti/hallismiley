@@ -352,20 +352,6 @@ async function reseedBooksReferenceData() {
   }
 }
 
-/**
- * Give this Jest worker its own range of project ids. Uploads land in
- * public/assets/projects/<project id>/ — one directory tree every worker
- * shares — while each worker's DB restarts the `projects` sequence at every
- * cleanTables(). Two workers therefore both made project 1, and one suite's
- * afterEach rmSync of its upload dir deleted the other's file mid-test
- * (media.test "deletes disk file…", master CI 36258240196, 2026-09-26).
- * Call it after cleanTables() in any suite that writes into that tree.
- */
-async function workerScopedProjectIds() {
-  const worker = Number(process.env.JEST_WORKER_ID || 1);
-  await db.query(`SELECT setval(pg_get_serial_sequence('projects', 'id'), $1, false)`, [worker * 1_000_000]);
-}
-
 /** A minimal valid project body for POST requests. */
 function validProject(overrides = {}) {
   return {
@@ -399,7 +385,6 @@ module.exports = {
   getTestSessionCookie,
   cleanTables,
   reseedBooksReferenceData,
-  workerScopedProjectIds,
   validProject,
   validArticle,
 };

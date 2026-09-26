@@ -2028,15 +2028,17 @@ company/                  gitignored: plans, decisions, logs, market-research st
   ([engine-sync-gaps-2026-09-26](history.d/2026-09-26-fix-engine-sync-gaps-2026-09-26.md#engine-sync-gaps-2026-09-26)):
   a worker's DB outlives each file, and `cleanTables()` empties only the
   users FK closure — `products` and `roles` (among others) survive it. So a
-  suite (1) leaves what it wrote outside a `cleanTables()` it runs last, or
-  cleans it in `afterAll` (adminHome); (2) never deletes rows the migrations
-  seeded without putting them back (adminRoles snapshots `roles` and restores
-  it); (3) asserts whole-table counts only relative to what the same table
-  answers elsewhere, or scoped to its own rows or dates (booksPos's receipt
-  list, adminHomeAttention's sold-out card); (4) keys shared FILESYSTEM paths
-  by something unique across workers — upload dirs under
-  `public/assets/projects/<id>` take `workerScopedProjectIds()` after
-  `cleanTables()`, because every worker restarts the serial at 1. A suite in
+  suite (1) removes what it wrote in `afterAll` — `cleanTables()` for the
+  closure, by name or by a restored snapshot for the rest (adminHome: its
+  `home-*` products and roles, `app_settings`); (2) never deletes rows the
+  migrations seeded without putting them back (adminRoles snapshots `roles`
+  and restores it); (3) asserts whole-table counts only relative to what the
+  same table answers elsewhere, or scoped to its own rows or dates (booksPos's
+  receipt list, adminHomeAttention's sold-out card); (4) keeps FILESYSTEM
+  writes per worker — uploads go to the per-worker `UPLOAD_ROOT` under the
+  run's temp base (`tests/lib/testUploads.js`,
+  [security-hygiene-2026-09-26](history.d/2026-09-26-fix-security-hygiene-2026-09-26.md#security-hygiene-2026-09-26)),
+  because every worker restarts a serial id at 1. A suite in
   the engine names no product: what a product hides comes from the seam
   (`identity.surface.*`, `publicSurface`, `disabledAdminViews()`). Prove a fix
   by running the pair in one worker in both orders (`--runInBand` with a
