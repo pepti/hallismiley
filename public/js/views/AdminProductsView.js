@@ -11,6 +11,11 @@ import {
   adminBulkProducts, adminProductAdjustments, adminParseProductImportFile,
 } from '../services/adminProducts.js';
 import { showToast } from '../components/Toast.js';
+import { dragHasFiles, dragHasUsableFile } from '../utils/dragFiles.js';
+
+// The image types the product-image upload takes: the drop filter and the
+// drag-time check share this pattern; the file input's accept lists the same.
+const PRODUCT_IMAGE_MIME = /^image\/(jpeg|png|webp)$/;
 
 // Reasons an admin may give for a stock change (server models/Inventory.js
 // ADJUSTMENT_REASONS); the product form's default is 'correction'.
@@ -961,7 +966,7 @@ export function openProductFormModal({ existing = null, onSaved = () => {}, pain
     // (drag-and-drop, harvested from icelandicstore #240). Non-image files in a
     // drop are skipped and counted.
     const uploadFiles = async (picked) => {
-      const files = picked.filter(f => /^image\/(jpeg|png|webp)$/.test(f.type));
+      const files = picked.filter(f => PRODUCT_IMAGE_MIME.test(f.type));
       const skipped = picked.length - files.length;
       if (!files.length) {
         if (skipped) errorEl.textContent = t('adminProducts.dropSkipped', { n: skipped });
@@ -1017,25 +1022,37 @@ export function openProductFormModal({ existing = null, onSaved = () => {}, pain
     const zone = modal.querySelector('.admin-shop__images');
     if (zone) {
       zone.classList.add('admin-shop__dropzone');
-      const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes('Files');
+      const hasFiles = dragHasFiles;
       const swallow = (e) => { e.preventDefault(); e.stopPropagation(); };
-      zone.addEventListener('dragenter', (e) => { if (!hasFiles(e)) return; swallow(e); zone.classList.add('is-dragover'); });
+      // Say yes or no while the file is still in the air (Ported from
+      // icelandicstore #193): a drag with no JPEG/PNG/WebP in it turns the
+      // outline --error and the cursor to no-drop. preventDefault still runs
+      // for a refused drag — without it the browser takes the drop itself and
+      // navigates to the file, losing the form. uploadFiles re-checks each
+      // file at the drop and stays the authority.
+      const mark = (e) => {
+        const ok = dragHasUsableFile(e.dataTransfer, PRODUCT_IMAGE_MIME);
+        zone.classList.toggle('is-dragover', ok);
+        zone.classList.toggle('is-dragreject', !ok);
+        e.dataTransfer.dropEffect = ok ? 'copy' : 'none';
+      };
+      const clear = () => zone.classList.remove('is-dragover', 'is-dragreject');
+      zone.addEventListener('dragenter', (e) => { if (!hasFiles(e)) return; swallow(e); mark(e); });
       zone.addEventListener('dragover', (e) => {
         if (!hasFiles(e)) return;
         swallow(e);
-        e.dataTransfer.dropEffect = 'copy';
-        zone.classList.add('is-dragover');
+        mark(e);
       });
       zone.addEventListener('dragleave', (e) => {
         // dragleave fires between the section's children too — only clear the
         // highlight once the pointer has actually left it.
         if (e.relatedTarget && zone.contains(e.relatedTarget)) return;
-        zone.classList.remove('is-dragover');
+        clear();
       });
       zone.addEventListener('drop', (e) => {
         if (!hasFiles(e)) return;
         swallow(e);
-        zone.classList.remove('is-dragover');
+        clear();
         uploadFiles(Array.from(e.dataTransfer.files || []));
       });
       // A file dropped elsewhere on the open modal must not make the browser

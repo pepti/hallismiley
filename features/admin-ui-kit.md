@@ -40,6 +40,8 @@ paths:
   - public/js/components/Combobox.js
   - tests/unit/combobox.client.test.js
   - tests/unit/stickyHScroll.client.test.js
+  - public/js/utils/dragFiles.js
+  - tests/unit/dragFiles.client.test.js
 migrations: []
 since: 2026-09-08
 origin: null
