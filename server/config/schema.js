@@ -5681,6 +5681,103 @@ END; $$ LANGUAGE plpgsql`,
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS country  TEXT`,
     ],
   },
+  {
+    // Goods receiving + the batch handle on stock movements
+    // (harvest2-lane6a-2026-09-26; ported from icelandicstore #23, ice's
+    // 080_goods_receipts). A supplier delivery is a RECEIPT: the lines the
+    // supplier's file says are coming, a scan log of what physically arrived,
+    // and — at finalise — ONE audited stock batch (Inventory.applyBatch,
+    // reason 'receipt') in the same transaction that marks it finalized.
+    //
+    //   goods_receipts       one delivery; draft → finalized | cancelled.
+    //   goods_receipt_lines  the expected rows (supplier text, OUR code as the
+    //                        file had it, expected qty, optional unit cost),
+    //                        matched to a product/variant by SKU then barcode;
+    //                        received_qty is re-derived from the scans.
+    //   goods_receipt_scans  append-only scan log; a scan with no line is
+    //                        "not on the invoice".
+    //   inventory_adjustments.batch_id / goods_receipt_id — every row of one
+    //                        applyBatch call shares a batch_id (a stock count
+    //                        is one batch), and a receipt's rows name it.
+    //
+    // Column names mirror ice's 080 so ice's databases already hold the three
+    // tables: there every CREATE is a no-op (IF NOT EXISTS) and only the
+    // engine's own columns are added (goods_receipt_lines.sku and the two
+    // inventory_adjustments columns). No alias, for that reason: ice's 080 did
+    // MORE than this entry (suppliers, eta/etd, confidence, variance_status and
+    // a wider status CHECK), so this one runs there and adds what 080 lacks.
+    // NOT taken from ice: the suppliers table (the engine keeps supplier text
+    // on the receipt), the fuzzy description matcher and the intermediate
+    // matched/receiving/reconciling/finalizing states — the engine finalises in
+    // one transaction under the receipt's row lock, so it needs no claim state.
+    //
+    // Additive (invariant 14): new tables, and two nullable columns the
+    // previous release neither reads nor writes (its INSERT names its columns).
+    // lock_timeout keeps a busy inventory_adjustments from stalling a boot; the
+    // indexes are partial on columns that are NULL on every existing row.
+    // Reference copy: server/migrations/118_goods_receipts.sql
+    name: '118_goods_receipts',
+    statements: [
+      `SET LOCAL lock_timeout = '5s'`,
+      `CREATE TABLE IF NOT EXISTS goods_receipts (
+         id                   TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+         supplier_name        TEXT        NOT NULL,
+         reference            TEXT,
+         status               TEXT        NOT NULL DEFAULT 'draft'
+                                          CHECK (status IN ('draft', 'finalized', 'cancelled')),
+         currency             TEXT        NOT NULL DEFAULT 'ISK',
+         note                 TEXT,
+         created_by           TEXT        REFERENCES users(id) ON DELETE SET NULL,
+         finalized_by         TEXT        REFERENCES users(id) ON DELETE SET NULL,
+         finalized_at         TIMESTAMPTZ,
+         created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+         updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+       )`,
+      `CREATE INDEX IF NOT EXISTS idx_goods_receipts_created ON goods_receipts (created_at DESC)`,
+      `DROP TRIGGER IF EXISTS trg_goods_receipts_updated_at ON goods_receipts`,
+      `CREATE TRIGGER trg_goods_receipts_updated_at
+         BEFORE UPDATE ON goods_receipts
+         FOR EACH ROW EXECUTE FUNCTION set_updated_at()`,
+      `CREATE TABLE IF NOT EXISTS goods_receipt_lines (
+         id                   TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+         receipt_id           TEXT        NOT NULL REFERENCES goods_receipts(id) ON DELETE CASCADE,
+         supplier_description TEXT,
+         supplier_ref         TEXT,
+         barcode              TEXT,
+         expected_qty         INTEGER     NOT NULL DEFAULT 0,
+         received_qty         INTEGER     NOT NULL DEFAULT 0,
+         unit_cost            INTEGER,
+         product_id           TEXT        REFERENCES products(id) ON DELETE SET NULL,
+         variant_id           TEXT        REFERENCES product_variants(id) ON DELETE SET NULL,
+         match_status         TEXT        NOT NULL DEFAULT 'unmatched'
+                                          CHECK (match_status IN ('matched','unmatched','manual','skipped','new_product')),
+         sort_order           INTEGER     NOT NULL DEFAULT 0,
+         created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+       )`,
+      `ALTER TABLE goods_receipt_lines ADD COLUMN IF NOT EXISTS sku TEXT`,
+      `CREATE INDEX IF NOT EXISTS idx_goods_receipt_lines_receipt ON goods_receipt_lines (receipt_id, sort_order)`,
+      `CREATE INDEX IF NOT EXISTS idx_goods_receipt_lines_product ON goods_receipt_lines (product_id)`,
+      `CREATE TABLE IF NOT EXISTS goods_receipt_scans (
+         id              TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+         receipt_id      TEXT        NOT NULL REFERENCES goods_receipts(id) ON DELETE CASCADE,
+         receipt_line_id TEXT        REFERENCES goods_receipt_lines(id) ON DELETE SET NULL,
+         product_id      TEXT        REFERENCES products(id) ON DELETE SET NULL,
+         variant_id      TEXT        REFERENCES product_variants(id) ON DELETE SET NULL,
+         scanned_code    TEXT        NOT NULL,
+         qty             INTEGER     NOT NULL DEFAULT 1,
+         scanned_by      TEXT        REFERENCES users(id) ON DELETE SET NULL,
+         created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+       )`,
+      `CREATE INDEX IF NOT EXISTS idx_goods_receipt_scans_receipt ON goods_receipt_scans (receipt_id, created_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_goods_receipt_scans_line ON goods_receipt_scans (receipt_line_id) WHERE receipt_line_id IS NOT NULL`,
+      `ALTER TABLE inventory_adjustments ADD COLUMN IF NOT EXISTS batch_id TEXT`,
+      `ALTER TABLE inventory_adjustments ADD COLUMN IF NOT EXISTS goods_receipt_id TEXT REFERENCES goods_receipts(id) ON DELETE SET NULL`,
+      `CREATE INDEX IF NOT EXISTS idx_inventory_adjustments_batch
+         ON inventory_adjustments (batch_id) WHERE batch_id IS NOT NULL`,
+      `CREATE INDEX IF NOT EXISTS idx_inventory_adjustments_receipt
+         ON inventory_adjustments (goods_receipt_id) WHERE goods_receipt_id IS NOT NULL`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

@@ -1114,19 +1114,19 @@ company/                  gitignored: plans, decisions, logs, market-research st
 
 | | |
 |---|---|
-| Routes | `server/routes/shopRoutes.js` → `/api/v1/shop` · `adminShopRoutes.js` → `/api/v1/admin/shop` · `adminDiscountRoutes.js` → `/api/v1/admin/discounts` · `adminBinsRoutes.js` → `/api/v1/admin/bins` |
-| Controllers | `server/controllers/shopController.js`, `adminShopController.js`, `adminDiscountController.js`, `adminBinsController.js` |
-| Models | `server/models/Product.js`, `ProductVariant.js`, `Collection.js`, `Order.js`, `Discount.js`, `Bin.js`, `Inventory.js` (On hand / Committed / Available, the one audited stock writer, the lock order) |
-| Services | `server/services/stripeService.js`, `discountEngine.js`, `orderExport.js` (the orders list as .xlsx); `server/services/productImport/parseFile.js`, `headerMap.js`, `parseXlsx.js`, `parsePdf.js`, `headerHints.js`, `tradeLabels.js`, `variantCell.js`, `variantGroups.js` (the one reader for every product file, harvested from icelandicstore); `server/config/stripe.js`, `shipping.js`; `server/utils/qr.js`, `variantAxis.js` |
-| Views | `public/js/views/ShopView.js`, `ProductView.js`, `CartView.js`, `CheckoutView.js`, `CheckoutSuccessView.js`, `CheckoutCancelView.js`, `OrderHistoryView.js`, `AdminProductsView.js`, `AdminOrdersView.js`, `AdminOrderDetailView.js`, `AdminCollectionsView.js`, `AdminDiscountsView.js`, `AdminBinsView.js`, `AdminSalesView.js` |
+| Routes | `server/routes/shopRoutes.js` → `/api/v1/shop` · `adminShopRoutes.js` → `/api/v1/admin/shop` · `adminDiscountRoutes.js` → `/api/v1/admin/discounts` · `adminBinsRoutes.js` → `/api/v1/admin/bins` · `adminInventoryRoutes.js` → `/api/v1/admin/inventory` (+ `GET /api/v1/admin/shop/reports/inventory` in `adminShopRoutes.js`) · `adminReceivingRoutes.js` → `/api/v1/admin/receiving` |
+| Controllers | `server/controllers/shopController.js`, `adminShopController.js`, `adminDiscountController.js`, `adminBinsController.js`, `adminInventoryController.js`, `adminReceivingController.js` |
+| Models | `server/models/Product.js`, `ProductVariant.js`, `Collection.js`, `Order.js`, `Discount.js`, `Bin.js`, `Inventory.js` (On hand / Committed / Available, the one audited stock writer, the lock order, `applyBatch`), `GoodsReceipt.js` |
+| Services | `server/services/stripeService.js`, `discountEngine.js`, `orderExport.js` (the orders list as .xlsx); `server/services/productImport/parseFile.js`, `headerMap.js`, `parseXlsx.js`, `parsePdf.js`, `headerHints.js`, `tradeLabels.js`, `variantCell.js`, `variantGroups.js` (the one reader for every product file, harvested from icelandicstore — goods receiving reads the supplier file through it too); `server/services/pdfService.js` (the goods receipt PDF); `server/config/stripe.js`, `shipping.js`; `server/utils/qr.js`, `variantAxis.js`, `inventoryStatus.js` (Inventory Watch buckets) |
+| Views | `public/js/views/ShopView.js`, `ProductView.js`, `CartView.js`, `CheckoutView.js`, `CheckoutSuccessView.js`, `CheckoutCancelView.js`, `OrderHistoryView.js`, `AdminProductsView.js`, `AdminOrdersView.js`, `AdminOrderDetailView.js`, `AdminCollectionsView.js`, `AdminDiscountsView.js`, `AdminBinsView.js`, `AdminSalesView.js`, `AdminInventoryView.js`, `AdminStockCountView.js`, `AdminReceivingView.js`, `AdminReceivingDetailView.js` |
 | Components | `public/js/components/ProductCard.js`, `ShopFilters.js`, `CartIcon.js`, `CurrencySelector.js`, `BarcodeScanner.js` |
-| Client | `public/js/services/cart.js`, `adminProducts.js`, `adminOrders.js`, `adminCollections.js`, `adminDiscounts.js`, `adminBins.js`; `public/js/utils/availability.js` (the basket's sold-out gate), `imageUrl.js` (the `.thumb.webp` URL), `colorLabels.js` (colour names + picker labels as locale keys), `duplicateNames.js` (the SKU chip on a shared name), `vat.js` (the per-rate VAT display — twin of `server/utils/vat.js` + `invoiceService.buildLines`) |
+| Client | `public/js/services/cart.js`, `adminProducts.js`, `adminOrders.js`, `adminCollections.js`, `adminDiscounts.js`, `adminBins.js`, `adminInventory.js`, `adminReceiving.js`; `public/js/utils/availability.js` (the basket's sold-out gate), `imageUrl.js` (the `.thumb.webp` URL), `colorLabels.js` (colour names + picker labels as locale keys), `duplicateNames.js` (the SKU chip on a shared name), `vat.js` (the per-rate VAT display — twin of `server/utils/vat.js` + `invoiceService.buildLines`), `stockUnits.js` (the stock screens' shared naming, reasons and count check) |
 | Scripts | `server/scripts/seed-shop.js`, `import-products-csv.js` |
-| CSS | `public/css/shop.css`, `admin-products.css`, `admin-orders.css`, `admin-collections.css`, `admin-discounts.css`, `admin-bins.css`, `admin-sales.css`, `barcode-scanner.css` |
-| Jest | `tests/integration/shop.test.js`, `discounts.test.js`, `adminOrderBulk.test.js`, `adminProductImportExport.test.js`, `sections.test.js`, `inventoryThreeNumbers.test.js`, `adminProductImportFile.test.js`, `adminOrderExport.test.js`; `tests/unit/discountEngine.test.js`, `shopFilters.test.js`, `bins-grid.test.js`, `qr.test.js`, `availability.client.test.js`, `productImportParseFile.test.js`, `productImportVariantCell.test.js`, `productImportVariantGroups.test.js`, `parsePdfWorker.test.js`, `imageUrl.test.js` (fixture `tests/fixtures/pdfFixture.js`), `colorLabels.client.test.js`, `duplicateNames.client.test.js`, `vatDisplay.client.test.js`, `cartPriceSync.client.test.js` |
-| e2e | `e2e/admin-product-group.spec.js`, `cart-sold-out.spec.js` |
-| Migrations | 022–025, 045, 048, 049, 050, 054, 055, 057, 074, 112, 113, 115 (`orders.notes`, the checkout note) |
-| Features | [cart-checkout](../features/cart-checkout.md), [discounts](../features/discounts.md), [orders](../features/orders.md), [shop-catalog](../features/shop-catalog.md) |
+| CSS | `public/css/shop.css`, `admin-products.css`, `admin-orders.css`, `admin-collections.css`, `admin-discounts.css`, `admin-bins.css`, `admin-sales.css`, `barcode-scanner.css`, `admin-stock.css` |
+| Jest | `tests/integration/shop.test.js`, `discounts.test.js`, `adminOrderBulk.test.js`, `adminProductImportExport.test.js`, `sections.test.js`, `inventoryThreeNumbers.test.js`, `adminProductImportFile.test.js`, `adminOrderExport.test.js`, `adminInventory.test.js`, `goodsReceipts.test.js`; `tests/unit/discountEngine.test.js`, `shopFilters.test.js`, `bins-grid.test.js`, `qr.test.js`, `availability.client.test.js`, `productImportParseFile.test.js`, `productImportVariantCell.test.js`, `productImportVariantGroups.test.js`, `parsePdfWorker.test.js`, `imageUrl.test.js` (fixture `tests/fixtures/pdfFixture.js`), `colorLabels.client.test.js`, `duplicateNames.client.test.js`, `vatDisplay.client.test.js`, `cartPriceSync.client.test.js`, `inventoryStatus.test.js` |
+| e2e | `e2e/admin-product-group.spec.js`, `cart-sold-out.spec.js`, `admin-stock.spec.js` |
+| Migrations | 022–025, 045, 048, 049, 050, 054, 055, 057, 074, 112, 113, 115 (`orders.notes`, the checkout note), 118 (goods receipts, the stock batch handle) |
+| Features | [cart-checkout](../features/cart-checkout.md), [discounts](../features/discounts.md), [orders](../features/orders.md), [shop-catalog](../features/shop-catalog.md), [goods-receiving](../features/goods-receiving.md) |
 | Feature doc | — (retail is hidden here; ENHANCEMENTS #22, #23, #25 landed by the 2026-09-24 ice harvest, #24 in part; #26 remains) |
 
 **Rules that must hold**
@@ -1219,8 +1219,44 @@ company/                  gitignored: plans, decisions, logs, market-research st
   `requireAuth`, `requireView('products')`, the limiters and (apply) CSRF, with
   `sanitizeBody` re-applied; `app.js` skips its global parser for that path.
   Never mount a large parser for an admin path at app level again ([ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23)).
+- **A batch of stock movements is ONE `Inventory.applyBatch` call** under a SAVEPOINT (a refused
+  batch rolls back to it even inside a caller's transaction; `maxLines` caps only the HTTP count) ([harvest2-lane6a](history.d/2026-09-26-harvest2-lane6a-stock.md#harvest2-lane6a-2026-09-26)):
+  its own transaction (or the caller's, which then holds only rows taken
+  BEFORE the stock rows), one `applyLines` call inside, so the module lock
+  order holds; every row carries the same `batch_id` (migration 118). It is
+  all or nothing: every line is checked under its lock and a line that would
+  go below zero, or a product-level line on a product WITH variant axes (checked
+  BEFORE any lock, so it never locks a parent after its variants), is
+  refused in one 409 naming every such line (`lines[]`) — never clamped to
+  0, never a partial write. One product/variant twice in a batch is a 400. A
+  `clientToken` is checked first and lands on one row (the unique
+  `client_token` index), so a re-sent batch is 409 `DUPLICATE_BATCH` and
+  moves nothing. `applyLines`
+  refuses a variant that does not belong to the product the line names.
+- **Inventory Watch** (`/admin/inventory`, view `inventory`; `GET
+  /api/v1/admin/shop/reports/inventory` is answered BEFORE the `/reports`
+  prefix's `sales` gate): one row per stocked unit (a product without
+  variant axes, or one active variant; bookable services never), velocity
+  from the order lines of PAID orders in the last 90 days, bucketed on
+  Available (`utils/inventoryStatus.js`, ice's thresholds). "Fix stock" is
+  `Inventory.correct`: parent FOR KEY SHARE, the row FOR UPDATE, the current
+  figure read under that lock, then `setAbsolute`. A count is a JSON number
+  or numeric string, whole, 0..100 000 000 (`Inventory.isWholeCount`, ice
+  #15) — never a boolean, an array or a blank.
+- **Goods receiving** (`/admin/receiving`, view `receiving`, migration 118):
+  the supplier file goes through `services/productImport/parseFile.js` with
+  the receipt's own column table (an order quantity IS the expected
+  quantity here); lines match by our code only, never guessed. Finalise locks
+  the `goods_receipts` row FIRST, then the stock rows through `applyBatch`
+  (reason `receipt`, `goods_receipt_id` on every row), and flips the status
+  in the same transaction — a second finalise waits, then finds
+  `finalized` (409, nothing moves). Stock moves by the scan log (received),
+  never by expected. Every line/scan write takes the receipt row, then
+  `Inventory.lockReferences` on the rows its foreign keys touch, before the
+  insert. No stock writer locks a receipt row, so the two orders cannot cycle. Receiving scans have their own per-user limiter (a pallet is
+  hundreds of POSTs); every other write is under `writeLimiter`.
 
-**History**: [harvest-2](HISTORY.md#harvest-2) · [ui-kit](HISTORY.md#ui-kit) · [ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23) · [harvest-ice-c-2026-09-24](HISTORY.md#harvest-ice-c-2026-09-24) · [harvest-ice-d-2026-09-24](HISTORY.md#harvest-ice-d-2026-09-24)
+**History**: [harvest-2](HISTORY.md#harvest-2) · [ui-kit](HISTORY.md#ui-kit) · [ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23) · [harvest-ice-c-2026-09-24](HISTORY.md#harvest-ice-c-2026-09-24) · [harvest-ice-d-2026-09-24](HISTORY.md#harvest-ice-d-2026-09-24) · [harvest2-lane6a-2026-09-26](history.d/2026-09-26-harvest2-lane6a-stock.md#harvest2-lane6a-2026-09-26)
 
 ## 12. News, projects, party, bio (hidden portfolio)
 

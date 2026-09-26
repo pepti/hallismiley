@@ -3,6 +3,7 @@ const multer  = require('multer');
 const router  = express.Router();
 
 const adminShop                = require('../controllers/adminShopController');
+const adminInventory           = require('../controllers/adminInventoryController');
 const { requireAuth }          = require('../auth/middleware');
 const { requireView }          = require('../auth/requireView');
 const { csrfProtect }          = require('../middleware/csrf');
@@ -16,6 +17,9 @@ const { verifyImageBytes } = require('../middleware/verifyImageBytes');
 router.use(requireAuth);
 router.use('/products',    requireView('products'));
 router.use('/collections', requireView('collections'));
+// Inventory Watch (harvest2-lane6a) is its own view, so it is answered HERE,
+// before the /reports prefix demands 'sales'.
+router.get('/reports/inventory', requireView('inventory'), adminInventory.getInventoryReport);
 router.use('/reports',     requireView('sales'));
 router.use('/orders',      requireView('orders'));
 
