@@ -9,9 +9,9 @@ to see their own business gets. The full record is D-023 in the gitignored `comp
 - **"Fáðu demo" opens the demo.** Every tier card on rekstrarkerfi.is/verdskra sends the visitor
   to `demo.rekstrarkerfi.is`. **"It is one big demo containing it all"** (Halli): one instance
   with every module (`modules.preset: all`) and the Kaffibrennslan Glóð data, not one per tier.
-  Self-serve: a throwaway session per visitor, never a real account, rate-limited, wiped by the
-  reset. This replaces D-020's "time-limited prospect logins after a guided demo". Seller logins
-  stay.
+  Self-serve follows from that; its mechanics are the plan's proposal, not Halli's words: a
+  throwaway session per visitor, never a real account, rate-limited, wiped by the reset, in place
+  of D-020's "time-limited prospect logins after a guided demo". Seller logins stay.
 - **"Innskrá" stays in rekstrarkerfi.is's nav** (Halli: "I needed a login as admin, to change
   text and other web page maintenance"). Public signup stays closed; only Halli signs in. D-020
   step 1 had removed both links.
