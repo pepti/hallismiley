@@ -6,6 +6,7 @@ import { canEdit }        from '../services/auth.js';
 import { getCsrfHeaders } from '../utils/api.js';
 import { getCSRFToken }   from '../services/auth.js';
 import { t, href }        from '../i18n/i18n.js';
+import { formatDate }     from '../utils/format.js';
 
 const PAGE_SIZE = 9;
 
@@ -18,9 +19,10 @@ function _esc(str) {
     .replace(/"/g, '&quot;');
 }
 
+// App-locale date (was toLocaleDateString('en-GB'); ice #324).
 function _formatDate(iso) {
   if (!iso) return '';
-  return new Date(iso).toLocaleDateString('en-GB', {
+  return formatDate(iso, {
     day: '2-digit', month: 'short', year: 'numeric',
   });
 }

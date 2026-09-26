@@ -12,7 +12,7 @@ Status: `live` · `hidden` (served, hidden from nav/sitemap/admin lines) ·
 `config/client.json` key path that gates the feature, when one exists.
 Downstream overrides go in `features/local.json`.
 
-## Engine features (53)
+## Engine features (54)
 
 | id | name (is / en) | domain | owner | status | flag | migrations | file |
 |---|---|---|---|---|---|---|---|
@@ -65,6 +65,7 @@ Downstream overrides go in `features/local.json`.
 | `uploads-media` | Skráaupphal / Uploads and media | 18 | engine | live | — | — | [uploads-media.md](uploads-media.md) |
 | `email` | Tölvupóstur / Email | 19 | engine | live | — | — | [email.md](email.md) |
 | `client-config` | Stillingar tilviks / Instance config (module flags + identity) | 20 | engine | live | — | — | [client-config.md](client-config.md) |
+| `demo-instance` | Sýnikerfi / Demo instance | 20 | engine | live | — | — | [demo-instance.md](demo-instance.md) |
 | `platform-core` | Kjarni / Platform core | 20 | engine | live | — | `001_initial_schema`, `043_strip_stale_railway_references` | [platform-core.md](platform-core.md) |
 | `rate-limits-security` | Öryggislag / Security layer | 20 | engine | live | — | — | [rate-limits-security.md](rate-limits-security.md) |
 | `testing-infra` | Prófunarumgjörð / Testing infrastructure | 20 | engine | live | — | — | [testing-infra.md](testing-infra.md) |

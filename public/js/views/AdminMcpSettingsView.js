@@ -11,6 +11,7 @@ import { isAuthenticated, isAdmin } from '../services/auth.js';
 import { listMcpTokens, createMcpToken, revokeMcpToken } from '../services/adminMcp.js';
 import { escHtml } from '../utils/escHtml.js';
 import { t, href } from '../i18n/i18n.js';
+import { formatDateTime } from '../utils/format.js';
 import { navigateReplace } from '../navigate.js';
 import { showToast } from '../components/Toast.js';
 import { renderAdminShell } from '../components/AdminSidebar.js';
@@ -110,7 +111,7 @@ export class AdminMcpSettingsView {
   _tokensTable() {
     const rows = (this._data.tokens || []);
     if (!rows.length) return `<p class="admin-empty">${t('mcp.noTokens')}</p>`;
-    const fmt = (v) => (v ? new Date(v).toLocaleString() : '—');
+    const fmt = (v) => formatDateTime(v); // '—' when empty; app locale (ice #324)
     return `
       <div class="pick-table-wrap"><table class="pick-table">
         <thead><tr>

@@ -90,6 +90,17 @@ async function start() {
   // admin bootstrap are NOT run here — they live in `npm run bootstrap`
   // so cold boots (especially on Azure with a cross-region DB) don't
   // pay 5–7 extra SELECTs before listen().
+  // The demo instance (R2b): the flag must sit on a demo environment
+  // (APP_ENV=demo, DEMO_DATABASE_NAME = this database). A flag set on the wrong
+  // stack fails the boot here rather than silently switching off email and
+  // de-indexing a real site (services/demoReset.js).
+  try {
+    await require('./services/demoReset').verifyDemoBoot();
+  } catch (err) {
+    logger.fatal({ err }, '[server] DEMO_INSTANCE is set but this is not a demo environment — refusing to start');
+    process.exit(1);
+  }
+
   await migrate();
 
   // The admin's module switches (R5b) — layer 2 over the contract, from
@@ -100,6 +111,25 @@ async function start() {
       if (summary.switched_off.length) logger.info({ modules: summary }, '[server] modules switched off by an admin');
     })
     .catch((err) => logger.error({ err }, '[server] could not load the admin module switches — keeping the contract'));
+
+  // The demo instance (R2b): an interrupted reset left its accounts in the
+  // demo_keep snapshot — copy them back; then a database with no demo data yet (first
+  // boot, or after that recovery) gets the product's seed. A failure is logged,
+  // never fatal — the site still serves, and an admin can reset from
+  // /admin/general.
+  {
+    const demoReset = require('./services/demoReset');
+    await demoReset.recoverInterruptedReset()
+      .catch((err) => {
+        logger.error({ err }, '[server] recovering an interrupted demo reset failed');
+        // The staff logins are not back and every reset is refused until they
+        // are: someone must look.
+        require('./observability/alerts').alert('critical', 'Demo reset recovery failed',
+          { error: err.message, snapshot: 'demo_keep.demo_keep_snapshot' }).catch(() => {});
+      });
+    await demoReset.seedIfFresh()
+      .catch((err) => logger.error({ err }, '[server] demo seed on first boot failed'));
+  }
 
   // Did the update we triggered before the last restart actually land? This
   // runs AFTER migrations and BEFORE listen, on purpose: migrations are the
@@ -118,6 +148,7 @@ async function start() {
   const server = app.listen(PORT, '0.0.0.0', () => {
     startEventLogCleanup(); // daily event_logs prune (EVENT_LOG_RETENTION_DAYS)
     startLeadsCleanup();    // daily leads prune (LEAD_RETENTION_DAYS — the /personuvernd promise)
+    require('./services/demoReset').startDemoScheduler(); // nightly demo reset; no-op unless DEMO_INSTANCE
     logger.info({ port: PORT, host: '0.0.0.0' }, 'Portfolio server started');
     // Which Anthropic auth mode is live, proven end to end when it is workload
     // identity (managed identity → token exchange → one cheap API call; ice

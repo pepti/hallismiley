@@ -288,6 +288,7 @@
   "errors.shop.variantNotFound": "Útgáfa fannst ekki: {id}",
   "errors.shop.notEnoughStock": "Ekki nægar birgðir af {name}",
   "errors.busyRetry": "Einhver annar er að uppfæra þetta núna — reyndu aftur",
+  "errors.ai.busy": "Gervigreindin er upptekin við aðrar beiðnir — reyndu aftur eftir smástund",
   "errors.inventory.insufficientStock": "Ekki nóg á lager fyrir þetta ({name}: {onHand} í hillu, {wanted} þarf). Leiðréttu birgðirnar fyrst.",
   "errors.inventory.stockInvalid": "Birgðir verða að vera heil tala, 0 eða meira",
   "errors.inventory.reasonInvalid": "Veldu gilda ástæðu fyrir birgðabreytingunni (athugasemd má vera 500 stafir að hámarki)",
@@ -495,5 +496,10 @@
   "meta.privacy.title": "Persónuverndarstefna",
   "meta.terms.title": "Notkunarskilmálar",
   "meta.party.title": "40 ára afmæli Halla",
-  "meta.party.description": "Þér er boðið í 40 ára afmæli Halla - 25 Julí, Mýrakot og Spa. Smelltu hér til að sjá dagskrá og skrá mætingu."
+  "meta.party.description": "Þér er boðið í 40 ára afmæli Halla - 25 Julí, Mýrakot og Spa. Smelltu hér til að sjá dagskrá og skrá mætingu.",
+  "errors.demo.resetting": "Verið er að endurstilla sýnigögnin. Reyndu aftur eftir um eina mínútu.",
+  "errors.demo.busy": "Endurstilling er þegar í gangi.",
+  "errors.demo.cooldown": "Sýnigögnin voru endurstillt fyrir minna en 15 mínútum. Reyndu aftur síðar.",
+  "errors.demo.interrupted": "Síðasta endurstilling kláraðist ekki. Endurræstu vefinn til að ljúka henni.",
+  "errors.demo.refused": "Ekki er hægt að endurstilla þetta kerfi."
 }

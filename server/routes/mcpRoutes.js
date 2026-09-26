@@ -27,6 +27,8 @@ const transport = require('../mcp/transport');
 const isTest = () => process.env.NODE_ENV === 'test';
 
 function mcpEnabled() {
+  // MCP is off on a demo instance (config/demoInstance.js), whatever the env says.
+  if (require('../config/demoInstance').isDemoInstance()) return false;
   return process.env.MCP_ENABLED === 'true';
 }
 
