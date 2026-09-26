@@ -5853,7 +5853,9 @@ END; $$ LANGUAGE plpgsql`,
     // Order.createWithItems fills both, in the checkout transaction, through
     // the pure helper utils/orderVat.js that bookkeeping/invoiceService
     // .buildLines also uses — so for an ISK order the snapshot IS what the
-    // invoice later books (tests/integration/orderVatSnapshot.test.js).
+    // invoice later books (tests/integration/orderVatSnapshot.test.js) —
+    // unless a product's rate changes between checkout and invoicing: the
+    // invoice still reads the CURRENT rate (owed, see the lane 5 fragment).
     //
     // Backfill (WHERE vat_total IS NULL): orders placed before this release
     // get the VAT computed HERE, in SQL, from each product's CURRENT vat_rate

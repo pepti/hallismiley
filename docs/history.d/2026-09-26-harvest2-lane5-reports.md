@@ -108,8 +108,35 @@ lesa"); `adminOrders.viewOpen` ("Bíða afgreiðslu"), `adminUsers.onlyPending`,
 `adminUsers.clearFilter`; server `errors.admin.invalidDateRange`.
 Removed (unused now): `adminSales.range7/30/90`, `adminSales.ordersPerDay`.
 
-**Measured.** See the lane report (test counts, screenshots on the three themes at desktop and
-375 px, the `migrate.js --plan` run showing 121 as the only RUN, and the invariant-reviewer pass).
+**Measured.** Unit tier 2 355 passed / 1 skipped (135 suites) before the second master merge; new
+unit suites `orderVatParity` (22), `dateRanges.client` (27), `reportWindow` (11), `trafficChannel`
+(30), `adminHomeTodo.client` (2). Integration after both master merges: 23 suites / 393 tests green,
+among them the new `orderVatSnapshot` (5), `adminSalesReport` (11), `adminHomeAttention` (4),
+`mcpSalesTools` (5), and the touched `adminHome`, `shop`, `booksInvoice`, the `mcp*` suites,
+`adminInventory`, `productMerge`. e2e on `E2E_PORT=3027`: the new `admin-sales-report.spec.js` (6)
+plus `admin-home`, `admin-feedback-switch`, `admin-surface`, `admin-stock`, `admin-list-kit` — 36/36.
+`migrate.js --plan` on a throwaway database at master's state (every entry applied, then 121's
+columns and row removed): `RUN 121_order_vat_snapshot` and nothing else; applying it there
+succeeded. Screenshots of the report (periods, deltas, insights, marketing) and the Í dag cards on
+Glóð, Bjart and Miðnætti at 1440 px and 375 px were checked by eye (the lane's scratch folder, not
+committed).
+
+**Review pass (invariant-reviewer, same day).** Both flagged areas clean: the snapshot cannot fail,
+double-lock or deadlock a checkout (a plain SELECT, updates only to rows the transaction created, the
+lock order untouched), and `buildLines` matched the pre-extraction code on the golden file AND on
+30 011 randomised differential inputs (rounding lines, ties, zero lines, 100 % discounts, bad rates —
+identical output and identical errors). Fixed: the two comments that said the snapshot always equals
+the booked VAT now name the exception (a rate changed before invoicing); a stale `?stock=out`
+comment; `AdminSalesView` no longer throws on a previous release's report shape during a swap.
+Won't fix, recorded here: (a) **icelandicstore prices are NET and a variant may override the rate**
+— ice keeps its own `vat_total` logic, so at the next graft its `Order.createWithItems` must win any
+conflict with `snapshotVat` (migration 121 itself is a no-op there); (b) the backfill's
+`UPPER('ísland')` depends on the database collation — inside the documented approximation (every
+engine database is UTF-8 with a real locale); the inner join to `products` is exact because
+`order_items.product_id` is NOT NULL with ON DELETE RESTRICT; (c) migration 121 holds its ALTER lock
+through the backfill — negligible at today's sizes; (d) `buildLines` still builds `grossBefore`
+though only its quantity assertion is used — kept so the checks run in the same order and the error
+a bad row throws stays byte-identical.
 
 **Owed / for Halli.** The invoice still reads each line's CURRENT product rate, not the new
 snapshot — making `createFromOrder` book `COALESCE(oi.vat_rate, p.vat_rate)` would pin the invoice

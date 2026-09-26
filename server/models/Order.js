@@ -93,7 +93,9 @@ function normaliseNote(raw) {
 // rows written in one transaction share created_at), the product's rate and
 // service flag, the country the invoice will snapshot. So for an ISK order the
 // snapshot equals the VAT the invoice later books
-// (tests/integration/orderVatSnapshot.test.js).
+// (tests/integration/orderVatSnapshot.test.js) — as long as no product's rate
+// changes in between: the invoice reads the CURRENT rate, not this snapshot
+// (owed; docs/history.d/2026-09-26-harvest2-lane5-reports.md).
 //
 // A rate the rule refuses (a product row outside 0/11/24) leaves the snapshot
 // NULL and is logged — the sale is not lost over a report figure; the invoice

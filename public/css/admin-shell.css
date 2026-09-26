@@ -615,7 +615,7 @@
    pattern of ice #279), so arrow keys scroll it; show where focus is. */
 .admin-table-wrap[tabindex]:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
 
-/* A list opened pre-filtered from "Í dag" (?status=pending, ?stock=out; harvest 2
+/* A list opened pre-filtered from "Í dag" (?status=pending; harvest 2
    lane 5) says so in a chip, with a way back to the whole list. */
 .filter-chip {
   display: inline-flex; align-items: center; gap: 6px; padding: 3px 4px 3px 10px;

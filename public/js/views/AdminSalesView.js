@@ -173,6 +173,12 @@ export class AdminSalesView {
 
   _paint(r) {
     const body = this._el.querySelector('#sales-body');
+    // A previous release's server (mid self-update swap) answers without
+    // `kpis`: say so rather than throw.
+    if (!r || !r.kpis) {
+      body.innerHTML = `<p class="admin-error" role="alert">${escHtml(t('adminSales.loadFailed'))}</p>`;
+      return;
+    }
     const prevBy = new Map(((r.kpisPrev && r.kpisPrev.byCurrency) || []).map(c => [c.currency, c]));
     const hasPrev = Boolean(r.kpisPrev);
     const cmp = (cur, prev) => (hasPrev ? changeHtml(cur, prev) : '');
@@ -238,7 +244,7 @@ export class AdminSalesView {
   async _renderChart() {
     let Chart;
     try { if (!window.Chart) await import('../vendor/chart.umd.js'); Chart = window.Chart; } catch { return; }
-    if (!Chart || this._destroyed || !this._report) return;
+    if (!Chart || this._destroyed || !this._report || !this._report.kpis) return;
     const canvas = this._el.querySelector('#sales-chart');
     if (!canvas) return;
     if (this._chart) { this._chart.destroy(); this._chart = null; }
