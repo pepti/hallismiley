@@ -1,8 +1,9 @@
 # Architecture — where things are, per domain
 
 The map a feature request starts from. Each domain below lists its files, the
-**rules that must hold** (each linking to the `docs/HISTORY.md` entry that
-explains why), and its history entries. `tests/unit/architectureIndex.test.js`
+**rules that must hold** (each linking to the history entry that explains
+why — a `docs/history.d/` fragment since 2026-09-26, the frozen archive
+`docs/HISTORY.md` before that), and its history entries. `tests/unit/architectureIndex.test.js`
 keeps this file honest: every path here must exist, every routes/controller/
 model/view file in the tree must be listed here, and every history link must
 resolve. Global stack rules live in `CLAUDE.md` and
@@ -43,7 +44,7 @@ tests/unit/               node-only Jest (no jsdom); read-the-source parity test
 tests/integration/        Jest against real Postgres (4 workers, one DB each — tests/workerDb.js)
 e2e/                      Playwright specs + lib/ helpers (isolated per-branch DB)
 scripts/                  repo tooling (check-i18n-keys, build-iceland-scenes, build-manifest…)
-docs/                     API, ARCHITECTURE (this), HISTORY, BOOKKEEPING-SYSTEM, SELF-UPDATE, mcp, SALES-STAFF, TESTING, DEPLOYMENT, SLO…
+docs/                     API, ARCHITECTURE (this), HISTORY (archive), history.d/ (one write-up per branch), BOOKKEEPING-SYSTEM, SELF-UPDATE, mcp, SALES-STAFF, TESTING, DEPLOYMENT, SLO…
 company/                  gitignored: plans, decisions, logs, market-research staging
 .claude/                  gitignored: agents, commands, rules (stack-invariants.md), hooks, worktrees
 ```
@@ -214,7 +215,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
   admin role revokes the user's live tokens (`McpToken.revokeAllForUser`) on
   top of the per-call owner check ([harvest-ice-a](HISTORY.md#harvest-ice-a-2026-09-24)).
 - **Time-limited logins** (`users.expires_at`, migration 114; NULL = never)
-  ([login-expiry-2026-09-26](HISTORY.md#login-expiry-2026-09-26)): the rule
+  ([login-expiry-2026-09-26](history.d/2026-09-26-feat-login-expiry.md#login-expiry-2026-09-26)): the rule
   lives in `server/auth/accountExpiry.js` and nowhere else. EVERY sign-in path
   refuses an expired login — password, the 2FA step, the magic link, Google,
   Facebook, the MCP owner check — with `AccountExpiredError` / `reason:
@@ -241,9 +242,9 @@ company/                  gitignored: plans, decisions, logs, market-research st
 - A typed client error carries an i18n `messageKey` and a string `reason`;
   `middleware/errorHandler.js` translates the one and passes the other
   through for 4xx only — an untyped error's shape is unchanged
-  ([login-expiry-2026-09-26](HISTORY.md#login-expiry-2026-09-26)).
+  ([login-expiry-2026-09-26](history.d/2026-09-26-feat-login-expiry.md#login-expiry-2026-09-26)).
 
-**History**: [base-sync](HISTORY.md#base-sync) · [review-099](HISTORY.md#review-099) · [ui-kit](HISTORY.md#ui-kit) · [harvest-rk-totp-2026-09-23](HISTORY.md#harvest-rk-totp-2026-09-23) · [mfa-optional-2026-09-23](HISTORY.md#mfa-optional-2026-09-23) · [ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23) · [mfa-reminder-2026-09-23](HISTORY.md#mfa-reminder-2026-09-23) · [harvest-ice-a-2026-09-24](HISTORY.md#harvest-ice-a-2026-09-24) · [signup-switch-2026-09-24](HISTORY.md#signup-switch-2026-09-24) · [login-expiry-2026-09-26](HISTORY.md#login-expiry-2026-09-26)
+**History**: [base-sync](HISTORY.md#base-sync) · [review-099](HISTORY.md#review-099) · [ui-kit](HISTORY.md#ui-kit) · [harvest-rk-totp-2026-09-23](HISTORY.md#harvest-rk-totp-2026-09-23) · [mfa-optional-2026-09-23](HISTORY.md#mfa-optional-2026-09-23) · [ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23) · [mfa-reminder-2026-09-23](HISTORY.md#mfa-reminder-2026-09-23) · [harvest-ice-a-2026-09-24](HISTORY.md#harvest-ice-a-2026-09-24) · [signup-switch-2026-09-24](HISTORY.md#signup-switch-2026-09-24) · [login-expiry-2026-09-26](history.d/2026-09-26-feat-login-expiry.md#login-expiry-2026-09-26)
 
 ## 2. Admin shell — sidebar, dashboard, surface hiding, UI kit
 
@@ -324,9 +325,9 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Components | `public/js/components/NavBar.js` |
 | Client | `public/js/router.js` (lazy `VIEWS` table + `make()`), `routePatterns.json` (the route list the server 404s against; `server/utils/spaRoutes.js` reads it), `navigate.js`, `main.js`, `consent.js`; `public/js/utils/identity.js` (the client half of the identity seam), `reveal.js`, `motion.js`, `productSite.js`, `sanitizeHtml.js`, `slug.js`, `features.js` |
 | CSS | `public/css/home.css`, `business-pages.css`, `contact.css`, `video-section.css`, `fonts.css` |
-| Jest | `tests/integration/contact.test.js`, `sitemap.test.js`, `llms.test.js`, `ssrMeta.test.js`, `identityDownstream.test.js`, `spaStatus.test.js`; `tests/unit/routePatterns.test.js`, `routerLazyViews.test.js`; `tests/unit/clientConfig.test.js`, `identityConfig.test.js`, `appEnv.test.js`, `slug.test.js`, `slug.client.test.js`, `outboundAllowlist.test.js`, `version.test.js`, `buildManifest.test.js` |
+| Jest | `tests/integration/contact.test.js`, `contactContentOs002.test.js`, `sitemap.test.js`, `llms.test.js`, `ssrMeta.test.js`, `identityDownstream.test.js`, `spaStatus.test.js`; `tests/unit/routePatterns.test.js`, `routerLazyViews.test.js`; `tests/unit/clientConfig.test.js`, `identityConfig.test.js`, `appEnv.test.js`, `slug.test.js`, `slug.client.test.js`, `outboundAllowlist.test.js`, `version.test.js`, `buildManifest.test.js` |
 | e2e | `e2e/business-routes.spec.js`, `lazy-views.spec.js`, `contact.spec.js`, `navigation.spec.js`, `responsive.spec.js`, `responsive-screenshots.spec.js`, `editable-homepage.spec.js` |
-| Migrations | 005, 017, 091, 092 (seeded company copy) |
+| Migrations | 005, 017, 091, 092, os_002 (seeded company copy) |
 | Features | [public-site](../features/public-site.md), [company-content](../features/os/company-content.md) (os) |
 | Feature doc | `docs/API.md` (Contact); `docs/SALES-STAFF.md` for what a submission becomes |
 
@@ -370,6 +371,13 @@ company/                  gitignored: plans, decisions, logs, market-research st
   service names — change them together; no `price` in structured data;
   `public/js/utils/productSite.js` is the one place that builds the product-site
   URL ([services-page](HISTORY.md#services-page)).
+- **The company site names no software it replaces, and does not describe
+  the product's stack** ([contact-page-company-2026-09-26](HISTORY.md#contact-page-company-2026-09-26)):
+  categories ("vefverslunarkerfi", "bókhaldskerfi"), not products, in copy
+  and in the contact form's platform select (`KNOWN_PLATFORMS` still accepts
+  the old product values). A contact-copy change ships with a product
+  migration for the seeded rows; `contactContentOs002.test.js` checks the
+  ContactView defaults and os_002 agree.
 - Homepage = the hallismiley composition: dark video hero, light site below;
   the media-hero surfaces are fixed dark on EVERY theme (`home.css`), which is
   how invariant 15 is met. A new hero clip gets a NEW filename (the `public/`
@@ -1277,14 +1285,28 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | App | `server/app.js`, `server/server.js`, `server/config/database.js`, `server/middleware/errorHandler.js`, `server/middleware/forwardedFor.js`; `server/utils/safeEqual.js` (constant-time compare for header credentials — the `/metrics` bearer) |
 | Module switches (R4) | `server/config/moduleCatalog.js` (what each switchable module owns: routes, API + upload prefixes, admin views, registry features, tiers), `server/config/modules.js` (the resolved state: the pre-auth `moduleGate`, `isDisabledRoute`, the `<script id="modules">` hand-off), `public/js/utils/modules.js` (its client half); `server/routes/adminModulesRoutes.js` → `/api/v1/admin/modules` (the admin's switches, R5b); `tests/unit/moduleCatalog.test.js`, `tests/integration/moduleFlags.test.js` · e2e `e2e/admin-modules.spec.js` |
 | Migrations tooling | `server/config/schema.js`, `server/scripts/migrate.js`, `bootstrap.js`, `setup-admin.js`, `seed.js`, `cleanup-duplicates.js`, `capture-site-screenshots.js` |
-| Tests infra | `tests/workerDb.js`, `tests/lib/featureGate.js` (the feature gate core), `tests/lib/locale.js` (the visitor-default helper), `e2e/global-setup.js`, `e2e/helpers.js`, `e2e/lib/dbUrl.js`, `e2e/lib/featureGate.js`, `e2e/lib/identity.js`, `e2e/lib/locale.js`; `scripts/drop-test-dbs.js` |
-| Jest | `tests/unit/schema-integrity.test.js`, `database.test.js`, `workerDb.test.js`, `featureGate.test.js`, `errorHandlerDeadlock.test.js`, `migrationIdempotent.test.js`, `ciSkippedShim.test.js`, `workflowsParse.test.js`; `tests/integration/migrateRunner.test.js` |
+| Tests infra | `tests/workerDb.js`, `tests/lib/featureGate.js` (the feature gate core), `tests/lib/locale.js` (the visitor-default helper), `tests/lib/historyAnchors.js` (archive + fragment anchors, one namespace), `e2e/global-setup.js`, `e2e/helpers.js`, `e2e/lib/dbUrl.js`, `e2e/lib/featureGate.js`, `e2e/lib/identity.js`, `e2e/lib/locale.js`; `scripts/drop-test-dbs.js` |
+| Jest | `tests/unit/schema-integrity.test.js`, `database.test.js`, `workerDb.test.js`, `featureGate.test.js`, `errorHandlerDeadlock.test.js`, `migrationIdempotent.test.js`, `ciSkippedShim.test.js`, `workflowsParse.test.js`, `historyFragments.test.js`; `tests/integration/migrateRunner.test.js` |
 | CI / deploy | `.github/workflows/ci.yml` (lint · 3 Jest shards · the aggregator), `ci-skipped.yml` (docs-only PR shim), `deploy.yml` (dispatch-only, by digest, production only), `promote.yml`; `scripts/merge-coverage.js`; `Dockerfile` |
 | Migrations | 001, 043 (housekeeping) |
 | Features | [client-config](../features/client-config.md), [platform-core](../features/platform-core.md), [rate-limits-security](../features/rate-limits-security.md), [testing-infra](../features/testing-infra.md) |
-| Feature doc | `RUNBOOK.md`, `SECURE_SDLC.md`, `docs/TESTING.md`, `docs/DEPLOYMENT.md` |
+| Feature doc | `RUNBOOK.md`, `SECURE_SDLC.md`, `docs/TESTING.md`, `docs/DEPLOYMENT.md`, `docs/history.d/README.md` |
 
 **Rules that must hold**
+- **A chunk's write-up is a new file, never an append** ([harvest2-lane0](history.d/2026-09-26-harvest2-lane0-history.md#harvest2-lane0-2026-09-26)):
+  `docs/history.d/YYYY-MM-DD-<branch, / as ->.md`, first line its `<a id>`
+  anchor, next non-empty line `## YYYY-MM-DD — <title>`; `docs/HISTORY.md` is
+  the frozen archive to 2026-09-26 and its index table covers it alone. The
+  archive's and the fragments' slugs are one namespace (a `history:` entry in
+  `features/*.md` is a bare slug) and must not repeat; a link names the file
+  it points into (`history.d/<file>.md#slug` from `docs/`,
+  `docs/history.d/<file>.md#slug` from `PLAN.md`) and must resolve there —
+  checked in every doc under docs/ and features/ plus the root PLAN, README
+  and CLAUDE files.
+  `historyFragments.test.js` + `architectureIndex.test.js` enforce both.
+- **Every chunk is reviewed before it merges** ([harvest2-lane0](history.d/2026-09-26-harvest2-lane0-history.md#harvest2-lane0-2026-09-26)):
+  `/code-review` or the `invariant-reviewer` agent on the branch diff;
+  findings are fixed on the branch first (CLAUDE.md, Project rules).
 - **A module that is off is absent, not hidden** ([module-flags-2026-09-24](HISTORY.md#module-flags-2026-09-24)):
   `modules.preset` (`all` default · `vefur` · `verslun` · `rekstur`) plus
   `modules.<id>.enabled`; an explicit switch beats the preset. What a module
@@ -1431,7 +1453,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
   green CI on `main`, unlike here, and has zero e2e coverage of checkout, so a
   base PR touching it is verified by hand first [ui-kit](HISTORY.md#ui-kit).
 
-**History**: [build-status](HISTORY.md#build-status) · [base-sync](HISTORY.md#base-sync) · [harvest-1](HISTORY.md#harvest-1) · [harvest-2](HISTORY.md#harvest-2) · [go-live](HISTORY.md#go-live) · [module-flags-2026-09-24](HISTORY.md#module-flags-2026-09-24) · [harvest-ice-f](HISTORY.md#harvest-ice-f-2026-09-24) · [harvest-ice-e](HISTORY.md#harvest-ice-e-2026-09-24)
+**History**: [build-status](HISTORY.md#build-status) · [base-sync](HISTORY.md#base-sync) · [harvest-1](HISTORY.md#harvest-1) · [harvest-2](HISTORY.md#harvest-2) · [go-live](HISTORY.md#go-live) · [module-flags-2026-09-24](HISTORY.md#module-flags-2026-09-24) · [harvest-ice-f](HISTORY.md#harvest-ice-f-2026-09-24) · [harvest-ice-e](HISTORY.md#harvest-ice-e-2026-09-24) · [harvest2-lane0](history.d/2026-09-26-harvest2-lane0-history.md#harvest2-lane0-2026-09-26)
 
 ## 21. Seller area — the published copy on the public instance
 

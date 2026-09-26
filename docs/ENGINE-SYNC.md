@@ -201,6 +201,16 @@ engine commit absent from a downstream's `engine.json.rev..upstream/master`
 - **i18n**: product keys are being moved to `product.{lang}.json`; until that
   loader lands, resolve locale conflicts **by key**, never by hunk, and run
   `check:i18n` before pushing.
+- **History** (harvest2-lane0-2026-09-26, `docs/history.d/README.md`): the
+  fragments in `docs/history.d/` are engine-owned and arrive as NEW files, so
+  they do not conflict; a downstream adds its own fragments beside them. A
+  downstream that keeps its own `docs/HISTORY.md` archive (rekstrarkerfid
+  does) keeps ITS side on a conflict there, and should list
+  `docs/HISTORY.md` in its `engine.json` `productPaths` so the merge takes
+  its side without asking. A slug collision after a sync (the parity tests
+  fail on a repeated `<a id>`) is fixed by renaming the downstream's own
+  **fragment** slug and its links — never an archive anchor, which old
+  links and code comments cite.
 
 ## 7. What never syncs
 
@@ -213,6 +223,10 @@ machinery syncs, the hues do not) · `fleet.json` · `features/local.json` ·
 appear in `.engine-paths`. (`publicSurface.js` and `adminSurface.js` DO sync
 since 2026-09-22: their lists come from `identity.surface.*`, so the files
 carry no product data any more.)
+
+History is split (§6): `docs/history.d/` fragments DO sync (engine-owned,
+new files); a downstream's own `docs/HISTORY.md` archive does not, once it
+is listed in that downstream's `productPaths`.
 
 ## 8. The upward path
 
@@ -231,6 +245,9 @@ building it with Orri). The rule for any downstream:
   upward PR renumbers it and the product file's `aliases` maps the engine
   name to the name the downstream's databases already applied
   (`docs/MIGRATIONS.md`).
+- A harvest PR into the engine gets the same review pass as any chunk
+  before it merges (the built-in `code-review` skill or the
+  `invariant-reviewer` agent; findings fixed on the branch — CLAUDE.md).
 
 ## 9. Cadence and owners
 

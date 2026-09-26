@@ -57,8 +57,8 @@ test.describe('Lead form', () => {
     await page.fill('#contact-page-company', 'Ísprjón ehf.');
     await page.fill('#contact-page-email', 'e2e@test.com');
     await page.fill('#contact-page-phone', '+354 555 1234');
-    await page.selectOption('#contact-page-platform', 'shopify');
-    await page.fill('#contact-page-message', 'We are on Shopify today and would like a demo of the platform.');
+    await page.selectOption('#contact-page-platform', 'webstore');
+    await page.fill('#contact-page-message', 'We run an online store today and would like a demo of the platform.');
     await page.locator('#contact-page-submit').click();
 
     await expect(page.locator('#contact-page-status')).toHaveClass(/success/, { timeout: 10_000 });
