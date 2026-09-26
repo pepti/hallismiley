@@ -40,7 +40,7 @@ Downstream overrides go in `features/local.json`.
 | `books-intake` | Innhólf fylgiskjala / Books intake queue | 9 | engine | live | `modules.books.enabled` | `096_books_capture_spine` | [books-intake.md](books-intake.md) |
 | `books-replay` | Endurspilun bókhalds / Books replay | 9 | engine | live | `modules.books.enabled` | — | [books-replay.md](books-replay.md) |
 | `books-settings` | Bókhaldsstillingar / Books settings | 9 | engine | live | `modules.books.enabled` | — | [books-settings.md](books-settings.md) |
-| `invoices` | Reikningar / Invoices | 9 | engine | live | `modules.books.enabled` | `099_invoice_account_link` | [invoices.md](invoices.md) |
+| `invoices` | Reikningar / Invoices | 9 | engine | live | `modules.books.enabled` | `099_invoice_account_link`, `122_passthrough_invoice` | [invoices.md](invoices.md) |
 | `payroll` | Launakerfi / Payroll | 9 | engine | live | `modules.books.enabled` | `076_books_payroll_lifecycle`, `078_books_payroll_integrity` | [payroll.md](payroll.md) |
 | `peppol-outbound` | Peppol/UBL útflutningur / Peppol UBL outbound | 9 | engine | live | `modules.books.enabled` | `095_books_invoice_party_structured` | [peppol-outbound.md](peppol-outbound.md) |
 | `pos` | Kassi / Point of sale | 9 | engine | hidden | `modules.pos.enabled` | `077_books_pos`, `079_books_pos_idempotency` | [pos.md](pos.md) |
