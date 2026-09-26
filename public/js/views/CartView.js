@@ -1,6 +1,8 @@
 // CartView — review/edit the cart before checkout. Route: #/cart
 import * as cart from '../services/cart.js';
 import { indexAvailability, shortfallOf } from '../utils/availability.js';
+import { vatBreakdown } from '../utils/vat.js';
+import { translateVariantLabel } from '../utils/colorLabels.js';
 import { CurrencySelector } from '../components/CurrencySelector.js';
 import { t, href } from '../i18n/i18n.js';
 
@@ -37,9 +39,17 @@ export class CartView {
     // line added while stock was there may have sold out since. Best-effort —
     // the checkout and the webhook are the gates; this is the UX in front.
     this._avail = null;
+    this._repriced = [];
     try {
       const res = await fetch('/api/v1/shop/products', { credentials: 'include' });
-      if (res.ok) this._avail = indexAvailability((await res.json()).products || []);
+      if (res.ok) {
+        const products = (await res.json()).products || [];
+        this._avail = indexAvailability(products);
+        // The same payload carries today's prices: a basket left open across a
+        // price change shows what checkout will charge, and says so
+        // (cart.syncPrices, ported from icelandicstore #343).
+        this._repriced = cart.syncPrices(products);
+      }
     } catch { /* no availability → no warnings */ }
 
     this._paintBody();
@@ -75,7 +85,7 @@ export class CartView {
               : `<div class="shop-cart__thumb shop-cart__thumb--placeholder" aria-hidden="true"></div>`}
             <div>
               <a href="${href('/shop/' + encodeURIComponent(it.slug))}" class="shop-cart__name">${_esc(it.name)}</a>
-              ${it.variantLabel ? `<p class="shop-cart__variant">${_esc(it.variantLabel)}</p>` : ''}
+              ${it.variantLabel ? `<p class="shop-cart__variant">${_esc(translateVariantLabel(it.variantLabel, t))}</p>` : ''}
               ${short ? `<p class="shop-cart__short" data-testid="cart-short">${short.out ? t('cart.outOfStockLine') : t('cart.shortLine', { n: short.available })}</p>` : ''}
               <p class="shop-cart__unit">${cart.formatMoney(price, cur)} ${t('cart.each')}</p>
             </div>
@@ -108,7 +118,13 @@ export class CartView {
           <span>${t('cart.subtotal')}</span>
           <span>${cart.formatMoney(subtotal, cur)}</span>
         </div>
-        <p class="shop-cart__vat-note">${t('orders.vatNote')}</p>
+        <div class="shop-cart__vat">${vatBreakdown({ lines: cart.vatLines(cur) }).map(v => `
+          <div class="shop-cart__vat-row" data-testid="cart-vat-${v.rate}">
+            <span>${_esc(t('shop.vatIncludedRate', { rate: v.rate }))}</span>
+            <span>${cart.formatMoney(v.vat, cur)}</span>
+          </div>`).join('')}
+        </div>
+        ${this._repriced.length ? `<p class="shop-cart__notice" role="status" data-testid="cart-repriced">${_esc(t('cart.pricesUpdated', { names: this._repriced.map(it => it.variantLabel ? `${it.name} — ${translateVariantLabel(it.variantLabel, t)}` : it.name).join(', ') }))}</p>` : ''}
         ${shortCount ? `<p class="shop-cart__notice shop-cart__notice--warn" role="alert" data-testid="cart-stock-notice">${t('cart.stockNotice')}</p>` : ''}
         <div class="shop-cart__actions">
           <a href="${href('/shop')}" class="shop-cart__continue">← ${t('cart.continueShopping')}</a>

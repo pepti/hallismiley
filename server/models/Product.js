@@ -10,6 +10,9 @@ const IMG_COLUMNS = 'id, product_id, url, position, alt_text, created_at';
 
 // Public-facing column list: COALESCE the IS sibling columns into the primary
 // field names so callers see `name` / `description` in the reader's language.
+// vat_rate rides along so the cart/checkout can show the VAT inside the total
+// per rate (public/js/utils/vat.js; harvest 2 lane 4b, ice #51) — the same
+// rate the invoice prints, not an internal figure.
 function publicCols(locale) {
   if (locale === 'is') {
     return `id, slug,
@@ -17,9 +20,9 @@ function publicCols(locale) {
             COALESCE(description_is, description) AS description,
             price_isk, price_eur, stock, weight_grams, shape, capacity_litres,
             category, subcategory, duration_minutes, delivery_format, is_bookable,
-            variant_axes, sku, barcode, bin, active, created_at, updated_at`;
+            variant_axes, sku, barcode, bin, active, vat_rate, created_at, updated_at`;
   }
-  return 'id, slug, name, description, price_isk, price_eur, stock, weight_grams, shape, capacity_litres, category, subcategory, duration_minutes, delivery_format, is_bookable, variant_axes, sku, barcode, bin, active, created_at, updated_at';
+  return 'id, slug, name, description, price_isk, price_eur, stock, weight_grams, shape, capacity_litres, category, subcategory, duration_minutes, delivery_format, is_bookable, variant_axes, sku, barcode, bin, active, vat_rate, created_at, updated_at';
 }
 
 class Product {

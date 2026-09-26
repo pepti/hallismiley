@@ -389,6 +389,40 @@
         "#216 90 s vision timeout, visionCore extraction (no vision in the engine)",
         "#218 shutdown handshake (engine AI calls end inside the 10 s grace), per-controller vision wiring, req.body blob nulling"
       ]
+    },
+    {
+      "rev": null,
+      "date": "2026-09-26",
+      "upstreamCommits": 0,
+      "conflicts": 0,
+      "note": "harvest",
+      "harvestedFrom": "ice@941cf51d",
+      "chunk": "harvest2 lane 4b (shop polish, i18n)",
+      "commits": [
+        "6f5b37e (#399 English leaks, contactFormat, amber pills, duplicate-name chip)",
+        "6c0f99fc (#400 colour names, Veldu lit / Veldu stærð, badges may wrap)",
+        "0faa32c2 (#51 VAT amount on price-bearing surfaces)",
+        "e1f75e0e (#343 cart.syncPrices — the cart half)",
+        "fa8de049 (#213 checkout order note → orders.notes, migration 115; signed-in autofill)"
+      ],
+      "branch": "harvest2/lane4b-shop-i18n",
+      "features": [
+        "cart-checkout",
+        "orders",
+        "public-site",
+        "i18n"
+      ],
+      "migrations": {
+        "115_order_notes": "ice alias: ice's orders.notes column (#213) — same DDL, IF NOT EXISTS"
+      },
+      "trimmed": [
+        "ice #213 second order path (the engine has one: createCheckoutSession)",
+        "ice #213 store radio cards + admin \"change store\" (no store locations in the engine)",
+        "ice #343 staff customer-price surfaces (no customer prices in the engine)",
+        "ice #399 /catalog back link, quick-order SKU chip, zipChangeRefused + company/store forms, plurals (already harvested), SSR 404s, invoice units, Pressan",
+        "ice #400 orders-list store label split, coverage messages, prettyColor fallback",
+        "ice #51 product-card net-price VAT note (engine prices are gross); CheckoutSuccessView (its payload is shopController, lane 1a this round)"
+      ]
     }
   ]
 }

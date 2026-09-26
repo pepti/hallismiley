@@ -48,7 +48,7 @@ Downstream overrides go in `features/local.json`.
 | `sales-handbook` | Handbók sölufólks / Sales handbook | 10 | engine | live | `modules.salesOps.enabled` | `090_sales_guides` | [sales-handbook.md](sales-handbook.md) |
 | `cart-checkout` | Verslun, karfa og greiðsla / Storefront, cart and checkout | 11 | engine | hidden | `modules.shop.enabled` | — | [cart-checkout.md](cart-checkout.md) |
 | `discounts` | Afslættir / Discounts | 11 | engine | hidden | `modules.shop.enabled` | `050_discounts`, `055_discount_types` | [discounts.md](discounts.md) |
-| `orders` | Pantanir / Orders | 11 | engine | hidden | `modules.shop.enabled` | `054_order_payment_fulfillment_tags` | [orders.md](orders.md) |
+| `orders` | Pantanir / Orders | 11 | engine | hidden | `modules.shop.enabled` | `054_order_payment_fulfillment_tags`, `115_order_notes` | [orders.md](orders.md) |
 | `shop-catalog` | Vörulisti / Shop catalog | 11 | engine | hidden | `modules.shop.enabled` | `022_ecommerce`, `023_product_taxonomy`, `024_product_variants`, `025_shop_content`, `045_shop_sections`, `048_product_codes`, `049_collections`, `057_product_bin`, `074_product_vat_rate`, `112_inventory_adjustments`, `113_variant_barcode` | [shop-catalog.md](shop-catalog.md) |
 | `bio` | Persónuleg kynning / Personal bio (/halli) | 12 | engine | hidden | `modules.bio.enabled` | `011_halli_bio_content`, `039_halli_bio_cv_arrays`, `040_halli_bio_image_urls`, `044_halli_bio_code_snippet` | [bio.md](bio.md) |
 | `news` | Fréttir / News | 12 | engine | hidden | `modules.news.enabled` | `008_news`, `016_news_media` | [news.md](news.md) |

@@ -4,6 +4,9 @@ import * as cart from '../services/cart.js';
 import { indexAvailability, shortfallOf } from '../utils/availability.js';
 import { getUser } from '../services/auth.js';
 import { getCsrfHeaders } from '../utils/api.js';
+import { isValidPhone, isValidZip } from '../utils/contactFormat.js';
+import { vatBreakdown, isExport } from '../utils/vat.js';
+import { translateVariantLabel } from '../utils/colorLabels.js';
 import { t, href } from '../i18n/i18n.js';
 
 function _esc(s) {
@@ -30,7 +33,7 @@ export class CheckoutView {
     this._view.className = 'view shop-checkout';
     this._view.innerHTML = `<div class="shop-checkout__loading">${t('form.loading')}</div>`;
 
-    const items = cart.list();
+    let items = cart.list();
     if (items.length === 0) {
       this._view.innerHTML = `
         <div class="shop-checkout__inner">
@@ -53,10 +56,18 @@ export class CheckoutView {
     // the cart page flags them too; here they block submit, the last gate
     // before Stripe (the server would answer 409 anyway).
     this._stockShort = [];
+    this._repriced = [];
     try {
       const res = await fetch('/api/v1/shop/products', { credentials: 'include' });
       if (res.ok) {
-        const index = indexAvailability((await res.json()).products || []);
+        const products = (await res.json()).products || [];
+        // Re-price before the summary is drawn (cart.syncPrices, ported from
+        // icelandicstore #343): the server re-fetches every price on submit,
+        // so the page must not quote an older one. `items` is re-read after
+        // the sync so the totals and the Pay button use the new prices.
+        this._repriced = cart.syncPrices(products);
+        items = cart.list();
+        const index = indexAvailability(products);
         this._stockShort = items.filter(it => shortfallOf(it, index));
       }
     } catch { /* no availability → no gate */ }
@@ -67,6 +78,14 @@ export class CheckoutView {
 
   _paint() {
     const user = getUser();
+    // Signed-in autofill (ported from icelandicstore #213): the delivery name
+    // from the account's display name (else its username), the phone from the
+    // account. Both stay editable; a guest starts blank. The browser's own
+    // autocomplete still wins where it has shipping details saved.
+    const prefill = {
+      name:  user ? String(user.display_name || user.username || '').slice(0, 100) : '',
+      phone: user ? String(user.phone || '').slice(0, 30) : '',
+    };
     const items = cart.list();
     const cur   = cart.getCurrency();
     const subtotal = cart.total(cur);
@@ -74,7 +93,7 @@ export class CheckoutView {
     const itemsHtml = items.map(it => {
       const price = cur === 'ISK' ? it.priceIsk : it.priceEur;
       const title = it.variantLabel
-        ? `${_esc(it.name)} — ${_esc(it.variantLabel)}`
+        ? `${_esc(it.name)} — ${_esc(translateVariantLabel(it.variantLabel, t))}`
         : _esc(it.name);
       return `
         <li class="shop-checkout__item">
@@ -87,7 +106,8 @@ export class CheckoutView {
       <div class="shop-checkout__inner">
         <a href="${href('/cart')}" class="shop-checkout__back">← ${t('checkout.backToCart')}</a>
         <h1 class="shop-checkout__title">${t('checkout.title')}</h1>
-        ${this._stockShort.length ? `<div class="shop-checkout__notice shop-checkout__notice--warn" role="alert" data-testid="checkout-stock-notice">${_esc(t('checkout.stockNotice'))} ${this._stockShort.map(it => _esc(it.variantLabel ? `${it.name} — ${it.variantLabel}` : it.name)).join(', ')}. <a href="${href('/cart')}">${_esc(t('checkout.backToCart'))}</a></div>` : ''}
+        ${this._stockShort.length ? `<div class="shop-checkout__notice shop-checkout__notice--warn" role="alert" data-testid="checkout-stock-notice">${_esc(t('checkout.stockNotice'))} ${this._stockShort.map(it => _esc(it.variantLabel ? `${it.name} — ${translateVariantLabel(it.variantLabel, t)}` : it.name)).join(', ')}. <a href="${href('/cart')}">${_esc(t('checkout.backToCart'))}</a></div>` : ''}
+        ${this._repriced.length ? `<div class="shop-checkout__notice shop-checkout__notice--info" role="status" data-testid="checkout-repriced">${_esc(t('cart.pricesUpdated', { names: this._repriced.map(it => it.variantLabel ? `${it.name} — ${translateVariantLabel(it.variantLabel, t)}` : it.name).join(', ') }))}</div>` : ''}
 
         <div class="shop-checkout__grid">
           <form class="shop-checkout__form" id="shop-checkout-form" novalidate>
@@ -130,7 +150,7 @@ export class CheckoutView {
             <fieldset class="shop-checkout__fieldset" id="shop-checkout-address">
               <legend>${t('checkout.shippingAddress')}</legend>
               <label>${t('checkout.nameOnDelivery')}
-                <input type="text" name="name" required maxlength="100" autocomplete="shipping name"/>
+                <input type="text" name="name" required maxlength="100" autocomplete="shipping name" value="${_esc(prefill.name)}"/>
               </label>
               <label>${t('checkout.address1')}
                 <input type="text" name="line1" required maxlength="200" autocomplete="shipping address-line1"/>
@@ -152,7 +172,14 @@ export class CheckoutView {
                 </select>
               </label>
               <label>${t('checkout.phone')}
-                <input type="tel" name="phone" maxlength="30" autocomplete="shipping tel"/>
+                <input type="tel" name="phone" maxlength="30" autocomplete="shipping tel" value="${_esc(prefill.phone)}"/>
+              </label>
+            </fieldset>
+
+            <fieldset class="shop-checkout__fieldset">
+              <legend>${t('checkout.noteLegend')}</legend>
+              <label>${t('checkout.noteLabel')}
+                <textarea name="note" rows="3" maxlength="1000" data-testid="checkout-note"></textarea>
               </label>
             </fieldset>
 
@@ -162,7 +189,6 @@ export class CheckoutView {
                     data-testid="checkout-submit">
               ${t('checkout.pay')} ${cart.formatMoney(subtotal + (cur === 'ISK' ? this._shippingRates.flat_rate.priceIsk : this._shippingRates.flat_rate.priceEur), cur)}
             </button>
-            <p class="shop-checkout__vat-note">${t('checkout.vatNote')}</p>
           </form>
 
           <aside class="shop-checkout__summary">
@@ -180,6 +206,7 @@ export class CheckoutView {
               <span>${t('orders.total')}</span>
               <span id="shop-checkout-grand"></span>
             </div>
+            <div class="shop-checkout__vat" id="shop-checkout-vat" aria-live="polite"></div>
           </aside>
         </div>
       </div>
@@ -209,9 +236,20 @@ export class CheckoutView {
       this._view.querySelector('#shop-checkout-shipping-total').textContent = cart.formatMoney(shippingAmt, cur);
       this._view.querySelector('#shop-checkout-grand').textContent = cart.formatMoney(subtotal + shippingAmt, cur);
       submitBtn.textContent = `${t('checkout.pay')} ${cart.formatMoney(subtotal + shippingAmt, cur)}`;
+      this._paintVat({ shippingAmt, exportSale: requiresAddr && isExport(form.elements['country']?.value) });
     };
     form.addEventListener('change', (e) => {
-      if (e.target.name === 'shipping_method') syncShipping();
+      // The country decides export (0 % VSK on goods and shipping), so it
+      // repaints the VAT lines too.
+      if (e.target.name === 'shipping_method' || e.target.name === 'country') syncShipping();
+    });
+    // A shape message set on submit is cleared as soon as the buyer edits the
+    // field (or the country that decides the postcode rule).
+    form.addEventListener('input', (e) => {
+      if (['postal', 'phone', 'country'].includes(e.target.name)) {
+        form.elements['postal']?.setCustomValidity('');
+        form.elements['phone']?.setCustomValidity('');
+      }
     });
     syncShipping();
     if (this._stockShort.length) submitBtn.disabled = true;
@@ -225,6 +263,7 @@ export class CheckoutView {
       // indication of which field was wrong. reportValidity() both reports and
       // focuses the first offender. Runs BEFORE the button is disabled, so a
       // rejected submit leaves the form usable.
+      this._checkContactShape(form);
       if (!form.reportValidity()) return;
       if (this._stockShort.length) return;
 
@@ -242,6 +281,10 @@ export class CheckoutView {
         currency: cur,
         shipping_method,
       };
+      // Optional order note (ice #213, migration 115) — staff read it on the
+      // admin order page; the server trims and caps it at 1000 characters.
+      const note = String(fd.get('note') || '').trim();
+      if (note) body.note = note;
       if (!user) {
         body.guest_email = String(fd.get('guest_email') || '').trim();
         body.guest_name  = String(fd.get('guest_name') || '').trim();
@@ -276,6 +319,45 @@ export class CheckoutView {
         syncShipping();
       }
     });
+  }
+
+  // The VAT inside the total, per rate (utils/vat.js; ported from
+  // icelandicstore #51, replacing the fixed "includes 24% VAT" sentence). The
+  // same split the invoice books: each product at its own rate, shipping at
+  // 24 %, and an order shipped abroad zero-rated on goods and shipping (a
+  // service keeps its rate). Display only — the charge is the server's.
+  _paintVat({ shippingAmt, exportSale }) {
+    const host = this._view.querySelector('#shop-checkout-vat');
+    if (!host) return;
+    const cur = cart.getCurrency();
+    const rows = vatBreakdown({ lines: cart.vatLines(cur), shipping: shippingAmt, exportSale });
+    host.innerHTML = rows.map(v => `
+      <div class="shop-checkout__vat-row" data-testid="checkout-vat-${v.rate}">
+        <span>${_esc(t('shop.vatIncludedRate', { rate: v.rate }))}</span>
+        <span>${cart.formatMoney(v.vat, cur)}</span>
+      </div>`).join('')
+      + (exportSale ? `<p class="shop-checkout__vat-note" data-testid="checkout-vat-export">${_esc(t('checkout.vatExportNote'))}</p>` : '');
+  }
+
+  // The server's postcode + phone shape (validate.validateCheckoutContact,
+  // utils/contactFormat.js — ported from icelandicstore #399), checked here so
+  // reportValidity() points at the field. An Icelandic address needs a
+  // three-digit postnúmer; abroad the postcode is free text. A blank field is
+  // left to `required` (the postcode) or allowed (the phone). The address
+  // fieldset is disabled on local pickup, and disabled fields are not
+  // validated, so nothing here blocks a pickup order.
+  _checkContactShape(form) {
+    const postal  = form.elements['postal'];
+    const phone   = form.elements['phone'];
+    const country = form.elements['country'];
+    if (postal) {
+      const v = postal.value.trim();
+      postal.setCustomValidity(v && !isValidZip(v, country?.value) ? t('checkout.postcodeInvalid') : '');
+    }
+    if (phone) {
+      const v = phone.value.trim();
+      phone.setCustomValidity(v && !isValidPhone(v) ? t('checkout.phoneInvalid') : '');
+    }
   }
 
   destroy() {}
