@@ -7,6 +7,7 @@
 // (auth/accountExpiry.js parseExpiresAt): the value must lie in the future.
 import { t, plural } from '../i18n/i18n.js';
 import { escHtml } from '../utils/escHtml.js';
+import { formatDateTime } from '../utils/format.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 export const QUICK_DAYS = [7, 14, 30];
@@ -30,7 +31,9 @@ export function expiryBadgeHtml(expiresAt, now = Date.now()) {
     return `<span class="users-expiry-badge users-expiry-badge--expired" data-expiry-state="expired">${escHtml(t('adminUsers.expired'))}</span>`;
   }
   const days = Math.max(1, Math.ceil((ms - now) / DAY_MS));
-  const title = new Date(ms).toLocaleString();
+  // The exact moment, in the app locale through the kit formatter (not the
+  // browser's own toLocaleString; ice #324 sweep, harvest 2 lane 4a).
+  const title = formatDateTime(ms);
   return `<span class="users-expiry-badge" data-expiry-state="active" title="${escHtml(title)}">${escHtml(plural(days, 'adminUsers.expiresIn.one', 'adminUsers.expiresIn.many'))}</span>`;
 }
 

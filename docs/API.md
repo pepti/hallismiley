@@ -256,9 +256,13 @@ nothing:
   controllers set it inline the same way (`password_required`,
   `username_taken`, `POSSIBLE_DUPLICATE`, `INSUFFICIENT_STOCK`…). A 5xx never
   carries one.
-- **`retryable: true`** — only on the `409` `reason: "BUSY"` answer to a
-  Postgres deadlock victim (40P01): nothing happened, send the same request
-  again.
+- **`retryable: true`** — on the two "busy, send it again" answers; nothing
+  happened, send the same request again:
+
+| Status | Body | When |
+|--------|------|------|
+| `409` | `{ "error": …, "code": 409, "reason": "BUSY", "retryable": true }` | Postgres picked the request as a deadlock victim (40P01); nothing was changed |
+| `429` + `Retry-After: <seconds>` | `{ "error": …, "code": 429, "reason": "AI_BUSY", "retryable": true }` | a request-path paid AI call found every `aiGate` slot taken (`AI_MAX_CONCURRENT`, default 4; `server/services/aiGate.js`, [harvest2-lane1b](history.d/2026-09-26-harvest2-lane1b-defects.md#harvest2-lane1b-2026-09-26)). No engine route raises it yet — the translator, today's only Claude caller, queues for a slot instead and never fails a save — so it is the contract for the next request-path AI endpoint |
 
 ## Rate limits (`express-rate-limit`, all skipped when `NODE_ENV` is `test` or `development`)
 
@@ -305,6 +309,7 @@ router's own gate still applies behind it.
 | `/api/v1/seller-publish` | `sellerPublishRoutes.js` | mounted BEFORE `express.json` (raw body); `INSTANCE_ROLE=public` + `SELLER_PUBLISH_SECRET`, else 404; HMAC signature (401), shape (400), newer-than-last (409); own limiter 30/15 min | [ARCHITECTURE §21](ARCHITECTURE.md#21-seller-area--the-published-copy-on-the-public-instance) · [HISTORY](HISTORY.md#seller-area) |
 | `/.well-known/oauth-protected-resource[/api/v1/mcp]`, `/.well-known/oauth-authorization-server`, `/oauth/register`, `/oauth/authorize`, `/oauth/token`, `/oauth/revoke`, `/api/v1/oauth/requests/:id[/approve\|/deny]` | `mcpOAuthRoutes.js` (mounted at `/`, after the MCP router) | every route `MCP_ENABLED` else 404; register/token/revoke: no cookies, own IP limiters, RFC 6749 error bodies; authorize: validates, stores a pending request, 302 to `/<lc>/tengja/<id>`; consent API: session + `admin` + CSRF on writes | [ARCHITECTURE §15](ARCHITECTURE.md#15-mcp-connector) · [HISTORY](HISTORY.md#mcp-oauth-2026-09-24) |
 | `/api/v1/admin/modules` | `adminModulesRoutes.js` | session + `admin`; `PATCH /:id` CSRF — `{ enabled }`, the contract is the ceiling (400 beyond it) | [ARCHITECTURE §20](ARCHITECTURE.md#20-infrastructure-and-cross-cutting) · [HISTORY](HISTORY.md#mcp-write-tools-2026-09-24) |
+| `/api/v1/admin/demo` | `adminDemoRoutes.js` | 404 unless `DEMO_INSTANCE=true`; session + `admin`; `GET /` status, `POST /reset` CSRF → 202 (the reset runs after the answer and restarts the site) | [ARCHITECTURE §20](ARCHITECTURE.md#20-infrastructure-and-cross-cutting) · [HISTORY](history.d/2026-09-26-feat-demo-mode.md#demo-instance-2026-09-26) |
 | `/auth` | `authRoutes.js` | per route (above); `/auth/signup`, `/auth/check-username`, `/auth/check-email` belong to the `signup` module (404 before auth when it is off, [HISTORY](HISTORY.md#signup-switch-2026-09-24)) | — |
 | `/api/v1/projects` | `projectRoutes.js` | public reads; admin/moderator writes | — |
 | `/api/v1/contact` | `contactRoutes.js` | public, 5/h | `docs/SALES-STAFF.md` |
@@ -319,6 +324,7 @@ router's own gate still applies behind it.
 | `/api/v1/admin/background` | `adminBackgroundRoutes.js` | admin (hidden) | — |
 | `/api/v1/admin/change-requests` | `adminChangeRequestRoutes.js` | `feedback` view | — |
 | `/api/v1/admin/nav-config` | `adminNavRoutes.js` | admin (`requireRole`) | — |
+| `/api/v1/admin/home` | `adminHomeRoutes.js` | session + `dashboard` view; `GET /` only, `no-store`. Behind the gate each block is computed only for a view the role holds (absent otherwise); a failing source → 200 with `errors` | [ARCHITECTURE §2](ARCHITECTURE.md#2-admin-shell--sidebar-dashboard-surface-hiding-ui-kit) · [HISTORY](history.d/2026-09-26-feat-admin-home-idag.md#admin-home-idag-2026-09-26) |
 | `/api/v1/admin/roles` | `adminRolesRoutes.js` | admin | — |
 | `/api/v1/admin/bins` | `adminBinsRoutes.js` | admin views (hidden) | — |
 | `/api/v1/admin/customers` | `adminCustomerRoutes.js` | `customers` view; `POST /` admin + CSRF — `{ email }` → welcome invite, `invited` only when it reached the customer, else `resetUrl` (+ `emailError`); `{ no_email: true, display_name }` → a name-only login, `{ username, password }` once (`no-store`); either takes an optional future `expires_at` (a time-limited login, migration 114) | `docs/SALES-STAFF.md` · [HISTORY](HISTORY.md#harvest-ice-a-2026-09-24) |

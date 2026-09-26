@@ -68,9 +68,16 @@ function errorHandler(err, req, res, next) { // eslint-disable-line no-unused-va
       error: t(req.locale, 'errors.busyRetry'), code: 409, reason: 'BUSY', retryable: true,
     });
   }
+  // A typed "come back later" (services/aiGate.js AiBusyError, harvest2 from
+  // icelandicstore #218) also carries Retry-After in seconds and is marked
+  // retryable in the envelope.
+  if (typed && Number.isFinite(err.retryAfterSeconds) && err.retryAfterSeconds > 0) {
+    res.setHeader('Retry-After', String(Math.ceil(err.retryAfterSeconds)));
+  }
   res.status(status).json({
     error: clientMessage, code: status,
     ...(typed && typeof err.reason === 'string' ? { reason: err.reason } : {}),
+    ...(typed && status === 429 ? { retryable: true } : {}),
   });
 }
 

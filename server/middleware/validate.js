@@ -144,8 +144,10 @@ const isEmail = (v) => typeof v === 'string' && v.length <= 254 && EMAIL_RE.test
 // Icelandic letters (both cases) are allowed so OAuth-derived usernames like
 // "jónþórsson" pass validation on subsequent profile updates.
 const USERNAME_RE = /^[a-zA-Z0-9_áéíóúýðþæöÁÉÍÓÚÝÐÞÆÖ]{3,40}$/;
-// phone: E.164-ish — digits, spaces, dashes, parentheses, leading +
-const PHONE_RE    = /^\+?[\d\s\-().]{7,20}$/;
+// phone: PHONE_RE (E.164-ish — digits, spaces, dashes, parentheses, leading +)
+// lives in utils/contactFormat.js, shared with the client forms so both refuse
+// the same values (ported from icelandicstore #399).
+const { PHONE_RE, isValidPhone, isValidZip } = require('../utils/contactFormat');
 
 // avatar-01.svg … avatar-40.svg
 const ALLOWED_AVATARS = Array.from({ length: 40 }, (_, i) =>
@@ -936,7 +938,32 @@ function validateAccountPatch(req, res, next) {
   next();
 }
 
+// POST /api/v1/shop/checkout — the SHAPE of the shipping address's postcode and
+// phone (ported from icelandicstore #399, utils/contactFormat.js). Everything
+// else about the body (items, currency, required fields, lengths) stays with
+// shopController.createCheckoutSession, which runs next.
+//
+// Only an Icelandic address is held to the three-digit postnúmer: a buyer in
+// Denmark or Britain keeps a free-text postcode. The phone is optional; when
+// present it gets the same rule as every other phone field. Nothing is read
+// when the method needs no address (local pickup ignores it).
+function validateCheckoutContact(req, res, next) {
+  const b = req.body || {};
+  const a = b.shipping_address;
+  if (b.shipping_method !== 'flat_rate' || !a || typeof a !== 'object' || Array.isArray(a)) return next();
+  const errors = [];
+  if (typeof a.postal === 'string' && a.postal.trim() && !isValidZip(a.postal, a.country)) {
+    errors.push({ key: 'validation.checkout.postcodeInvalid' });
+  }
+  if (typeof a.phone === 'string' && a.phone.trim() && !isValidPhone(a.phone.trim())) {
+    errors.push({ key: 'validation.phone.invalid' });
+  }
+  if (errors.length) return _fail(req, res, errors);
+  next();
+}
+
 module.exports = {
+  validateCheckoutContact,
   _isEmail: isEmail,
   validateProject,
   validateQuery,

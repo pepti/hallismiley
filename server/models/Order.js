@@ -55,7 +55,23 @@ function buildOrderFilter({ status = null, paymentStatus = null, fulfillmentStat
   return { clause: where.length ? where.join(' AND ') : 'TRUE', params };
 }
 
+// The customer's order note, as stored (migration 115; ported from
+// icelandicstore #213): plain text, trimmed, at most ORDER_NOTE_MAX characters
+// (a longer paste is cut, not refused — the note is a courtesy, never a reason
+// to lose the order). Anything that is not a non-blank string is no note.
+// Rendered escaped, staff-only (the admin order page); never in COLUMNS.
+const ORDER_NOTE_MAX = 1000;
+function normaliseNote(raw) {
+  if (typeof raw !== 'string') return null;
+  // Cut by code point, not UTF-16 unit, so an emoji at the cut is not split
+  // into a lone surrogate.
+  const note = Array.from(raw.trim()).slice(0, ORDER_NOTE_MAX).join('').trim();
+  return note || null;
+}
+
 class Order {
+  static normaliseNote(raw) { return normaliseNote(raw); }
+
   // Create order + items in one transaction; computes totals from the passed
   // server-trusted line data. Caller is responsible for having already
   // re-fetched prices from the DB — do NOT trust client prices here either.
@@ -69,6 +85,7 @@ class Order {
     items,       // [{ productId, name, price, quantity }]
     shipping,    // integer minor units
     appliedDiscount = null, // { discount, discountAmount, shippingDiscount } | null
+    notes = null,           // the buyer's checkout note (raw; normalised here)
   }) {
     if (!['ISK', 'EUR'].includes(currency)) {
       throw new Error(`Invalid currency: ${currency}`);
@@ -96,8 +113,8 @@ class Order {
         `INSERT INTO orders (
            order_number, user_id, guest_email, guest_name, currency,
            subtotal, shipping, total, status, shipping_method, shipping_address,
-           discount_code, discount_title, discount_amount, shipping_discount
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', $9, $10, $11, $12, $13, $14)
+           discount_code, discount_title, discount_amount, shipping_discount, notes
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', $9, $10, $11, $12, $13, $14, $15)
          RETURNING ${COLUMNS}`,
         [
           orderNumber, userId, guestEmail, guestName, currency,
@@ -106,6 +123,7 @@ class Order {
           disc ? disc.code : null,
           disc ? (disc.title || disc.code) : null,
           discountAmount, shippingDiscount,
+          normaliseNote(notes),
         ]
       );
       const order = orderRows[0];
@@ -365,9 +383,15 @@ class Order {
      // columns on order_items remain the source of truth for name/price;
      // the JOIN is non-authoritative — a deleted product just renders the
      // booking flag as NULL, which we coerce to false at read time.
+    // vat_rate is the product's CURRENT rate, the same live read
+    // bookkeeping/invoiceService.readOrderForInvoicing books the invoice with,
+    // so the admin order page's per-rate VAT (utils/vat.js) matches the
+    // invoice. A deleted product reads NULL, which the display treats as the
+    // standard rate, as the invoice does.
     const { rows } = await db.query(
       `SELECT ${ITEM_COLUMNS.split(',').map(c => `oi.${c.trim()}`).join(', ')},
-              COALESCE(p.is_bookable, FALSE) AS is_bookable
+              COALESCE(p.is_bookable, FALSE) AS is_bookable,
+              p.vat_rate
          FROM order_items oi
     LEFT JOIN products p ON p.id = oi.product_id
         WHERE oi.order_id = $1

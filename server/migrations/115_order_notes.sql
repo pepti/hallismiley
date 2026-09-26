@@ -1,0 +1,11 @@
+-- 115_order_notes — reference copy; the authoritative entry is in
+-- server/config/schema.js.
+--
+-- The customer's order note, the checkout "athugasemd" field (harvest 2 lane
+-- 4b, ported from icelandicstore #213). Written once at checkout (trimmed,
+-- capped at 1000 characters by Order.normaliseNote), read by staff on the admin
+-- order page only; never in the public order payloads. NULL = no note.
+-- Additive; IF NOT EXISTS makes it a no-op on icelandicstore, whose orders
+-- table already has the same column. Rollback: DROP COLUMN once no release
+-- reads it.
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS notes TEXT;

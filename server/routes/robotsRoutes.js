@@ -52,10 +52,14 @@ function buildRobots({ hidden = HIDDEN_PUBLIC_ROUTES, noindex = NOINDEX_ROUTES, 
 
 const router = express.Router();
 
+// A demo instance (config/demoInstance.js) is sample data: nothing on it is
+// for a crawler.
+const DEMO_ROBOTS = ['User-agent: *', 'Disallow: /', ''].join('\n');
+
 router.get('/robots.txt', (req, res) => {
   res.set('Content-Type', 'text/plain; charset=utf-8');
   res.set('Cache-Control', 'public, max-age=3600');
-  res.status(200).send(buildRobots());
+  res.status(200).send(require('../config/demoInstance').isDemoInstance() ? DEMO_ROBOTS : buildRobots());
 });
 
 module.exports = { router, buildRobots };
