@@ -28,7 +28,7 @@ const GUIDES = [
     body: `
 <p>Velkomin(n) í hópinn. Þessi handbók er vinnutækið þitt — hér er allt sem þú þarft að vita til að selja og þjónusta af öryggi. Byrjaðu á þessari leið og farðu svo í gegnum hinar í röð.</p>
 <h2>Fyrirtækið og varan</h2>
-<p><strong>Orange Smiley ehf.</strong> er íslenskt hugbúnaðarfyrirtæki í Hafnarfirði. Það smíðar og rekur vefi, vefverslanir og rekstrarkerfi fyrir lítil og meðalstór íslensk fyrirtæki. Fyrirtækið selur <strong>eina vöru</strong>: <strong>Rekstrarkerfið</strong> — eitt kerfi sem sameinar heimasíðu, vefverslun og bókhald, keyrir í skýinu (þ.e. á netþjónum sem við sjáum um, viðskiptavinurinn þarf engan búnað) og er í boði í þremur þjónustuleiðum með föstu verði. Fjórða leiðin, <strong>Samstarf</strong>, er fyrir fyrirtæki sem þurfa kerfi smíðað utan um eigin rekstur: þar er verðið samið eftir ókeypis mat (sjá <em>Þrepin þrjú</em>).</p>
+<p><strong>Orange Smiley ehf.</strong> er íslenskt hugbúnaðarfyrirtæki í Hafnarfirði. Það smíðar og rekur vefi, vefverslanir og rekstrarkerfi fyrir lítil og meðalstór íslensk fyrirtæki. Fyrirtækið selur <strong>eina vöru</strong>: <strong>Rekstrarkerfið</strong> — eitt kerfi sem sameinar heimasíðu, vefverslun og bókhald, keyrir í skýinu (þ.e. á netþjónum sem við sjáum um, viðskiptavinurinn þarf engan búnað) og er í boði í þremur þjónustuleiðum með föstu verði. Fjórða leiðin, <strong>Samstarf</strong>, er fyrir fyrirtæki sem þurfa kerfi smíðað utan um eigin rekstur: þar er verðið samið eftir ókeypis úttekt (sjá <em>Þrepin þrjú</em>).</p>
 <p>Sérstaða vörunnar í einni setningu: <em>allir viðskiptavinir fá sama trausta kjarnann, og hver og einn fær að auki sérsníðin sem passa nákvæmlega hans rekstri — af því að gervigreind smíðar og viðheldur sérsniðnu hlutunum eru þeir greiddir með verkeiningum úr föstum þjónustusamningi, ekki með ráðgjafatímum.</em></p>
 <h2>Nafnareglan — lærðu hana utan að</h2>
 <ul>
@@ -107,8 +107,8 @@ const GUIDES = [
 <li><strong>Þjónustusamningur</strong> — fast mánaðargjald sem heldur kerfinu í rekstri: hýsing, vöktun, öryggisuppfærslur og ákveðinn fjöldi verkeininga á mánuði fyrir breytingar. Fylgir öllum þrepum. Andstæðan við tímagjald.</li>
 <li><strong>Verkeining</strong> — mælieining fyrir vinnu við breytingar og sérsmíði. Hvert verk er metið fyrir fram: lítið verk er 1 eining, meðalstórt 5, stórt 20. Ekki rugla henni saman við <em>sérsniðna einingu</em> hér að neðan: verkeining mælir vinnu, sérsniðin eining er hluti af kerfinu.</li>
 <li><strong>Einingaverð</strong> — fast verð fyrir hverja verkeiningu umfram þær sem fylgja þjónustusamningnum: 6.000 kr. án VSK (DRÖG — Halli staðfestir).</li>
-<li><strong>Samstarf</strong> — fjórða leiðin, fyrir fyrirtæki sem þurfa kerfi smíðað utan um eigin rekstur. Samstarf hefur ekkert listaverð: verðið er samið eftir <em>ókeypis mat</em>.</li>
-<li><strong>Ókeypis mat</strong> — við förum yfir rekstur fyrirtækisins og hvað við leggjum til að smíða fyrir það. Matið kostar viðskiptavininn ekkert, og út úr því kemur tilboð í Samstarf.</li>
+<li><strong>Samstarf</strong> — fjórða leiðin, fyrir fyrirtæki sem þurfa kerfi smíðað utan um eigin rekstur. Samstarf hefur ekkert listaverð: verðið er samið eftir <em>ókeypis úttekt</em>.</li>
+<li><strong>Ókeypis úttekt</strong> — við förum yfir rekstur fyrirtækisins og hvað við leggjum til að smíða fyrir það. Úttektin kostar viðskiptavininn ekkert, og út úr því kemur tilboð í Samstarf.</li>
 <li><strong>Kerfi í skýinu</strong> — kerfið keyrir á netþjónum sem við rekum; viðskiptavinurinn opnar það bara í vafra. Enginn búnaður, engar uppsetningar hjá honum.</li>
 <li><strong>Hýsing</strong> — að geyma og keyra vef eða kerfi á netþjóni. Innifalin í þjónustusamningnum, í þeirri stærð sem fylgir þrepinu. Þurfi viðskiptavinurinn meira er það sem umfram er rukkað á kostnaðarverði skýjaþjónustunnar (Azure) að viðbættum 15 %.</li>
 <li><strong>Lén</strong> — nafn vefsins á netinu, t.d. fyrirtaeki.is. Viðskiptavinurinn á sitt lén; kerfið hans svarar á því.</li>
@@ -154,7 +154,7 @@ const GUIDES = [
 <li><strong>Verslun:</strong> vörulisti og lagerstaða, karfa, greiðslur og pantanir, aðgangar viðskiptavina, strikamerki og afgreiðslukerfi fyrir búðina.</li>
 <li><strong>Rekstur:</strong> reikningagerð með VSK, viðskiptamannabókhald og vörumóttaka — bókhaldshliðin á sama stað og salan.</li>
 </ul>
-<p>Þjónustuleiðirnar þrjár (sjá <em>Þrepin þrjú</em>) eru einfaldlega mismunandi stórir skammtar af þessu sama kerfi — ekki þrjár ólíkar vörur. Fyrirtæki sem þarf kerfi smíðað utan um eigin rekstur fer í fjórðu leiðina, <strong>Samstarf</strong>: þar er verðið samið eftir ókeypis mat.</p>
+<p>Þjónustuleiðirnar þrjár (sjá <em>Þrepin þrjú</em>) eru einfaldlega mismunandi stórir skammtar af þessu sama kerfi — ekki þrjár ólíkar vörur. Fyrirtæki sem þarf kerfi smíðað utan um eigin rekstur fer í fjórðu leiðina, <strong>Samstarf</strong>: þar er verðið samið eftir ókeypis úttekt.</p>
 <h2>Sami kjarni fyrir alla — sérsníðin fyrir hvern og einn</h2>
 <p>Allir viðskiptavinir keyra sama kjarnann. Það þýðir að endurbætur og öryggisuppfærslur berast öllum, sjálfkrafa — enginn situr eftir á gamalli útgáfu. Ofan á kjarnann fær hver viðskiptavinur <strong>sérsniðnar einingar</strong>: viðbætur sem passa nákvæmlega hans rekstri. Gervigreind smíðar þær og viðheldur þeim, og þess vegna eru þær greiddar með verkeiningum úr þjónustusamningnum en ekki með ráðgjafatímum. Hver viðskiptavinur er með sína eigin uppsetningu og sinn eigin gagnagrunn — gögnin hans blandast aldrei við annarra.</p>
 <h2>Hvað viðskiptavinurinn greiðir</h2>
@@ -210,7 +210,7 @@ const GUIDES = [
     sort_order: 1,
     title: 'Þrepin þrjú, Samstarf og hverjum þau henta',
     summary:
-      'Vefur, Verslun og Rekstur: uppsetningargjald 390 / 580 / 690 þ.kr. og þjónustusamningur 29 / 59 / 89 þ.kr./mán með 2 / 3 / 5 verkeiningum á mánuði, einingaverð 6.000 kr. umfram það — öll verð DRÖG þar til Halli staðfestir, öll án VSK. Fjórða leiðin, Samstarf, hefur ekkert listaverð: verðið er samið eftir ókeypis mat. Aldrei tímagjald. Hér lærirðu verðmódelið, hvað verkeining er, hvernig þú parar fyrirtæki við rétt þrep og hvenær þú býður ókeypis mat í staðinn.',
+      'Vefur, Verslun og Rekstur: uppsetningargjald 390 / 580 / 690 þ.kr. og þjónustusamningur 29 / 59 / 89 þ.kr./mán með 2 / 3 / 5 verkeiningum á mánuði, einingaverð 6.000 kr. umfram það — öll verð DRÖG þar til Halli staðfestir, öll án VSK. Fjórða leiðin, Samstarf, hefur ekkert listaverð: verðið er samið eftir ókeypis úttekt. Aldrei tímagjald. Hér lærirðu verðmódelið, hvað verkeining er, hvernig þú parar fyrirtæki við rétt þrep og hvenær þú býður ókeypis úttekt í staðinn.',
     body: `
 <p>Rekstrarkerfið er selt í þremur þjónustuleiðum með föstu verði — þrepum. Þau eru ekki þrjár vörur heldur mismunandi stórir skammtar af sama kerfinu; viðskiptavinur getur alltaf fært sig upp síðar. Fjórða leiðin, <strong>Samstarf</strong>, er fyrir fyrirtæki sem þurfa kerfi smíðað utan um eigin rekstur; hún hefur ekkert listaverð og henni er lýst neðst í þessari leið. Nákvæm eiginleikaskipting er í vöruhlutanum (<em>Hvað er í hverju þrepi</em>); hér er sölusjónarhornið.</p>
 <h2>Verðin — mikilvægasta reglan fyrst</h2>
@@ -249,13 +249,13 @@ const GUIDES = [
 <li>Hvort ónotaðar einingar flytjist yfir á næsta mánuð er ekki ákveðið: DRÖG — Halli staðfestir. Lofaðu engu um það.</li>
 </ul>
 <h2>Að velja þrep í samtali</h2>
-<p>Einföld regla: <strong>engin vefverslun → Vefur; vefverslun eða búð → Verslun; vill líka losna við sérstakt bókhaldskerfi → Rekstur; þarf kerfi smíðað utan um eigin rekstur → Samstarf.</strong> Ef þú ert í vafa milli tveggja þrepa, veldu lægra þrepið — það er auðvelt að færa sig upp og enginn upplifir sig plataðan. Hvað það kostar að færa sig upp um þrep síðar er ekki ákveðið: DRÖG — Halli staðfestir. Ef þú ert í vafa um hvort nokkurt þrep passi, bjóddu ókeypis mat (sjá hér að neðan).</p>
-<h2>Samstarf — fjórða leiðin, verð eftir ókeypis mat (DRÖG)</h2>
+<p>Einföld regla: <strong>engin vefverslun → Vefur; vefverslun eða búð → Verslun; vill líka losna við sérstakt bókhaldskerfi → Rekstur; þarf kerfi smíðað utan um eigin rekstur → Samstarf.</strong> Ef þú ert í vafa milli tveggja þrepa, veldu lægra þrepið — það er auðvelt að færa sig upp og enginn upplifir sig plataðan. Hvað það kostar að færa sig upp um þrep síðar er ekki ákveðið: DRÖG — Halli staðfestir. Ef þú ert í vafa um hvort nokkurt þrep passi, bjóddu ókeypis úttekt (sjá hér að neðan).</p>
+<h2>Samstarf — fjórða leiðin, verð eftir ókeypis úttekt (DRÖG)</h2>
 <p><em>Fyrir fyrirtæki sem þurfa kerfi smíðað utan um eigin rekstur.</em></p>
 <p>Sum fyrirtæki passa ekki í neitt þrepanna. Þau vantar ekki stærri skammt af sama kerfinu heldur kerfi sem er smíðað utan um verklagið þeirra: sérstaka vöruflokka og verðlagningu, tengingar við kerfi birgja og viðskiptavina, ferla sem ekkert staðlað kerfi kann. Fyrsti viðskiptavinurinn okkar er einmitt slíkt fyrirtæki. Fyrir þau er <strong>Samstarf</strong>.</p>
-<p>Samstarf hefur <strong>ekkert listaverð</strong>. Verðið er samið eftir <strong>ókeypis mat</strong>: við förum yfir rekstur fyrirtækisins og hvað við leggjum til að smíða fyrir það, og út úr því kemur tilboð sem Halli sendir. Matið kostar viðskiptavininn ekkert. Hvernig samningurinn er byggður upp — uppsetning, mánaðargjald, verkeiningar — kemur fram í tilboðinu, ekki frá þér.</p>
-<h2>Hvenær þú býður ókeypis mat í stað þreps</h2>
-<p>Bjóddu ókeypis mat, og nefndu ekkert verð, þegar þú heyrir eitthvað af þessu:</p>
+<p>Samstarf hefur <strong>ekkert listaverð</strong>. Verðið er samið eftir <strong>ókeypis úttekt</strong>: við förum yfir rekstur fyrirtækisins og hvað við leggjum til að smíða fyrir það, og út úr því kemur tilboð sem Halli sendir. Úttektin kostar viðskiptavininn ekkert. Hvernig samningurinn er byggður upp — uppsetning, mánaðargjald, verkeiningar — kemur fram í tilboðinu, ekki frá þér.</p>
+<h2>Hvenær þú býður ókeypis úttekt í stað þreps</h2>
+<p>Bjóddu ókeypis úttekt, og nefndu ekkert verð, þegar þú heyrir eitthvað af þessu:</p>
 <ul>
 <li>Reksturinn byggist á verklagi sem staðlað kerfi styður ekki — „við gerum þetta öðruvísi en allir aðrir“.</li>
 <li>Kerfið þarf að tala við mörg önnur kerfi: birgja, heildsala, bókhald, sérhæfðan búnað.</li>
@@ -263,7 +263,7 @@ const GUIDES = [
 <li>Fyrirtækið er á leið af eldra kerfi sem hefur verið lagað að því árum saman, og gögnin eða ferlarnir eru flóknir.</li>
 <li>Þú getur ekki sagt með vissu hvaða þrep passar, jafnvel eftir fyrsta samtalið.</li>
 </ul>
-<p>Þá segirðu: <em>„Það sem þið lýsið þarf að smíða utan um ykkar rekstur. Við bjóðum ókeypis mat: við förum yfir reksturinn og hvað við myndum smíða, og þið fáið tilboð út frá því. Matið kostar ykkur ekkert.“</em> Skráðu það sem þú heyrðir eins og fyrir tilboð (sjá <em>Tilboðsferlið</em>) og láttu Halla vita. Þú framkvæmir ekki matið sjálf(ur) og nefnir aldrei verð í Samstarfi, ekki heldur „svona í kringum“. Nefndu heldur aldrei fyrsta viðskiptavininn á nafn eða tölur úr því verkefni.</p>
+<p>Þá segirðu: <em>„Það sem þið lýsið þarf að smíða utan um ykkar rekstur. Við bjóðum ókeypis úttekt: við förum yfir reksturinn og hvað við myndum smíða, og þið fáið tilboð út frá því. Úttektin kostar ykkur ekkert.“</em> Skráðu það sem þú heyrðir eins og fyrir tilboð (sjá <em>Tilboðsferlið</em>) og láttu Halla vita. Þú framkvæmir ekki úttektina sjálf(ur) og nefnir aldrei verð í Samstarfi, ekki heldur „svona í kringum“. Nefndu heldur aldrei fyrsta viðskiptavininn á nafn eða tölur úr því verkefni.</p>
 `,
   },
   {
@@ -289,7 +289,7 @@ const GUIDES = [
 <li>„Ef þið mættuð breyta einu í kerfunum ykkar á morgun — hvað yrði það?“ (Svarið er oft fyrsta sérsniðna einingin þeirra.)</li>
 </ul>
 <h2>Það sem þú segir — og segir ekki</h2>
-<p>Segðu söguna stutt (sjá <em>Sölusöguna</em>): eitt íslenskt kerfi, einn reikningur, breytingar á dögum, sérsniðið kostar verkeiningar en ekki ráðgjafatíma. Nefndu þrepið sem þér sýnist passa og af hverju — eða, ef reksturinn þarf kerfi smíðað utan um sig, bjóddu ókeypis mat í stað þreps (sjá <em>Þrepin þrjú</em>, kaflann um Samstarf). Ef verð ber á góma: viðmiðunarverðin eru drög og endanlegt verð kemur í tilboðinu frá Halla. Lofaðu engri dagsetningu og engum eiginleika sem þú ert ekki viss um — „þetta læt ég tæknifólkið svara, þú heyrir frá okkur innan eins virks dags“ er alltaf gilt svar.</p>
+<p>Segðu söguna stutt (sjá <em>Sölusöguna</em>): eitt íslenskt kerfi, einn reikningur, breytingar á dögum, sérsniðið kostar verkeiningar en ekki ráðgjafatíma. Nefndu þrepið sem þér sýnist passa og af hverju — eða, ef reksturinn þarf kerfi smíðað utan um sig, bjóddu ókeypis úttekt í stað þreps (sjá <em>Þrepin þrjú</em>, kaflann um Samstarf). Ef verð ber á góma: viðmiðunarverðin eru drög og endanlegt verð kemur í tilboðinu frá Halla. Lofaðu engri dagsetningu og engum eiginleika sem þú ert ekki viss um — „þetta læt ég tæknifólkið svara, þú heyrir frá okkur innan eins virks dags“ er alltaf gilt svar.</p>
 <h2>Lok samtals</h2>
 <p>Endaðu alltaf á skýru næsta skrefi: „Ég tek þetta saman og við sendum ykkur tilboð með samanburði við núverandi kostnað — hvaða netfang á það að fara á?“ Skráðu strax: tengilið, netfang, núverandi kerfi, líklegt þrep, helsta pirring og hvað var lofað (sem á bara að vera: tilboð kemur).</p>
 `,
@@ -338,7 +338,7 @@ const GUIDES = [
 <ul>
 <li><strong>Fyrirtækið:</strong> nafn, tengiliður, netfang, sími.</li>
 <li><strong>Núverandi stafla:</strong> hvaða kerfi eru í notkun (vefur, vefverslun, öpp, bókhald, vefstofa) og — ef fæst — hvað hvert þeirra kostar á mánuði.</li>
-<li><strong>Líklegt þrep:</strong> Vefur, Verslun eða Rekstur, með rökstuðningi í einni setningu — eða <strong>Samstarf</strong>, ef reksturinn þarf kerfi smíðað utan um sig (sjá <em>Þrepin þrjú</em>). Þá er næsta skref ókeypis mat, ekki tilboð beint.</li>
+<li><strong>Líklegt þrep:</strong> Vefur, Verslun eða Rekstur, með rökstuðningi í einni setningu — eða <strong>Samstarf</strong>, ef reksturinn þarf kerfi smíðað utan um sig (sjá <em>Þrepin þrjú</em>). Þá er næsta skref ókeypis úttekt, ekki tilboð beint.</li>
 <li><strong>Helsta pirring:</strong> með orðum viðskiptavinarins sjálfs — það rammar tilboðið inn.</li>
 <li><strong>Sérþarfir:</strong> allt sem hljómaði eins og sérsniðin eining („okkur vantar að kerfið geri X“).</li>
 </ul>
@@ -350,7 +350,7 @@ const GUIDES = [
 <li><strong>Samanburður við núverandi stafla:</strong> hvað fyrirtækið borgar í dag á móti föstu mánaðargjaldi þjónustusamningsins, með uppsetningargjaldið sýnt sér. Þetta er sterkasta blaðsíðan — og hún er bara jafn góð og upplýsingarnar sem þú safnaðir.</li>
 <li>Næstu skref: hvað gerist ef tilboðinu er tekið.</li>
 </ol>
-<p><strong>Í Samstarfi kemur ókeypis matið á undan tilboðinu.</strong> Við förum yfir reksturinn með viðskiptavininum og hvað við leggjum til að smíða, og tilboðið byggist á matinu. Þú safnar sömu upplýsingum og í skrefi 1 — þær eru grunnurinn að matinu — en nefnir ekkert verð, hvorki fyrir matið (það er ókeypis) né fyrir samstarfið sjálft.</p>
+<p><strong>Í Samstarfi kemur ókeypis úttektin á undan tilboðinu.</strong> Við förum yfir reksturinn með viðskiptavininum og hvað við leggjum til að smíða, og tilboðið byggist á úttektinni. Þú safnar sömu upplýsingum og í skrefi 1 — þær eru grunnurinn að úttektinni — en nefnir ekkert verð, hvorki fyrir úttektina (hún er ókeypis) né fyrir samstarfið sjálft.</p>
 <p>Á meðan tilboðið er í vinnslu er það <strong>drög</strong>. Sendu það aldrei sjálf(ur), ekki heldur „bara óformlega í pósti svo þau sjái tölurnar“ — ósamþykkt drög í pósthólfi viðskiptavinar eru loforð sem við höfum ekki gefið.</p>
 <h2>Skref 3: Halli samþykkir og sendir</h2>
 <p>Halli yfirfer verðin, samanburðinn og öll loforð í textanum — og sendir tilboðið sjálfur. Fyrst þá er verðið raunverulegt. Fram að því svarar þú verð- og tímaspurningum svona: „Það kemur í tilboðinu — þið fáið það fljótlega.“</p>
@@ -495,7 +495,7 @@ const GUIDES = [
 <li>Viðmiðunarverðin — uppsetningargjald 390 / 580 / 690 þ.kr. og þjónustusamningur 29 / 59 / 89 þ.kr./mán með 2 / 3 / 5 verkeiningum og einingaverð 6.000 kr. — eru <strong>DRÖG</strong> þar til Halli staðfestir, og máttu aðeins nefnast sem viðmið með þeim fyrirvara og alltaf án VSK.</li>
 <li>Þú gefur aldrei afslátt, semur aldrei um verð og staðfestir aldrei endanlegt verð — það stendur í tilboðinu sem Halli sendir.</li>
 <li>Hvort ónotaðar einingar flytjist milli mánaða er ekki ákveðið — þú lofar engu um það.</li>
-<li><strong>Samstarf hefur ekkert verð fyrr en eftir ókeypis matið.</strong> Þú nefnir enga tölu, ekki heldur „svona í kringum“, og lofar hvorki hvað verður smíðað né hvenær.</li>
+<li><strong>Samstarf hefur ekkert verð fyrr en eftir ókeypis úttektina.</strong> Þú nefnir enga tölu, ekki heldur „svona í kringum“, og lofar hvorki hvað verður smíðað né hvenær.</li>
 <li>Þú metur aldrei sjálf(ur) hve margar verkeiningar verk kostar. Matið kemur úr ferlinu, áður en vinnan hefst.</li>
 </ul>
 <h2>3. Aldrei eiginleika sem eru ekki til</h2>
@@ -519,9 +519,9 @@ const GUIDES = [
     sort_order: 0,
     title: 'Hvað er í hverju þrepi — ítarlega',
     summary:
-      'Nákvæma eiginleikataflan: hvað öll þrep innihalda, hvað bætist við í Verslun og hvað er aðeins í Rekstri. Samstarf er utan töflunnar: þar ræður ókeypis matið. Þetta er heimildin þegar viðskiptavinur spyr „er X innifalið?“ — lofaðu engu sem er ekki hér.',
+      'Nákvæma eiginleikataflan: hvað öll þrep innihalda, hvað bætist við í Verslun og hvað er aðeins í Rekstri. Samstarf er utan töflunnar: þar ræður ókeypis úttektin. Þetta er heimildin þegar viðskiptavinur spyr „er X innifalið?“ — lofaðu engu sem er ekki hér.',
     body: `
-<p>Þessi leið geymir eiginleikatöfluna fyrir þrepin — hún er heimildin þín þegar viðskiptavinur spyr „er þetta innifalið?“. Ef eiginleiki er ekki hér, þá er hann ekki innifalinn og þú lofar honum ekki (sjá <em>Hvað þú lofar aldrei</em>). Verðin eru DRÖG þar til Halli staðfestir, öll án VSK: Vefur 390 þ.kr. uppsetning + 29 þ.kr./mán með 2 verkeiningum, Verslun 580 þ.kr. + 59 þ.kr./mán með 3, Rekstur 690 þ.kr. + 89 þ.kr./mán með 5; einingaverð umfram það 6.000 kr. Hvert þrep inniheldur allt úr þrepinu á undan. Samstarf, fjórða leiðin, er ekki í töflunni: þar er kerfið smíðað utan um rekstur viðskiptavinarins og innihaldið ákveðið eftir ókeypis mat.</p>
+<p>Þessi leið geymir eiginleikatöfluna fyrir þrepin — hún er heimildin þín þegar viðskiptavinur spyr „er þetta innifalið?“. Ef eiginleiki er ekki hér, þá er hann ekki innifalinn og þú lofar honum ekki (sjá <em>Hvað þú lofar aldrei</em>). Verðin eru DRÖG þar til Halli staðfestir, öll án VSK: Vefur 390 þ.kr. uppsetning + 29 þ.kr./mán með 2 verkeiningum, Verslun 580 þ.kr. + 59 þ.kr./mán með 3, Rekstur 690 þ.kr. + 89 þ.kr./mán með 5; einingaverð umfram það 6.000 kr. Hvert þrep inniheldur allt úr þrepinu á undan. Samstarf, fjórða leiðin, er ekki í töflunni: þar er kerfið smíðað utan um rekstur viðskiptavinarins og innihaldið ákveðið eftir ókeypis úttekt.</p>
 <h2>Í öllum þrepum (Vefur, Verslun og Rekstur)</h2>
 <ul>
 <li><strong>Heimasíða og efnisstjórnun</strong> — vefur fyrirtækisins með stjórnborði þar sem viðskiptavinurinn breytir sjálfur texta og myndum, án forritara.</li>
@@ -548,7 +548,7 @@ const GUIDES = [
 <ul>
 <li><strong>Sérsniðnar einingar</strong> ríða á hvaða þrepi sem er — sérþörf þvingar engan upp um þrep.</li>
 <li><strong>Uppsetningargjald</strong> er fast verð eftir þrepi (390 / 580 / 690 þ.kr., DRÖG) og <strong>þjónustusamningur</strong> fylgir öllum þrepum.</li>
-<li><strong>Samstarf</strong> er utan þrepanna: hvað er smíðað og hvað það kostar ræðst af ókeypis mati (sjá <em>Þrepin þrjú</em>). Lofaðu engum eiginleika í Samstarfi fyrr en matið liggur fyrir.</li>
+<li><strong>Samstarf</strong> er utan þrepanna: hvað er smíðað og hvað það kostar ræðst af ókeypis úttekt (sjá <em>Þrepin þrjú</em>). Lofaðu engum eiginleika í Samstarfi fyrr en úttektin liggur fyrir.</li>
 <li>Uppfærslur á kjarnanum berast öllum þrepum jafnt — enginn er skilinn eftir á gamalli útgáfu.</li>
 </ul>
 <p>Munurinn milli þrepa er sem sagt eingöngu <em>hvaða hlutar kerfisins eru opnir</em> — kerfið undir niðri er eitt og hið sama, og uppfærsla milli þrepa er opnun, ekki flutningur.</p>

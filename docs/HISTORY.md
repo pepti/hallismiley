@@ -3342,7 +3342,7 @@ use. The handbook quoted D-001's contract figures in three guides, left the eini
   whether any tier fits, offer the assessment". `fyrsta-samtalid`,
   `tilbodsferlid` (the assessment comes before the offer),
   `hvad-er-i-hverju-threpi` (Samstarf sits outside the feature table),
-  `hvad-thu-lofar-aldrei`, `ordalisti` (Samstarf, Ókeypis mat),
+  `hvad-thu-lofar-aldrei`, `ordalisti` (Samstarf, Ókeypis úttekt),
   `kerfid-i-stuttu-mali` and `velkomin-i-soluteymid` point to it. How a
   Samstarf contract is shaped is left to the offer; D-022 does not say.
 - **Migration `os_003_sales_guides_d022_pricing`**: 25 exact old → new

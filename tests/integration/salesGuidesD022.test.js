@@ -113,10 +113,10 @@ describe('os_003 — sales guides on the D-022 price model, with Samstarf', () =
     expect(tiers.body).toContain('<h2>Rekstur — 690 þ.kr. uppsetning + 89 þ.kr./mán með 5 verkeiningum (DRÖG)</h2>');
     expect(tiers.body).toContain('<strong>6.000 kr. á einingu án VSK</strong> (DRÖG — Halli staðfestir)');
     // Samstarf: its own section, no listed price, the free assessment and when to offer it.
-    expect(tiers.body).toContain('<h2>Samstarf — fjórða leiðin, verð eftir ókeypis mat (DRÖG)</h2>');
+    expect(tiers.body).toContain('<h2>Samstarf — fjórða leiðin, verð eftir ókeypis úttekt (DRÖG)</h2>');
     expect(tiers.body).toContain('Samstarf hefur <strong>ekkert listaverð</strong>');
-    expect(tiers.body).toContain('<h2>Hvenær þú býður ókeypis mat í stað þreps</h2>');
-    expect(tiers.body).toContain('Matið kostar ykkur ekkert.');
+    expect(tiers.body).toContain('<h2>Hvenær þú býður ókeypis úttekt í stað þreps</h2>');
+    expect(tiers.body).toContain('Úttektin kostar ykkur ekkert.');
     expect(tiers.body).toContain('nefnir aldrei verð í Samstarfi');
     const samstarf = tiers.body.slice(tiers.body.indexOf('<h2>Samstarf'));
     expect(samstarf).not.toMatch(/\d+\s*þ\.kr\.|\d\.\d{3} kr\./); // no figure in the Samstarf copy
@@ -125,9 +125,9 @@ describe('os_003 — sales guides on the D-022 price model, with Samstarf', () =
     const table = seedOf('hvad-er-i-hverju-threpi');
     expect(table.body).toContain('Vefur 390 þ.kr. uppsetning + 29 þ.kr./mán með 2 verkeiningum, Verslun 580 þ.kr. + 59 þ.kr./mán með 3, Rekstur 690 þ.kr. + 89 þ.kr./mán með 5');
     expect(table.body).toContain('<li><strong>Samstarf</strong> er utan þrepanna');
-    expect(seedOf('tilbodsferlid').body).toContain('Í Samstarfi kemur ókeypis matið á undan tilboðinu.');
-    expect(seedOf('hvad-thu-lofar-aldrei').body).toContain('Samstarf hefur ekkert verð fyrr en eftir ókeypis matið.');
-    expect(seedOf('ordalisti').body).toContain('<li><strong>Ókeypis mat</strong>');
+    expect(seedOf('tilbodsferlid').body).toContain('Í Samstarfi kemur ókeypis úttektin á undan tilboðinu.');
+    expect(seedOf('hvad-thu-lofar-aldrei').body).toContain('Samstarf hefur ekkert verð fyrr en eftir ókeypis úttektina.');
+    expect(seedOf('ordalisti').body).toContain('<li><strong>Ókeypis úttekt</strong>');
   });
 
   test('turns every untouched D-001 guide into exactly the seed text', async () => {
