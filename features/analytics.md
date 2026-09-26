@@ -26,7 +26,7 @@ paths:
 migrations: [046_analytics]
 since: 2026-08-09
 origin: null
-history: [harvest-ice-b-2026-09-24, harvest2-lane5-2026-09-26]
+history: [harvest-ice-b-2026-09-24, harvest2-lane5-2026-09-26, harvest2-lane9-2026-09-26]
 ---
 
 First-party, cookie-consent-gated page analytics (046): a salted daily visitor hash, page views and the `/admin/analytics` charts (drawn through `chartTheme.js`).

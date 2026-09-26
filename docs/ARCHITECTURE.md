@@ -352,6 +352,15 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Feature doc | — (this section) |
 
 **Rules that must hold**
+- **A refused admin screen leaves its URL, and no admin screen scrolls the page sideways on a phone** ([harvest2-lane9](history.d/2026-09-26-harvest2-lane9-ops.md#harvest2-lane9-2026-09-26)):
+  a role without an admin route's view (or the admin role, for `/admin/roles`,
+  `/admin/monitoring`, `/admin/mcp` — `ADMIN_ONLY_PATHS` in `router.js`) is sent
+  home by the router's early guard, never shown the home page under the admin
+  URL. At 375px nothing in `.admin-shell` widens the page: title rows and
+  toolbars wrap, a table without an `.admin-table-wrap` scrolls inside itself
+  (the phone block at the end of `admin-shell.css`), and grid tracks that hold
+  a chart or a wide child are `minmax(0, 1fr)`, never a bare `1fr`. The role ×
+  route harness (`e2e/roles`) checks every route both ways.
 - **Layout preferences live on the account** ([harvest-ice-b](HISTORY.md#harvest-ice-b-2026-09-24)): `users.page_widths` /
   `aside_widths` (`{ '<page key>' | '*': width }`) and `page_width_motion`
   (111) ride on every session payload like `theme`; a page's key is the
@@ -1958,7 +1967,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Module switches (R4) | `server/config/moduleCatalog.js` (what each switchable module owns: routes, API + upload prefixes, admin views, registry features, tiers), `server/config/modules.js` (the resolved state: the pre-auth `moduleGate`, `isDisabledRoute`, the `<script id="modules">` hand-off), `public/js/utils/modules.js` (its client half); `server/routes/adminModulesRoutes.js` → `/api/v1/admin/modules` (the admin's switches, R5b); `tests/unit/moduleCatalog.test.js`, `tests/integration/moduleFlags.test.js` · e2e `e2e/admin-modules.spec.js` |
 | Migrations tooling | `server/config/schema.js`, `server/scripts/migrate.js`, `bootstrap.js`, `setup-admin.js`, `seed.js`, `cleanup-duplicates.js`, `capture-site-screenshots.js` |
 | Destructive-script guard | `server/scripts/targetGuard.js` (`checkTarget` / `assertSafeTarget`) — called first by `seed-books-demo.js`, `seed-shop.js --reset`, `cleanup-duplicates.js`, `books-replay.js`, `tests/globalSetup.js`, `scripts/drop-test-dbs.js`, `e2e/global-setup.js`; `tests/unit/targetGuard.test.js` |
-| Tests infra | `tests/workerDb.js`, `tests/lib/featureGate.js` (the feature gate core), `tests/lib/locale.js` (the visitor-default helper), `tests/lib/historyAnchors.js` (archive + fragment anchors, one namespace), `e2e/global-setup.js`, `e2e/helpers.js`, `e2e/lib/dbUrl.js`, `e2e/lib/featureGate.js`, `e2e/lib/identity.js`, `e2e/lib/locale.js`; `tests/lib/testDbSweep.js` (test-DB labels + the sweep), `tests/lib/testPg.js` (the throwaway test server seam); `scripts/drop-test-dbs.js`, `scripts/test-pg.js` |
+| Tests infra | `tests/workerDb.js`, `tests/lib/featureGate.js` (the feature gate core), `tests/lib/locale.js` (the visitor-default helper), `tests/lib/historyAnchors.js` (archive + fragment anchors, one namespace), `e2e/global-setup.js`, `e2e/helpers.js`, `e2e/lib/dbUrl.js`, `e2e/lib/featureGate.js`, `e2e/lib/identity.js`, `e2e/lib/locale.js`; the role × route harness `e2e/lib/routes.js` (routes derived from `router.js`), `e2e/lib/routeSmoke.js`, `e2e/lib/roleSession.js`, `e2e/lib/roleMatrix.js`, `e2e/roles/*.spec.js`, `tests/unit/roleRoutes.test.js`; `tests/lib/testDbSweep.js` (test-DB labels + the sweep), `tests/lib/testPg.js` (the throwaway test server seam); `scripts/drop-test-dbs.js`, `scripts/test-pg.js` |
 | Jest | `tests/unit/schema-integrity.test.js`, `database.test.js`, `workerDb.test.js`, `featureGate.test.js`, `errorHandlerDeadlock.test.js`, `errorHandlerAiBusy.test.js`, `migrationIdempotent.test.js`, `ciSkippedShim.test.js`, `workflowsParse.test.js`, `historyFragments.test.js`, `testDbSweep.test.js`; `tests/integration/migrateRunner.test.js`, `testDbSweep.test.js` |
 | CI / deploy | `.github/workflows/ci.yml` (lint · 3 Jest shards · the aggregator), `ci-skipped.yml` (docs-only PR shim), `deploy.yml` (dispatch-only, by digest, production only), `promote.yml`, `secret-cert-watch.yml` (weekly TLS + Key Vault expiry watch; judging in `scripts/expiry-watch.js`, `tests/unit/expiryWatch.test.js`); `scripts/merge-coverage.js`; `Dockerfile` |
 | Migrations | 001, 043 (housekeeping) |
@@ -2018,6 +2027,36 @@ company/                  gitignored: plans, decisions, logs, market-research st
   answered in the standard envelope with the key localised, `Retry-After`
   set, and `{ reason, retryable: true }` for a 429. A 5xx never chooses its
   own message, key or not (`errorHandlerAiBusy.test.js`).
+- **Every instance is on the weekly expiry watch** ([harvest2-lane9](history.d/2026-09-26-harvest2-lane9-ops.md#harvest2-lane9-2026-09-26); ice #90):
+  `.github/workflows/secret-cert-watch.yml` fails when a TLS certificate on a
+  `WATCH_HOSTS` host is inside 21 days (a managed certificate that far in failed
+  to renew) or a `WATCH_KEY_VAULTS` secret is inside 30 days or has no expiry
+  stamp; the judging lives in `scripts/expiry-watch.js` (unit-tested), the
+  workflow only gathers inputs. It reads secret METADATA only (Key Vault
+  Reader, never `secret show`). A half that is not armed (no hosts; no vaults
+  or no Azure secrets) is skipped with a warning, never red, so a downstream
+  without Azure stays green. The engine has no fleet manifest CI can read — the
+  repository variable IS the host list. Every workflow pins its actions to a
+  full commit sha (`workflowsParse.test.js`).
+- **A TEST stack's invented rows never ride a promote** ([harvest2-lane9](history.d/2026-09-26-harvest2-lane9-ops.md#harvest2-lane9-2026-09-26); ice #183):
+  sample rows a TEST stack wants and production must not get go in the
+  product-owned `server/demo/testStackData.js` (idempotent, natural keys,
+  labelled, non-destructive), never in a migration; `testStackSeeder` applies
+  them after `migrate()` on every boot only where `APP_ENV` is exactly `test`
+  (never judged by `NODE_ENV`), the instance is not a demo instance, and the
+  database host/name carries no `prod`/`production`/`live` word; one
+  transaction per dataset, and it never throws. By hand only on a local
+  database (`npm run seed:test-stack`, behind `targetGuard.js`). A demo
+  instance keeps its own seed (`server/demo/seed.js`).
+- **Every route is walked by every role, from the router's own list** ([harvest2-lane9](history.d/2026-09-26-harvest2-lane9-ops.md#harvest2-lane9-2026-09-26); ice #62):
+  `e2e/lib/routes.js` derives the routes, views and guards from `router.js`
+  `ROUTES` and fails when the parse disagrees with `routePatterns.json` or
+  names a view id `adminViews.js` lacks — a route is never added to a hand
+  list. A signed-in role's expectations come from its `roles.view_access` row;
+  a hidden feature or a switched-off module skips its routes with the reason.
+  Its accounts are its own (`e2erole_*`), seeded behind `targetGuard.js`,
+  signed in once per worker (storageState). Console noise it ignores is a
+  short, commented list; a 5xx is always a failure.
 - **A destructive script proves its target first** ([harvest2-lane1a](history.d/2026-09-26-harvest2-lane1a-security.md#harvest2-lane1a-2026-09-26); generalised
   from icelandicstore #370's e2e fixtures guard): anything that deletes, truncates,
   drops or rewrites rows calls `server/scripts/targetGuard.js` before its first
