@@ -1675,6 +1675,14 @@ company/                  gitignored: plans, decisions, logs, market-research st
   and fails loudly; an interrupt hands the drop to a detached cleaner.
   `cleanTables()` DELETEs (FK closure, replica role, sequences reset) —
   TRUNCATE cost 7× the wall time in both durability modes.
+- **Nothing creates a test database the run does not own** ([test-db-followups](history.d/2026-09-26-chore-test-db-hygiene-followups.md#test-db-followups-2026-09-26)):
+  a suite that needs a database of its own takes `createExtraTestDb(suffix)`
+  (the demo-reset test: `…_w<N>_demo_test` — the suffix is exactly `demo`,
+  the reset guard wants it as a word); the one deliberate exception, the
+  sweep's own integration test (`zzsw<pid>_…`, outside every product prefix
+  so the real sweep cannot meet it), drops dead-pid leftovers of itself on
+  the way in. The inventory is in `docs/TESTING.md`. `.wt/` (engine-sync
+  worktrees) is gitignored engine-wide.
 - **A demo instance throws its data away, never a real database** ([demo-instance-2026-09-26](history.d/2026-09-26-feat-demo-mode.md#demo-instance-2026-09-26)):
   `DEMO_INSTANCE=true` is accepted only with `APP_ENV=demo` and `DEMO_DATABASE_NAME`
   equal to the connected database (whose name carries "demo"); `server.js` exits at
