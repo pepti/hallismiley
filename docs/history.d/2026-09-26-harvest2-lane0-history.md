@@ -48,6 +48,17 @@ removal of the `main-gate` tree-match step does not apply, because the engine's 
 already pins the engine's two-array names (shape, uniqueness, strictly increasing). Ice's per-PR `CHANGELOG.md` freeze is not
 ported, because `build-manifest.js` reads the engine's CHANGELOG at release time.
 
+**Review pass** (the new rule, applied to this chunk; no blockers). Fixed on the branch:
+- The link check now scans every `.md` under `docs/` and `features/`, plus PLAN, README and
+  CLAUDE. Each link resolves relative to its own file, and the check accepts `./`/`../` paths,
+  titled links, reference-style links and sibling-fragment links. No existing link was broken.
+- Single-quoted anchors are accepted.
+- A fragment's heading date must be a real calendar date and must equal the date in its filename.
+- `docs/ENGINE-SYNC.md` §6/§7 and the README's Downstreams section now say how history behaves in a
+  sync. That also fixed the README contradicting itself.
+- The review rule names the built-in `code-review` skill. ENGINE-SYNC §8 applies the rule to
+  harvest PRs.
+
 **Owed / for the next sync.** Icelandicstore already has a `docs/history.d/` with its own README,
 and its fragments open with the `##` heading, not an anchor. When ice next merges the engine, the
 README conflicts and the engine's `historyFragments.test.js` fails on ice's fragments. The graft

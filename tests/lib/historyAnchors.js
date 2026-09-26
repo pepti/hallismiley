@@ -17,8 +17,35 @@ const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8').replace(/\r\n/g,
 const ARCHIVE_FILE = 'docs/HISTORY.md';
 const FRAGMENT_DIR = 'docs/history.d';
 
-/** Every `<a id="…"></a>` slug in a document, in order (duplicates kept). */
-const anchorList = (md) => [...md.matchAll(/<a id="([\w-]+)"><\/a>/g)].map((m) => m[1]);
+/** Every `<a id="…"></a>` (or single-quoted `<a id='…'></a>`) slug in a
+ *  document, in order (duplicates kept). */
+const anchorList = (md) => [...md.matchAll(/<a id=(["'])([\w-]+)\1><\/a>/g)].map((m) => m[2]);
+
+// A candidate target: any relative `.md` path (`./`, `../`, folders) with a
+// `#slug`. Whether it is a HISTORY link is decided after resolving it, so a
+// fragment linking a sibling fragment (`./2026-…md#x`) is caught too.
+const TARGET = String.raw`((?:[\w.-]+\/)*[\w.-]+\.md)#([\w-]+)`;
+const isHistoryFile = (p) => p === ARCHIVE_FILE || (p.startsWith(`${FRAGMENT_DIR}/`) && p !== `${FRAGMENT_DIR}/README.md`);
+const TITLE = String.raw`(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?`;
+const INLINE = new RegExp(String.raw`\]\(\s*<?${TARGET}>?${TITLE}\s*\)`, 'g');
+const REFERENCE = new RegExp(String.raw`^[ ]{0,3}\[[^\]]+\]:\s*<?${TARGET}>?${TITLE}\s*$`, 'gm');
+
+/** Every history link in a markdown document, resolved relative to the file
+ *  that holds it (`fromFile`, repo-relative). Inline and reference-style
+ *  links, with or without a title; code (fenced blocks and inline spans) is
+ *  prose about links, not a link, and is skipped. Returns [{ file, id, raw }]. */
+function historyLinks(md, fromFile) {
+  const body = md.replace(/\r\n/g, '\n').replace(/```[\s\S]*?```/g, '').replace(/`[^`\n]*`/g, '');
+  const dir = path.posix.dirname(fromFile);
+  const out = [];
+  for (const re of [INLINE, REFERENCE]) {
+    for (const m of body.matchAll(re)) {
+      const file = path.posix.normalize(path.posix.join(dir, m[1]));
+      if (isHistoryFile(file)) out.push({ file, id: m[2], raw: `${m[1]}#${m[2]}` });
+    }
+  }
+  return out;
+}
 
 /** The fragment files (README excluded), sorted. */
 function fragmentFiles() {
@@ -50,4 +77,4 @@ function duplicateAnchors() {
   return [...seen].filter(([, n]) => n > 1).map(([a]) => a).sort();
 }
 
-module.exports = { ARCHIVE_FILE, FRAGMENT_DIR, read, anchorList, fragmentFiles, anchorsByFile, allAnchors, duplicateAnchors };
+module.exports = { ARCHIVE_FILE, FRAGMENT_DIR, read, anchorList, historyLinks, fragmentFiles, anchorsByFile, allAnchors, duplicateAnchors };

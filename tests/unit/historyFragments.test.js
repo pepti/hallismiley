@@ -19,8 +19,14 @@ const DIR = path.join(ROOT, FRAGMENT_DIR);
 // be stricter than the branch names the estate actually uses (`_` and capitals
 // are both legal in git and both appear in dependabot / older branches).
 const PATTERN = /^\d{4}-\d{2}-\d{2}-[A-Za-z0-9][A-Za-z0-9._-]*\.md$/;
-const ANCHOR_LINE = /^<a id="[\w-]+"><\/a>$/;
+const ANCHOR_LINE = /^<a id=(["'])[\w-]+\1><\/a>$/;
 const HEADING_LINE = /^## (\d{4}-\d{2}-\d{2}) — \S/;
+
+/** YYYY-MM-DD that names a day that exists (2026-02-30 does not). */
+function isCalendarDate(iso) {
+  const d = new Date(`${iso}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === iso;
+}
 
 const lines = (f) => fs.readFileSync(path.join(DIR, f), 'utf8').replace(/\r\n/g, '\n').split('\n');
 
@@ -38,22 +44,27 @@ describe('docs/history.d fragments', () => {
   });
 
   test('every fragment carries a real calendar date', () => {
-    const bad = files.filter((f) => {
-      const iso = f.slice(0, 10);
-      const d = new Date(`${iso}T00:00:00Z`);
-      return Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== iso;
-    });
-    expect(bad).toEqual([]);
+    expect(files.filter((f) => !isCalendarDate(f.slice(0, 10)))).toEqual([]);
   });
 
   test('the first line is the <a id> anchor', () => {
     expect(files.filter((f) => !ANCHOR_LINE.test(lines(f)[0]))).toEqual([]);
   });
 
+  const headingOf = (f) => lines(f).slice(1).find((l) => l.trim() !== '');
+
   test('the next non-empty line is the `## YYYY-MM-DD — <title>` heading', () => {
     const bad = files.filter((f) => {
-      const next = lines(f).slice(1).find((l) => l.trim() !== '');
+      const next = headingOf(f);
       return !next || !HEADING_LINE.test(next);
+    });
+    expect(bad).toEqual([]);
+  });
+
+  test("the heading's date is a real calendar date and equals the filename's", () => {
+    const bad = files.filter((f) => {
+      const m = (headingOf(f) || '').match(HEADING_LINE);
+      return !m || !isCalendarDate(m[1]) || m[1] !== f.slice(0, 10);
     });
     expect(bad).toEqual([]);
   });
@@ -64,7 +75,11 @@ describe('docs/history.d fragments', () => {
     expect(PATTERN.test('harvest2-lane0-history.md')).toBe(false);
     expect(PATTERN.test('2026-09-26-.md')).toBe(false);
     expect(ANCHOR_LINE.test('<a id="harvest2-lane0-2026-09-26"></a>')).toBe(true);
+    expect(ANCHOR_LINE.test("<a id='harvest2-lane0-2026-09-26'></a>")).toBe(true);
+    expect(ANCHOR_LINE.test('<a id="mixed\'></a>')).toBe(false);
     expect(ANCHOR_LINE.test('## 2026-09-26 — x')).toBe(false);
+    expect(isCalendarDate('2026-02-29')).toBe(false);
+    expect(isCalendarDate('2028-02-29')).toBe(true);
     expect(HEADING_LINE.test('## 2026-09-26 — Harvest 2, lane 0')).toBe(true);
     expect(HEADING_LINE.test('## 2026-09-26 - hyphen, not an em dash')).toBe(false);
   });

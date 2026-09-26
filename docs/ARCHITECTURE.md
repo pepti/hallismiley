@@ -1264,7 +1264,9 @@ company/                  gitignored: plans, decisions, logs, market-research st
   archive's and the fragments' slugs are one namespace (a `history:` entry in
   `features/*.md` is a bare slug) and must not repeat; a link names the file
   it points into (`history.d/<file>.md#slug` from `docs/`,
-  `docs/history.d/<file>.md#slug` from `PLAN.md`) and must resolve there.
+  `docs/history.d/<file>.md#slug` from `PLAN.md`) and must resolve there —
+  checked in every doc under docs/ and features/ plus the root PLAN, README
+  and CLAUDE files.
   `historyFragments.test.js` + `architectureIndex.test.js` enforce both.
 - **Every chunk is reviewed before it merges** ([harvest2-lane0](history.d/2026-09-26-harvest2-lane0-history.md#harvest2-lane0-2026-09-26)):
   `/code-review` or the `invariant-reviewer` agent on the branch diff;

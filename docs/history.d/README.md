@@ -23,8 +23,10 @@ conflict with another new file.
 - **The first line is the anchor**, `<a id="<slug>"></a>`, and the next non-empty line is the
   heading, `## YYYY-MM-DD — <title>` (add ` (PR #NNN)` once the PR exists). Then the same kind of
   prose the archive carries: what shipped, why, what was measured, what is still owed.
-- **The slug is unique** across the archive and every fragment, and follows the archive's habit of
-  ending in the date (`harvest2-lane0-2026-09-26`).
+- **The slug is unique** across the archive and every fragment (in a downstream: its own archive,
+  the engine's fragments and its own), and follows the archive's habit of ending in the date
+  (`harvest2-lane0-2026-09-26`). On a collision the newer **fragment** slug is renamed, never an
+  archive anchor (see Downstreams).
 - One fragment per branch. A follow-up branch on the same feature gets its own file.
 - **Never edit `docs/HISTORY.md`** — a later correction to an archived entry goes in a new fragment
   that names the entry's anchor. Code comments that cite "HISTORY.md, 2026-09-15" or
@@ -49,17 +51,27 @@ items to `PLAN.md` → Status, and a feature it adds or changes lists the anchor
 | `features/*.md` frontmatter | `history: [harvest2-lane0-2026-09-26]` — the bare slug; the archive and the fragments are one namespace |
 
 `tests/unit/architectureIndex.test.js` checks that every `HISTORY.md#…` link and every
-`history.d/<file>.md#…` link in `docs/ARCHITECTURE.md`, `PLAN.md` and `docs/API.md` resolves — the
-file exists and the anchor is in that file — and that no slug appears twice across the archive and
+`history.d/<file>.md#…` link (inline, titled or reference-style, relative to the linking file) in
+every `.md` under `docs/` and `features/`, plus `PLAN.md`, `README.md` and `CLAUDE.md`, resolves —
+the file exists and the anchor is in that file (links inside code spans are examples and are
+skipped) — and that no slug appears twice across the archive and
 the fragments. `tests/unit/featureRegistry.test.js` resolves `history:` slugs against the same union
 (`tests/lib/historyAnchors.js`).
 
 ## Downstreams
 
-This folder is engine-owned and arrives in every downstream by `git merge upstream/master`
-(`docs/ENGINE-SYNC.md`). A downstream adds its own chunks here too; its branch names keep the
-filenames apart, and its slugs must not reuse an engine slug (the uniqueness test runs there as
-well — a collision after a sync is fixed by renaming the downstream's slug).
+Same rules as `docs/ENGINE-SYNC.md` §6 (History):
+
+- **The fragments are engine-owned** and arrive in every downstream as new files by
+  `git merge upstream/master`, so they do not conflict. A downstream adds its own fragments here
+  too; its branch names keep the filenames apart.
+- **A downstream's own `docs/HISTORY.md` archive stays its own.** A downstream that keeps one
+  (rekstrarkerfid does) takes ITS side on a conflict there, and lists `docs/HISTORY.md` in its
+  `engine.json` `productPaths` so the merge does that without asking. "Never edit the archive"
+  above means: never append to it — in the engine or in a downstream.
+- **A slug collision** after a sync (the parity tests fail on a repeated `<a id>`) is fixed by
+  renaming the downstream's own fragment slug, and its links, never an archive anchor — old links
+  and code comments cite those.
 
 ## Reading it
 
