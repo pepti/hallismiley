@@ -1,6 +1,8 @@
 /**
  * docs/ARCHITECTURE.md is the per-domain index a feature request starts from,
- * and docs/HISTORY.md holds the dated write-ups its rules link to. Both rot the
+ * and the dated write-ups its rules link to live in docs/HISTORY.md (the
+ * archive, frozen 2026-09-26) and docs/history.d/*.md (one fragment per
+ * branch since then — tests/lib/historyAnchors.js). Both rot the
  * moment nobody checks them, so this test reads the two documents and the tree
  * and asserts, in BOTH directions where a direction exists:
  *
@@ -8,8 +10,11 @@
  *    resolves by basename against the tree, so line layout is irrelevant; an
  *    unknown or ambiguous basename is a failure, never a skip);
  *  - every file in the source directories the index promises to cover is in it;
- *  - the HISTORY index table lists exactly the anchored, dated entries;
- *  - every HISTORY link from ARCHITECTURE, PLAN and API resolves to an anchor;
+ *  - the HISTORY index table lists exactly the archive's anchored, dated
+ *    entries; no slug repeats across the archive and the fragments;
+ *  - every history link (`HISTORY.md#id` or `history.d/<file>.md#id`) in any
+ *    .md under docs/ and features/, PLAN, README and CLAUDE resolves, relative
+ *    to its own file, to a file holding that anchor;
  *  - CLAUDE.md's domain map has exactly one row per numbered ARCHITECTURE
  *    section, and API.md's section links resolve too;
  *  - the migrations ARCHITECTURE cites are exactly the ones schema.js applies;
@@ -24,15 +29,15 @@
 const fs = require('fs');
 const path = require('path');
 const { migrations } = require('../../server/config/schema');
-const { ROOT, TREE_ROOTS, tree, byBase } = require('../lib/sourceTree');
+const { ROOT, TREE_ROOTS, tree, byBase, walk } = require('../lib/sourceTree');
 const { loadFeatures } = require('../../scripts/features-index');
+const historyAnchors = require('../lib/historyAnchors');
 
 const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8').replace(/\r\n/g, '\n');
 
 const ARCH = read('docs/ARCHITECTURE.md');
 const HISTORY = read('docs/HISTORY.md');
 const CLAUDE = read('CLAUDE.md');
-const PLAN = read('PLAN.md');
 const API = read('docs/API.md');
 
 // The tree (walk, roots, byBase) lives in tests/lib/sourceTree.js, shared with
@@ -71,7 +76,7 @@ function indexedPaths(md) {
   return { paths, unknown, ambiguous };
 }
 
-const anchorsIn = (md) => new Set([...md.matchAll(/<a id="([\w-]+)"><\/a>/g)].map((m) => m[1]));
+const anchorsIn = (md) => new Set(historyAnchors.anchorList(md));
 const linkIds = (md, re) => new Set([...md.matchAll(re)].map((m) => m[1]));
 const diff = (a, b) => [...a].filter((x) => !b.has(x)).sort();
 
@@ -129,9 +134,11 @@ describe('every source file the index promises to cover is listed', () => {
   });
 });
 
-describe('docs/HISTORY.md: anchors, dated headings and the index table agree', () => {
+describe('docs/HISTORY.md (the frozen archive): anchors, dated headings and the index table agree', () => {
+  // The index table covers the archive only; fragments in docs/history.d/ are
+  // their own index (filenames sort by date — historyFragments.test.js).
   const anchors = anchorsIn(HISTORY);
-  const dated = new Set([...HISTORY.matchAll(/<a id="([\w-]+)"><\/a>\n## \d{4}-\d{2}-\d{2} — /g)].map((m) => m[1]));
+  const dated = new Set([...HISTORY.matchAll(/<a id=(["'])([\w-]+)\1><\/a>\n## \d{4}-\d{2}-\d{2} — /g)].map((m) => m[2]));
   const tableStart = HISTORY.indexOf('\n## Index\n');
   const tableEnd = HISTORY.indexOf('\n---\n', tableStart);
   const indexLinks = linkIds(HISTORY.slice(tableStart, tableEnd), /\]\(#([\w-]+)\)/g);
@@ -153,22 +160,62 @@ describe('docs/HISTORY.md: anchors, dated headings and the index table agree', (
   });
 });
 
-describe('history links resolve', () => {
-  const anchors = anchorsIn(HISTORY);
-  const sources = {
-    'docs/ARCHITECTURE.md': linkIds(ARCH, /\(HISTORY\.md#([\w-]+)\)/g),
-    'PLAN.md': linkIds(PLAN, /\(docs\/HISTORY\.md#([\w-]+)\)/g),
-    'docs/API.md': linkIds(API, /\(HISTORY\.md#([\w-]+)\)/g),
-  };
-
-  test('the link parsers found links (guard)', () => {
-    expect(sources['docs/ARCHITECTURE.md'].size).toBeGreaterThan(10);
-    expect(sources['PLAN.md'].size).toBeGreaterThan(3);
-    expect(sources['docs/API.md'].size).toBeGreaterThan(3);
+describe('history anchors are one namespace (archive + docs/history.d fragments)', () => {
+  test('parsers found both halves (guard)', () => {
+    expect(historyAnchors.anchorsByFile().get(historyAnchors.ARCHIVE_FILE).size).toBeGreaterThan(15);
+    expect(historyAnchors.fragmentFiles().length).toBeGreaterThan(0);
   });
 
-  test.each(Object.keys(sources))('every HISTORY link in %s is an anchor', (file) => {
-    expect(diff(sources[file], anchors)).toEqual([]);
+  test('no slug appears twice across the archive and the fragments', () => {
+    expect(historyAnchors.duplicateAnchors()).toEqual([]);
+  });
+});
+
+describe('history links resolve', () => {
+  // A link is `HISTORY.md#id` (the archive) or `history.d/<file>.md#id` (a
+  // fragment), resolved relative to the file that holds it (`../`, `./`,
+  // titled and reference-style links included — historyAnchors.historyLinks).
+  // It must name a file that exists AND holds the anchor. Scanned: every .md
+  // under docs/ and features/, plus PLAN.md, README.md and CLAUDE.md.
+  const byFile = historyAnchors.anchorsByFile();
+  // features/ is not a TREE_ROOT (sourceTree.js), so walk it here.
+  const featureTree = new Set();
+  walk('features', featureTree);
+  const mdUnder = (dir) => [...tree, ...featureTree].filter((p) => p.startsWith(`${dir}/`) && p.endsWith('.md'));
+  const files = [...mdUnder('docs'), ...mdUnder('features'), 'PLAN.md', 'README.md', 'CLAUDE.md'].sort();
+  const sources = Object.fromEntries(files.map((f) => [f, historyAnchors.historyLinks(read(f), f)]));
+
+  test('the link parsers found links (guard)', () => {
+    expect(files.length).toBeGreaterThan(60);
+    expect(sources['docs/ARCHITECTURE.md'].length).toBeGreaterThan(10);
+    expect(sources['PLAN.md'].length).toBeGreaterThan(3);
+    expect(sources['docs/API.md'].length).toBeGreaterThan(3);
+    expect(sources['features/testing-infra.md'].length).toBeGreaterThan(0);
+    expect(sources['PLAN.md'].some((l) => l.file.startsWith('docs/history.d/'))).toBe(true);
+  });
+
+  test('every history link resolves to a file that holds the anchor', () => {
+    const bad = [];
+    for (const [file, links] of Object.entries(sources)) {
+      for (const l of links) if (!(byFile.get(l.file) || new Set()).has(l.id)) bad.push(`${file}: ${l.raw}`);
+    }
+    expect([...new Set(bad)].sort()).toEqual([]);
+  });
+
+  test('the link parser handles relative, titled and reference-style links (self-check)', () => {
+    const md = [
+      'a [x](HISTORY.md#one) b [y](../docs/HISTORY.md#two "t") c [z](./history.d/2026-09-26-a.md#three)',
+      "[ref]: history.d/2026-09-26-a.md#four 'title'",
+      '`[code](HISTORY.md#skipped)` and [no-anchor](HISTORY.md) and [other](API.md#x)',
+      '```', '[fenced](HISTORY.md#skipped)', '```',
+    ].join('\n');
+    expect(historyAnchors.historyLinks(md, 'docs/X.md').map((l) => `${l.file}#${l.id}`)).toEqual([
+      'docs/HISTORY.md#one', 'docs/HISTORY.md#two', 'docs/history.d/2026-09-26-a.md#three', 'docs/history.d/2026-09-26-a.md#four',
+    ]);
+    expect(historyAnchors.historyLinks('[p](docs/history.d/f.md#s)', 'PLAN.md')[0].file).toBe('docs/history.d/f.md');
+    // a fragment linking a sibling fragment names no `history.d/` in the path
+    expect(historyAnchors.historyLinks('[s](./2026-09-25-b.md#five)', 'docs/history.d/2026-09-26-a.md').map((l) => l.file))
+      .toEqual(['docs/history.d/2026-09-25-b.md']);
   });
 });
 

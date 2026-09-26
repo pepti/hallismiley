@@ -13,7 +13,8 @@
  *    features, product-prefixed ones only by that product's;
  *  - `domain` is a numbered `## N.` section of docs/ARCHITECTURE.md;
  *  - `owner` equals the folder; ids are unique and equal the filename;
- *  - every `history` anchor exists in docs/HISTORY.md;
+ *  - every `history` anchor exists in docs/HISTORY.md (the archive) or in a
+ *    docs/history.d/ fragment — one namespace (tests/lib/historyAnchors.js);
  *  - `flag`, when set, is a key path of the resolved client config;
  *  - `features/local.json` keys are engine feature ids;
  *  - features/README.md, .engine-paths and .gitattributes equal what
@@ -36,7 +37,6 @@ const allFeatures = idx.loadFeatures(ROOT);
 const features = allFeatures.filter((f) => !f.foreign);
 const engineFeatures = features.filter((f) => f.owner === 'engine');
 const ARCH = read('docs/ARCHITECTURE.md');
-const HISTORY = read('docs/HISTORY.md');
 const PRODUCT = idx.productId(ROOT);
 
 // ------------------------------------------------------------ coverage
@@ -97,7 +97,8 @@ for (const f of features) {
 
 // --------------------------------------------------------------- docs
 const DOMAINS = new Set([...ARCH.matchAll(/^## (\d+)\. /gm)].map((m) => Number(m[1])));
-const ANCHORS = new Set([...HISTORY.matchAll(/<a id="([\w-]+)"><\/a>/g)].map((m) => m[1]));
+// The archive's anchors plus every docs/history.d/ fragment's (2026-09-26).
+const ANCHORS = require('../lib/historyAnchors').allAnchors();
 
 const keyPath = (obj, dotted) => dotted.split('.').reduce((o, k) => (o && typeof o === 'object' && k in o ? o[k] : undefined), obj);
 
@@ -157,7 +158,7 @@ describe('frontmatter shape', () => {
     expect(features.filter((f) => !DOMAINS.has(f.domain)).map((f) => `${f.id}: domain ${f.domain}`)).toEqual([]);
   });
 
-  test('every history anchor exists in HISTORY.md', () => {
+  test('every history anchor exists in HISTORY.md or a history.d fragment', () => {
     const bad = [];
     for (const f of features) for (const h of f.history) if (!ANCHORS.has(h)) bad.push(`${f.id}: ${h}`);
     expect(bad).toEqual([]);

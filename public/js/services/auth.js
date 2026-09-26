@@ -214,6 +214,9 @@ export async function refreshSession() {
   _dispatch();
 }
 
+// Resolves { expired: true } when the cookie belonged to a time-limited login
+// that has run out (the server deleted its sessions, migration 114) — main.js
+// says so once the locale is loaded, instead of silently showing a guest page.
 export async function tryRestoreSession() {
   try {
     const res  = await fetch('/auth/session', { credentials: 'include', cache: 'no-store' });
@@ -222,7 +225,9 @@ export async function tryRestoreSession() {
       _user = data.user;
       _dispatch();
     }
+    return { expired: data.reason === 'account_expired' };
   } catch { /* no session or network error — that's fine */ }
+  return { expired: false };
 }
 
 // ── Registration & email ──────────────────────────────────────────────────────
@@ -491,6 +496,8 @@ export async function adminUpdateUser(userId, updates) {
     role:         'role',
     disabled:     'disable',
     party_access: 'party-access',
+    // Time-limited login (migration 114): ISO date-time, or null to clear.
+    expires_at:   'expiry',
   };
   const [field] = Object.keys(updates);
   const sub = pathByField[field];
