@@ -4,6 +4,7 @@
 const request = require('supertest');
 const app     = require('../../server/app');
 const db      = require('../../server/config/database');
+const Role    = require('../../server/models/Role');
 const {
   createTestAdminUser,
   createTestModeratorUser,
@@ -13,6 +14,31 @@ const {
 } = require('../helpers');
 
 let adminCookie, adminId, modId, userId;
+
+// The DELETE below also removes the non-system roles the MIGRATIONS seeded
+// (solufolk 090, solumadur + verktaki, and whatever a product's own array
+// seeds), and a worker's DB outlives this file: a later suite on the same
+// worker that grants one of them failed on user_roles_role_name_fkey
+// (loginExpiry on master CI 36260175513, 2026-09-26; adminOuterGuard's
+// re-seed of 81567f9 worked around the same leak). So the roles table is
+// snapshotted before the first test and the seeded rows put back after the
+// last — read from the table, never a list of names, so every product's
+// seeds come back.
+let seededRoles;
+beforeAll(async () => {
+  seededRoles = (await db.query('SELECT * FROM roles')).rows;
+});
+
+afterAll(async () => {
+  await cleanTables(); // the users holding this file's custom roles go first
+  await db.query('DELETE FROM roles WHERE is_system = FALSE');
+  await db.query(
+    `INSERT INTO roles SELECT * FROM jsonb_populate_recordset(NULL::roles, $1::jsonb)
+     ON CONFLICT DO NOTHING`,
+    [JSON.stringify(seededRoles)]
+  );
+  Role.invalidateCache();
+});
 
 beforeEach(async () => {
   await cleanTables();

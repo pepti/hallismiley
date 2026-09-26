@@ -19,17 +19,27 @@ const PUBLIC_HOST = new URL(process.env.APP_URL).host;
 const {
   createTestAdminUser, getTestSessionCookie, cleanTables,
 } = require('../helpers');
+const { localePrefix } = require('../lib/locale');
 
 function withEnv(env, fn) {
   const saved = {};
   for (const [k, v] of Object.entries(env)) { saved[k] = process.env[k]; process.env[k] = v; }
-  let app;
-  let tools;
-  jest.isolateModules(() => {
-    app = require('../../server/app');
-    tools = require('../../server/mcp/tools/system');
-  });
-  return Promise.resolve(fn(app, tools)).finally(() => {
+  // The whole case runs inside the isolated registry (isolateModulesAsync, not
+  // isolateModules): a module the app or a tool requires LAZILY (the MCP
+  // environment_info handler's `require('config/modules')`) then resolves in
+  // the registry that was loaded under `env`. With the synchronous form a lazy
+  // require after the block fell through to the file's main registry, so the
+  // case passed only while nothing at the top of this file had loaded
+  // config/modules under the default env first (found 2026-09-26, when a
+  // top-level require of tests/lib/locale did exactly that).
+  return jest.isolateModulesAsync(async () => {
+    const app = require('../../server/app');
+    const tools = require('../../server/mcp/tools/system');
+    // The public IA as THIS app resolved it (the module switches of `env` and
+    // the product's identity.surface) — the same registry instance app.js used.
+    const surface = require('../../server/config/publicSurface');
+    await fn(app, tools, surface);
+  }).finally(() => {
     for (const [k, v] of Object.entries(saved)) {
       if (v === undefined) delete process.env[k]; else process.env[k] = v;
     }
@@ -80,14 +90,21 @@ describe('preset vefur — the core + news', () => {
   });
 
   test('the core still answers', async () => {
-    await withEnv(VEFUR, async (app) => {
+    await withEnv(VEFUR, async (app, _tools, surface) => {
       expect((await request(app).get('/api/v1/admin/leads').set('Cookie', adminCookie)).status).toBe(200);
       expect((await request(app).get('/api/v1/admin/users').set('Cookie', adminCookie)).status).toBe(200);
       expect((await request(app).get('/health')).status).toBe(200);
       // News is in every tier (Halli, 2026-09-24).
       expect((await request(app).get('/api/v1/news')).status).toBe(200);
-      const page = await request(app).get('/is/thjonusta').set('Host', PUBLIC_HOST);
-      expect(page.status).toBe(200);
+      // An indexable page of the core, read from the product's public IA
+      // (identity.surface.nav minus hiddenRoutes and the switched-off modules,
+      // then minus its noindex routes) — never a route literal: a product that
+      // hides /thjonusta (LedgerLink) has other pages. Home when the product
+      // links none: the one public page every product has.
+      const route = [...surface.publicNav().map(e => e.route), ...surface.legalRoutes()]
+        .find(r => !surface.isDeindexedRoute(r)) || '/';
+      const page = await request(app).get(`${localePrefix()}${route}`).set('Host', PUBLIC_HOST);
+      expect([route, page.status]).toEqual([route, 200]);
       expect(page.text).toContain('<meta name="robots" content="index, follow"');
     });
   });

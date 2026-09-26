@@ -110,14 +110,21 @@ test('every card counts exactly the rows its link opens', async () => {
   expect(orders.body.total).toBe(2);
   expect(orders.body.orders).toHaveLength(2);
 
+  // `products` is outside cleanTables()'s users FK closure, so a suite that ran
+  // earlier on this worker may have left sold-out products of its own (seen on
+  // master 2026-09-26: 3 where 2 was expected). The property is scoped
+  // accordingly: the card counts exactly the rows the linked page lists (both
+  // read the whole table), and of THIS suite's products exactly the two that
+  // are out are among them — the in-stock, inactive and bookable ones are not.
   const out = card(body, 'out_of_stock');
-  expect(out).toMatchObject({ count: 2, route: '/admin/inventory?status=out', view: 'inventory' });
+  expect(out).toMatchObject({ route: '/admin/inventory?status=out', view: 'inventory' });
   // The page behind the link filters the watch report's items by status.
   const watch = await request(app).get('/api/v1/admin/shop/reports/inventory').set('Cookie', cookie);
   expect(watch.status).toBe(200);
   const outRows = watch.body.report.items.filter(i => i.status === 'out');
-  expect(outRows).toHaveLength(2);
-  expect(outRows.map(i => i.name).sort()).toEqual(['Vara att-out', 'Vara att-variants']);
+  expect(out.count).toBe(outRows.length);
+  expect(outRows.map(i => i.name).filter(n => n.startsWith('Vara att-')).sort())
+    .toEqual(['Vara att-out', 'Vara att-variants']);
 
   const signups = card(body, 'signups_pending');
   expect(signups).toMatchObject({ count: 2, route: '/admin/users?status=pending', view: 'users' });
