@@ -29,6 +29,10 @@
 const { fetchNamed } = require('../observability/trackedFetch');
 const logger = require('../logger');
 const anthropicAuth = require('./anthropicAuth');
+// Process-wide cap on concurrent paid AI calls (harvest2, ported from
+// icelandicstore #218). The translator fans a big tree out into parallel
+// batches, so every model call takes a slot — queued, never refused outright.
+const aiGate = require('./aiGate');
 
 // Keys that must NEVER be translated when walking a site_content jsonb.
 // Extend as new structural keys are introduced.
@@ -94,6 +98,15 @@ function getTimeout() {
   return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_TIMEOUT_MS;
 }
 
+// How long a call may wait for a free aiGate slot before giving up (the
+// caller then leaves the target locale empty, as for any other failure).
+// Twice the per-call timeout: every call ahead of it finishes or aborts
+// within one timeout of taking its slot, so a queued call is not starved by
+// a race between its wait timer and the release.
+function getQueueWaitMs() {
+  return getTimeout() * 2;
+}
+
 function systemPrompt(format, from = 'en', to = 'is') {
   const fromName = LOCALE_NAMES[from] || 'English';
   const toName   = LOCALE_NAMES[to]   || 'Icelandic';
@@ -141,9 +154,13 @@ function systemPromptForTree(from = 'en', to = 'is') {
   ].join('\n');
 }
 
+// One model call. Returns { text, stopReason } (text null when there is no
+// client or no text block), so a caller that cannot use the reply can log WHY:
+// a `max_tokens` stop is a truncated JSON array, not a model that ignored the
+// prompt.
 async function callModel({ systemText, userText, maxTokens, signal }) {
   const client = getClient();
-  if (!client) return null;
+  if (!client) return { text: null, stopReason: null };
   const model = getModel();
   const res = await client.messages.create({
     model,
@@ -155,9 +172,13 @@ async function callModel({ systemText, userText, maxTokens, signal }) {
 
   // @anthropic-ai/sdk returns content as an array of typed blocks. For
   // non-tool responses we expect a single text block.
-  if (!res || !Array.isArray(res.content)) return null;
+  const stopReason = (res && res.stop_reason) || null;
+  if (!res || !Array.isArray(res.content)) return { text: null, stopReason };
   const textBlock = res.content.find(b => b && b.type === 'text');
-  return textBlock && typeof textBlock.text === 'string' ? textBlock.text.trim() : null;
+  return {
+    text: textBlock && typeof textBlock.text === 'string' ? textBlock.text.trim() : null,
+    stopReason,
+  };
 }
 
 function withTimeout(promiseFactory, timeoutMs) {
@@ -165,6 +186,59 @@ function withTimeout(promiseFactory, timeoutMs) {
   const timer = setTimeout(() => ac.abort(), timeoutMs);
   return promiseFactory(ac.signal)
     .finally(() => clearTimeout(timer));
+}
+
+// A model call inside an aiGate slot. The slot is taken FIRST and the call's
+// own timeout starts once it is held, so time spent queued behind other calls
+// never eats into the model's budget.
+function gatedCall(args) {
+  return aiGate.withQueuedSlot(
+    () => withTimeout((signal) => callModel({ ...args, signal }), getTimeout()),
+    { waitMs: getQueueWaitMs() },
+  );
+}
+
+function tryJsonParse(s) {
+  try {
+    return JSON.parse(s);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The model's reply to a batch as an array, or null. Tolerant of a ```json
+ * fence and of prose around the JSON, which the model occasionally adds
+ * despite the prompt (ported from icelandicstore #216, visionCore.parseItems):
+ * the whole reply first, then its outermost [...] span, then its outermost
+ * {...} span when that object holds exactly one array (a reply shaped
+ * {"translations": [...]}). The caller still checks the length.
+ */
+function parseJsonArray(raw) {
+  if (typeof raw !== 'string') return null;
+  const cleaned = raw
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/, '')
+    .trim();
+  const span = (open, close) => {
+    const i = cleaned.indexOf(open);
+    const j = cleaned.lastIndexOf(close);
+    return i !== -1 && j > i ? cleaned.slice(i, j + 1) : '';
+  };
+  const arrayOf = (v) => {
+    if (Array.isArray(v)) return v;
+    if (v && typeof v === 'object') {
+      const arrays = Object.values(v).filter(Array.isArray);
+      if (arrays.length === 1) return arrays[0];
+    }
+    return null;
+  };
+  for (const candidate of [cleaned, span('[', ']'), span('{', '}')]) {
+    if (!candidate) continue;
+    const arr = arrayOf(tryJsonParse(candidate));
+    if (arr) return arr;
+  }
+  return null;
 }
 
 /**
@@ -179,21 +253,17 @@ async function translate({ text, sourceLocale = 'en', targetLocale = 'is', forma
   const maxTokens = Math.max(256, Math.min(8000, Math.ceil(text.length * 0.7) + 64));
   const started = Date.now();
   try {
-    const out = await withTimeout(
-      (signal) => callModel({
-        systemText: systemPrompt(format, sourceLocale, targetLocale),
-        userText: text,
-        maxTokens,
-        signal,
-      }),
-      getTimeout(),
-    );
+    const { text: out, stopReason } = await gatedCall({
+      systemText: systemPrompt(format, sourceLocale, targetLocale),
+      userText: text,
+      maxTokens,
+    });
     const ms = Date.now() - started;
     if (typeof out === 'string' && out.length > 0) {
       logger.info({ chars: text.length, ms, ok: true }, 'translator.translate');
       return out;
     }
-    logger.warn({ chars: text.length, ms, ok: false }, 'translator.translate empty response');
+    logger.warn({ chars: text.length, ms, ok: false, stopReason }, 'translator.translate empty response');
     return null;
   } catch (err) {
     const ms = Date.now() - started;
@@ -259,28 +329,22 @@ async function translateBatch(strings, { sourceLocale = 'en', targetLocale = 'is
 
   const started = Date.now();
   try {
-    const out = await withTimeout(
-      (signal) => callModel({
-        systemText: systemPromptForTree(sourceLocale, targetLocale),
-        userText: payload,
-        maxTokens,
-        signal,
-      }),
-      getTimeout(),
-    );
-    if (typeof out !== 'string') return null;
+    const { text: out, stopReason } = await gatedCall({
+      systemText: systemPromptForTree(sourceLocale, targetLocale),
+      userText: payload,
+      maxTokens,
+    });
+    if (typeof out !== 'string') {
+      logger.warn({ count: strings.length, stopReason }, 'translator.batch no text in the response');
+      return null;
+    }
 
-    // Model occasionally wraps in ```json … ``` despite instructions.
-    const cleaned = out
-      .replace(/^```(?:json)?\s*/i, '')
-      .replace(/\s*```$/, '')
-      .trim();
-
-    let parsed;
-    try {
-      parsed = JSON.parse(cleaned);
-    } catch (_err) {
-      logger.warn({ preview: cleaned.slice(0, 200) }, 'translator.batch JSON parse failed');
+    const parsed = parseJsonArray(out);
+    if (!parsed) {
+      // stop_reason tells a truncated reply (max_tokens) from one that ignored
+      // the format (end_turn). The preview is admin-authored site copy.
+      logger.warn({ stopReason, rawLength: out.length, preview: out.slice(0, 200) },
+        'translator.batch JSON parse failed');
       return null;
     }
 
@@ -401,5 +465,5 @@ module.exports = {
   translateTree,
   isEnabled,
   // exported for tests
-  _internal: { BLOCK_KEYS, MAX_TREE_DEPTH, collectLeaves, setPath },
+  _internal: { BLOCK_KEYS, MAX_TREE_DEPTH, collectLeaves, setPath, parseJsonArray },
 };

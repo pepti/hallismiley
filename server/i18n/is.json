@@ -287,6 +287,7 @@
   "errors.shop.variantNotFound": "Útgáfa fannst ekki: {id}",
   "errors.shop.notEnoughStock": "Ekki nægar birgðir af {name}",
   "errors.busyRetry": "Einhver annar er að uppfæra þetta núna — reyndu aftur",
+  "errors.ai.busy": "Gervigreindin er upptekin við aðrar beiðnir — reyndu aftur eftir smástund",
   "errors.inventory.insufficientStock": "Ekki nóg á lager fyrir þetta ({name}: {onHand} í hillu, {wanted} þarf). Leiðréttu birgðirnar fyrst.",
   "errors.inventory.stockInvalid": "Birgðir verða að vera heil tala, 0 eða meira",
   "errors.inventory.reasonInvalid": "Veldu gilda ástæðu fyrir birgðabreytingunni (athugasemd má vera 500 stafir að hámarki)",
