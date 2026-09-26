@@ -986,9 +986,9 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Client | `public/js/services/salesGuides.js` |
 | Scripts | `server/scripts/seed-sales-guides.js` |
 | CSS | `public/css/admin-handbok.css` |
-| Jest | `tests/integration/salesGuides.test.js`, `salesGuidesServicesPage.test.js`, `salesGuidesD001.test.js`, `salesGuidesD022.test.js` |
+| Jest | `tests/integration/salesGuides.test.js`, `salesGuidesServicesPage.test.js`, `salesGuidesD001.test.js`, `salesGuidesD022.test.js`, `salesGuidesQueueSpread.test.js` |
 | e2e | `e2e/sales-handbook.spec.js` (+ `e2e/lib/salesUser.js`) |
-| Migrations | 090, 104, os_001, os_003 |
+| Migrations | 090, 104, os_001, os_003, os_004 |
 | Features | [sales-handbook](../features/sales-handbook.md) |
 | Feature doc | `docs/SALES-STAFF.md` |
 
@@ -1017,9 +1017,13 @@ company/                  gitignored: plans, decisions, logs, market-research st
   the guides tell a seller to offer the free assessment instead of quoting a
   tier, and the Samstarf copy carries no figure. It is DRAFT until Halli
   approves it ([handbook-d022-2026-09-26](history.d/2026-09-26-feat-handbook-d022.md#handbook-d022-2026-09-26)).
+- No guide promises a verk waits for "next month's units": a verk bigger than
+  one month's quota is spread over several months or started now with the
+  rest at the einingaverð, the customer's choice agreed before work starts
+  (os_004; [handbook-queue-spread-2026-09-26](history.d/2026-09-26-fix-handbook-queue-spread.md#handbook-queue-spread-2026-09-26)).
 - Onboarding a hire is no code: `/admin/customers` → `solufolk` in `/admin/roles`.
 
-**History**: [sales-staff](HISTORY.md#sales-staff) · [services-page](HISTORY.md#services-page) · [handbook-d001-2026-09-22](HISTORY.md#handbook-d001-2026-09-22) · [handbook-d022-2026-09-26](history.d/2026-09-26-feat-handbook-d022.md#handbook-d022-2026-09-26)
+**History**: [sales-staff](HISTORY.md#sales-staff) · [services-page](HISTORY.md#services-page) · [handbook-d001-2026-09-22](HISTORY.md#handbook-d001-2026-09-22) · [handbook-d022-2026-09-26](history.d/2026-09-26-feat-handbook-d022.md#handbook-d022-2026-09-26) · [handbook-queue-spread-2026-09-26](history.d/2026-09-26-fix-handbook-queue-spread.md#handbook-queue-spread-2026-09-26)
 
 ## 11. Shop — cart, checkout, orders, products, collections, bins, discounts (hidden surface)
 

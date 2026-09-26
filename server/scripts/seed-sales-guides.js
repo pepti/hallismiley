@@ -7,12 +7,14 @@
 //
 // Rows that already exist never see a change made here. When a text below is
 // revised, the same revision reaches seeded rows through a product migration in
-// server/config/product-migrations/os.js (104, os_001, os_003), which rewrites
+// server/config/product-migrations/os.js (104, os_001, os_003, os_004), which rewrites
 // only rows no person has saved (updated_by IS NULL). os_001 (2026-09-22) carried
 // the D-001 price model and the demo instance; os_003 (2026-09-26) carries D-022
 // (29/59/89 þ.kr./mán with 2/3/5 verkeiningar, einingaverð 6.000 kr., the fourth
-// tier Samstarf and the free assessment). tests/integration/salesGuidesD001.test.js
-// and salesGuidesD022.test.js check that this file and the migrations agree.
+// tier Samstarf and the free assessment); os_004 (2026-09-26) makes the queue
+// promise "spread a verk over several months" (a stórt verk is bigger than any
+// month's units). tests/integration/salesGuidesD001.test.js, salesGuidesD022.test.js
+// and salesGuidesQueueSpread.test.js check that this file and the migrations agree.
 require('dotenv').config();
 const { pool } = require('../config/database');
 
@@ -241,11 +243,12 @@ const GUIDES = [
 <li><strong>Meðalstórt verk = 5 einingar</strong> — t.d. ný síða eða nýtt yfirlit í stjórnborði.</li>
 <li><strong>Stórt verk = 20 einingar</strong> — t.d. nýr eiginleiki eða tenging við annað kerfi.</li>
 </ul>
-<p>Til að gera þetta áþreifanlegt: 2 einingar í Vef duga fyrir tveimur litlum verkum á mánuði; 5 einingar í Rekstri duga fyrir fimm litlum verkum eða einu meðalstóru. Stórt verk (20 einingar) er stærra en mánaðarskammtur nokkurs þreps, svo það sem umfram er greiðist á einingaverði — og viðskiptavinurinn sér upphæðina áður en hann samþykkir verkið.</p>
+<p>Til að gera þetta áþreifanlegt: 2 einingar í Vef duga fyrir tveimur litlum verkum á mánuði; 5 einingar í Rekstri duga fyrir fimm litlum verkum eða einu meðalstóru. Stórt verk (20 einingar) er stærra en mánaðarskammtur nokkurs þreps, svo viðskiptavinurinn velur: að dreifa því á einingar næstu mánaða án aukakostnaðar, eða að hefja það strax og greiða það sem umfram er á einingaverði — og hann sér upphæðina áður en hann samþykkir verkið.</p>
 <ul>
 <li><strong>Tilkynning við 80%:</strong> viðskiptavinurinn fær að vita þegar 80% af einingum mánaðarins eru notuð.</li>
 <li><strong>Umfram einingarnar:</strong> klárist einingar mánaðarins greiðir hann fast <strong>einingaverð</strong> fyrir það sem umfram er: <strong>6.000 kr. á einingu án VSK</strong> (DRÖG — Halli staðfestir). Hann fær upphæðina alltaf gefna upp áður en verkið hefst.</li>
-<li><strong>Verk sem ekkert liggur á</strong> má geyma til næsta mánaðar og taka af einingum hans, án aukakostnaðar. Nýjar einingar bætast við um mánaðamót.</li>
+<li><strong>Verk sem ekkert liggur á</strong> má geyma og greiða með einingum næstu mánaða — stærra verk en einn mánuður rúmar má dreifa á fleiri mánuði, án aukakostnaðar. Nýjar einingar bætast við um mánaðamót.</li>
+<li><strong>Dæmi:</strong> viðskiptavinur í Rekstri (5 einingar á mánuði) vill stórt verk (20 einingar). Annaðhvort dreifist verkið á fjóra mánuði og einingar þeirra mánaða fara í það, eða það hefst strax og hann greiðir það sem er umfram einingar mánaðarins á einingaverði: 15 × 6.000 kr. = 90.000 kr. án VSK. Viðskiptavinurinn velur, og samið er um valið áður en vinnan hefst.</li>
 <li>Hvort ónotaðar einingar flytjist yfir á næsta mánuð er ekki ákveðið: DRÖG — Halli staðfestir. Lofaðu engu um það.</li>
 </ul>
 <h2>Að velja þrep í samtali</h2>
@@ -642,3 +645,13 @@ if (require.main === module) {
 // - Still "DRÖG — Halli staðfestir": whether unused units carry over, the cost
 //   of moving up a tier, and how a Samstarf contract is shaped (it comes in the
 //   offer).
+//
+// Revision 2026-09-26 (os_004 — DRAFT, guides unpublished): verk sizes stay
+// 1/5/20 but the D-022 quotas are 2/3/5, so "a verk nobody is waiting for can
+// wait for next month's units" could not hold for a stórt verk. The queue note in
+// threpin-thrju now says such a verk is paid with the units of the coming months,
+// spread over several months if one month cannot hold it; the "Stórt verk"
+// sentence above it names both paths (spread, or start now and pay the rest at
+// the einingaverð); plus a worked example
+// (20 einingar on Rekstur: four months, or start now and pay the rest at the
+// einingaverð; the customer chooses before work starts). Halli, 2026-09-26.
