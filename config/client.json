@@ -28,7 +28,7 @@
         { "route": "/hafa-samband", "labelKey": "nav.hafaSamband" }
       ],
       "hiddenRoutes": ["/party", "/halli", "/about", "/news", "/shop", "/projects", "/contact", "/privacy", "/verkefni"],
-      "hiddenAdminViews": ["products", "collections", "bins", "orders", "discounts", "sales", "pos", "background"],
+      "hiddenAdminViews": ["products", "collections", "bins", "inventory", "receiving", "orders", "discounts", "sales", "pos", "background"],
       "navSignIn": true
     },
     "routes": {

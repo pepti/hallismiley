@@ -58,7 +58,7 @@ export const IDENTITY_DEFAULTS = Object.freeze({
       Object.freeze({ route: '/hafa-samband', labelKey: 'nav.hafaSamband' }),
     ]),
     hiddenRoutes: Object.freeze(['/party', '/halli', '/about', '/news', '/shop', '/projects', '/contact', '/privacy', '/verkefni']),
-    hiddenAdminViews: Object.freeze(['products', 'collections', 'bins', 'orders', 'discounts', 'sales', 'pos', 'background']),
+    hiddenAdminViews: Object.freeze(['products', 'collections', 'bins', 'inventory', 'receiving', 'orders', 'discounts', 'sales', 'pos', 'background']),
     navSignIn: true,
   }),
   // The product's OWN routes' meta (identity-seam-3): route → { titleKey,

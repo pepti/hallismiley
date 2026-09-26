@@ -205,6 +205,19 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
     `--on-accent` by lane 4b or a follow-up.
   - (d) Settled in the master merge: `AdminUsersView.js`'s raw date call is
     on `formatDate`, and the date guard has no pending exceptions left.
+- 2026-09-26: Harvest 2 lane 6a, stock, is on branch `harvest2/lane6a-stock`
+  (not merged): [harvest2-lane6a-2026-09-26](docs/history.d/2026-09-26-harvest2-lane6a-stock.md#harvest2-lane6a-2026-09-26).
+  Inventory Watch + "Fix stock" (ice #13/#15), the stock count as one audited
+  batch (`Inventory.applyBatch`, ice #18) and goods receiving (ice #23,
+  migration `118_goods_receipts`). Open:
+  - (a) **DRAFT strings** (Halli): `admin.nav.inventory`/`receiving`,
+    `adminInventory.*`, `adminStockCount.*`, `adminReceiving.*`, the new
+    `errors.inventory.*` and `errors.receiving.*`, and the receipt PDF labels.
+  - (b) The migration number 118 is provisional; renumber at the Harvest 2
+    merge if the order changes (115–117 are other lanes').
+  - (c) At ice's next graft, engine 118 runs on ice and adds only
+    `goods_receipt_lines.sku` + `inventory_adjustments.batch_id`/`goods_receipt_id`
+    (its CREATEs are no-ops against ice 080) — no alias.
 - Upward harvest from icelandicstore `4694289`, lane 1 (chunks A then B, branch
   `harvest/ice-2026-09-24-ab`, not merged). Chunk A landed on the branch
   ([harvest-ice-a-2026-09-24](docs/HISTORY.md#harvest-ice-a-2026-09-24)): admin

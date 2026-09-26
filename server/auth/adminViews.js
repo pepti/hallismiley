@@ -12,6 +12,11 @@ const ALL = '*';
 const ADMIN_VIEW_IDS = [
   'dashboard', 'products', 'orders', 'collections', 'bins', 'customers', 'discounts', 'sales',
   'analytics', 'background', 'feedback', 'general', 'users', 'roles',
+  // Stock (harvest2-lane6a): Inventory Watch + the stock count, and goods
+  // receiving. Retail ids like 'bins' — owned by the shop module and hidden
+  // here by identity.surface.hiddenAdminViews. Both MOVE stock (through
+  // models/Inventory.js, audited), so granting one is granting that.
+  'inventory', 'receiving',
   // Software updates. Granting this is granting SIGHT of the release channel and
   // the update history — the apply/rollback/settings routes are hard admin-only
   // on top (server/routes/systemRoutes.js), so an ops role can watch a fleet

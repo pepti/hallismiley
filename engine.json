@@ -389,6 +389,36 @@
         "#216 90 s vision timeout, visionCore extraction (no vision in the engine)",
         "#218 shutdown handshake (engine AI calls end inside the 10 s grace), per-controller vision wiring, req.body blob nulling"
       ]
+    },
+    {
+      "rev": null,
+      "date": "2026-09-26",
+      "upstreamCommits": 0,
+      "conflicts": 0,
+      "note": "harvest",
+      "harvestedFrom": "ice@941cf51d",
+      "chunk": "harvest2 lane 6a (stock, receiving)",
+      "commits": [
+        "415151ad (#13 Inventory Watch: inventoryStatus, report, Fix stock)",
+        "56e07ca4 (#15 Inventory Watch load-error message, stricter stock validation)",
+        "bbce630e (#18 EasyScan \"Update inventory\" — the stock count as one batch)",
+        "dcf5c0f9 (#23 goods receiving + supplier-invoice cross-check)",
+        "e9c83de6 (#23 review follow-ups)"
+      ],
+      "branch": "harvest2/lane6a-stock",
+      "features": [
+        "shop-catalog",
+        "goods-receiving"
+      ],
+      "migrations": {
+        "118_goods_receipts": "ice 080_goods_receipts created goods_receipts / goods_receipt_lines / goods_receipt_scans with a superset of these columns (suppliers, eta/etd, confidence, variance_status, a wider status CHECK), so NO alias: on ice every CREATE is a no-op (IF NOT EXISTS) and the entry adds only goods_receipt_lines.sku and inventory_adjustments.batch_id / goods_receipt_id. The engine writes only statuses inside ice's CHECK (draft, finalized, cancelled) and line states inside ice's set. Provisional number (115-117 reserved by other Harvest 2 lanes)."
+      },
+      "trimmed": [
+        "#13 made_to_order exclusion + excluded tally, recipe/build_consume demand, the dashboard stock card, reorder suggestions, the BIN on-hand classifier (no such engine concepts)",
+        "#13/#15 negative stock in Fix stock (the engine keeps stock >= 0)",
+        "#18 one mode per batch (per line here), decrement clamping at 0 (refused here), the recent-activity history panel, moderator-open scan routes (the inventory view gates it)",
+        "#23 suppliers directory + supplier email (emailService is lane 2), fuzzy description matcher matchReceipt.js, new_product creation, the matched/receiving/reconciling/finalizing states (one-transaction finalise instead), ice's own parseXlsx (the engine's productImport reader instead)"
+      ]
     }
   ]
 }

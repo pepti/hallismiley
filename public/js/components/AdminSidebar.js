@@ -112,6 +112,8 @@ export const ADMIN_NAV = [
     { id: 'products',    route: '/admin/shop/products',    labelKey: 'admin.nav.products',    icon: 'tag' },
     { id: 'collections', route: '/admin/shop/collections', labelKey: 'admin.nav.collections', icon: 'layers' },
     { id: 'bins',        route: '/admin/bins',             labelKey: 'admin.nav.bins',        icon: 'box' },
+    { id: 'inventory',   route: '/admin/inventory',        labelKey: 'admin.nav.inventory',   icon: 'activity' },
+    { id: 'receiving',   route: '/admin/receiving',        labelKey: 'admin.nav.receiving',   icon: 'inbox' },
     { id: 'orders',      route: '/admin/shop/orders',      labelKey: 'admin.nav.orders',      icon: 'receipt' },
     { id: 'discounts',   route: '/admin/discounts',        labelKey: 'admin.nav.discounts',   icon: 'percent' },
     { id: 'sales',       route: '/admin/sales',            labelKey: 'admin.nav.sales',       icon: 'chart' },
