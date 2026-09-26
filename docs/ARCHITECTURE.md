@@ -100,16 +100,16 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Routes | `server/routes/authRoutes.js` → `/auth` · `server/routes/userRoutes.js` → `/api/v1/users` · `server/routes/adminRoutes.js` → `/api/v1/admin` (users list/role/disable/expiry/approve/decline/delete, `totp/reset`, `new-password`, `email-health`) · `server/routes/adminRolesRoutes.js` → `/api/v1/admin/roles` |
 | Controllers | `server/controllers/authController.js`, `googleAuthController.js`, `facebookAuthController.js`, `userController.js`, `adminController.js`, `adminRolesController.js` |
 | Models | `server/models/Role.js`, `server/models/UserRole.js` (users are written by the controllers directly) |
-| Services | `server/services/mfaService.js`, `server/services/tokenCleanup.js`; `server/utils/generatePassword.js`, `server/utils/username.js`, `server/utils/placeholderEmail.js` (name-only logins) |
+| Services | `server/services/mfaService.js`, `server/services/tokenCleanup.js`; `server/utils/roleName.js` (role display name → slug, reserved names), `server/utils/generatePassword.js`, `server/utils/username.js`, `server/utils/placeholderEmail.js` (name-only logins) |
 | Auth layer | `server/auth/lucia.js`, `middleware.js`, `accountExpiry.js` (time-limited logins), `roles.js`, `tokens.js`, `adminViews.js`, `requireView.js`, `mfaPolicy.js`, `google.js`, `facebook.js`, `oauthHelpers.js`; `server/utils/adminRole.js`, `server/utils/totp.js`, `server/utils/secretBox.js`; break-glass `server/scripts/reset-admin-totp.js` |
 | Middleware | `server/middleware/softAuth.js`, `server/middleware/csrf.js` |
 | Views | `public/js/views/SignupView.js`, `ProfileView.js`, `ForgotPasswordView.js`, `ResetPasswordView.js`, `VerifyEmailView.js`, `AdminUsersView.js`, `AdminRolesView.js` |
 | Components | `public/js/components/LoginModal.js`, `totpFailure.js`, `mfaReminder.js` (the two-step reminder, mounted by `AdminSidebar.renderAdminShell` and `SellerAreaView`), `OneTimeCredentials.js` (the shown-once username + password), `ExpiryPicker.js` ("Gildir til") |
-| Client | `public/js/services/auth.js`, `sessionGuard.js`, `adminRoles.js`; `public/js/utils/passwordToggle.js`, `safeReturnTo.js`, `avatar.js`, `placeholderEmail.js` |
+| Client | `public/js/services/auth.js`, `sessionGuard.js`, `adminRoles.js`; `public/js/utils/roleLabel.js` (the one role-name helper), `public/js/utils/passwordToggle.js`, `safeReturnTo.js`, `avatar.js`, `placeholderEmail.js` |
 | CSS | `public/css/user-system.css`, `admin-roles.css`, `mfa-reminder.css` |
-| Jest | `tests/integration/auth.test.js`, `auth.google.test.js`, `auth.facebook.test.js`, `auth.socialKillSwitch.test.js`, `users.test.js`, `adminRoles.test.js`, `adminTotp.test.js`, `adminTotpEnforcement.test.js`, `mfaReminder.test.js`, `security.test.js`, `adminOuterGuard.test.js`, `adminNameOnlyLogin.test.js`, `authLoginMetrics.test.js`, `signupEmailNonBlocking.test.js`, `loginExpiry.test.js`; `tests/unit/adminUsersView.client.test.js`, `totp.test.js`, `totpFailure.client.test.js`, `mfaPolicy.test.js`, `mfaProtected.test.js`, `mfaProtectedClient.test.js`, `oauthHelpers.test.js`, `csrf.test.js`, `safeReturnTo.client.test.js`, `rateLimit.test.js`, `rateLimitDecide.test.js`, `rateLimitGuard.client.test.js`, `nameOnlyHelpers.test.js`, `generatePassword.test.js` |
+| Jest | `tests/unit/roleName.test.js`; `tests/integration/auth.test.js`, `auth.google.test.js`, `auth.facebook.test.js`, `auth.socialKillSwitch.test.js`, `users.test.js`, `adminRoles.test.js`, `adminTotp.test.js`, `adminTotpEnforcement.test.js`, `mfaReminder.test.js`, `security.test.js`, `adminOuterGuard.test.js`, `adminNameOnlyLogin.test.js`, `authLoginMetrics.test.js`, `signupEmailNonBlocking.test.js`, `loginExpiry.test.js`; `tests/unit/adminUsersView.client.test.js`, `totp.test.js`, `totpFailure.client.test.js`, `mfaPolicy.test.js`, `mfaProtected.test.js`, `mfaProtectedClient.test.js`, `oauthHelpers.test.js`, `csrf.test.js`, `safeReturnTo.client.test.js`, `rateLimit.test.js`, `rateLimitDecide.test.js`, `rateLimitGuard.client.test.js`, `nameOnlyHelpers.test.js`, `generatePassword.test.js` |
 | e2e | `e2e/auth.spec.js`, `signup-flow.spec.js`, `profile.spec.js`, `admin-totp-enrolment.spec.js` (on the second, `required` e2e server), `mfa-reminder.spec.js`, `admin-user-expiry.spec.js` |
-| Migrations | 002, 003, 009, 012, 020, 021, 041, 056, 060, 061, 065, 082 (admin TOTP), 083/084 (per-account theme), 107 (TOTP secret sealed at rest, expand phase), 109 (`users.mfa_reminder_dismissed_at`, the two-step reminder's "don't show again"), 114 (`users.expires_at`, time-limited logins) |
+| Migrations | 002, 003, 009, 012, 020, 021, 041, 056, 060, 061, 065, 082 (admin TOTP), 083/084 (per-account theme), 107 (TOTP secret sealed at rest, expand phase), 109 (`users.mfa_reminder_dismissed_at`, the two-step reminder's "don't show again"), 114 (`users.expires_at`, time-limited logins), 116 (`roles.label`, a role's display name) |
 | Features | [admin-2fa](../features/admin-2fa.md), [auth-sessions](../features/auth-sessions.md), [rbac-roles](../features/rbac-roles.md), [signup](../features/signup.md), [social-login](../features/social-login.md), [users-admin](../features/users-admin.md) |
 | Feature doc | `docs/API.md` (Authentication), `docs/ADMIN-2FA.md` (mandatory enrolment, the secret at rest, break-glass) |
 
@@ -271,8 +271,56 @@ company/                  gitignored: plans, decisions, logs, market-research st
   `middleware/errorHandler.js` translates the one and passes the other
   through for 4xx only — an untyped error's shape is unchanged
   ([login-expiry-2026-09-26](history.d/2026-09-26-feat-login-expiry.md#login-expiry-2026-09-26)).
+- **A role is created by its display name; its slug never changes**
+  ([harvest2-lane3](history.d/2026-09-26-harvest2-lane3-users.md#harvest2-lane3-2026-09-26)):
+  `POST /admin/roles { label }` — the server derives the slug with
+  `utils/roleName.js` (folded, `-2`/`-3` on a collision, insert-and-retry, never
+  check-then-insert) and keeps the typed text in `roles.label` (migration 116,
+  unique on `lower(label)` where non-empty). `{ name }` alone (a ready slug) is
+  still accepted. The label is editable (`PATCH { label }`, audited as
+  `role.updated` with `label_before`/`label_after`); `roles.name` is the FK
+  target of `users.role` and `user_roles` and is NEVER renamed. Labels are
+  NFKC-cleaned, stripped of control/bidi characters, Latin script only, 2–30
+  characters, and unique after folding — compared against every other role's
+  label, or its slug when it has none.
+- **Reserved role names are compared folded, for the label AND the slug**
+  ([harvest2-lane3](history.d/2026-09-26-harvest2-lane3-users.md#harvest2-lane3-2026-09-26)):
+  the built-ins (`admin`, `moderator`, `user`) and the back-office deny-list in
+  `roleName.js` (anything starting `admin`, administrator, staff, system,
+  kerfi, kerfisstjóri, stjórnandi, starfsmaður, starfsfólk, root, owner,
+  support, notandi…) are 409. The built-ins are named on screen by i18n
+  (`adminRoles.builtin.*`); their label is not editable (400).
+- **Every surface names a role through `public/js/utils/roleLabel.js`**
+  ([harvest2-lane3](history.d/2026-09-26-harvest2-lane3-users.md#harvest2-lane3-2026-09-26)) —
+  the Roles grid, the Members board, the Users-page dropdown, the Profile
+  badge. A slug on screen is a bug, except for a role nobody named.
+- **The `user` role can never GAIN a view**
+  ([harvest2-lane3](history.d/2026-09-26-harvest2-lane3-users.md#harvest2-lane3-2026-09-26)):
+  every account holds it (the trigger mirrors each primary role into
+  `user_roles`), so a view on it would be granted to every customer and make
+  each of them staff through `requireStaff`. `PATCH /admin/roles/user` with a
+  view the role does not already hold is 400 `cannotGrantUserRole`; shrinking
+  it is allowed. The grid shows the column all-off and locked.
+- **The Roles grid** ([harvest2-lane3](history.d/2026-09-26-harvest2-lane3-users.md#harvest2-lane3-2026-09-26)):
+  rows are the server's `grantableViews` (`offeredViewIds()` — switched-on
+  modules only; `roles` is never a row), grouped by sidebar group; columns are
+  roles; `admin` is all-on and locked. Changes collect in a draft and go out
+  as ONE PATCH per changed role through the audited update endpoint, sending
+  the role's full set — a held view of a switched-off module is kept. The save
+  bar counts the DISTINCT people the change reaches (`GET /admin/roles/members`;
+  a person holding two changed roles counts once). At ≤ 600px the grid shows
+  one role column, picked with the kit Combobox.
+- **Deleting a role somebody holds is 409 `roleInUse` with `count`**
+  ([harvest2-lane3](history.d/2026-09-26-harvest2-lane3-users.md#harvest2-lane3-2026-09-26))
+  (`UserRole.holderCount`: memberships plus primaries); the FK violation path
+  answers the same shape.
+- **The Profile badge names the roles the SESSION holds**
+  ([harvest2-lane3](history.d/2026-09-26-harvest2-lane3-users.md#harvest2-lane3-2026-09-26)):
+  `GET /api/v1/users/me` returns `roles: [{ name, label, is_system }]` from
+  `req.user.roles` (after the 2FA withholding), and `user` is only named when
+  it is the only role.
 
-**History**: [base-sync](HISTORY.md#base-sync) · [review-099](HISTORY.md#review-099) · [ui-kit](HISTORY.md#ui-kit) · [harvest-rk-totp-2026-09-23](HISTORY.md#harvest-rk-totp-2026-09-23) · [mfa-optional-2026-09-23](HISTORY.md#mfa-optional-2026-09-23) · [ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23) · [mfa-reminder-2026-09-23](HISTORY.md#mfa-reminder-2026-09-23) · [harvest-ice-a-2026-09-24](HISTORY.md#harvest-ice-a-2026-09-24) · [signup-switch-2026-09-24](HISTORY.md#signup-switch-2026-09-24) · [login-expiry-2026-09-26](history.d/2026-09-26-feat-login-expiry.md#login-expiry-2026-09-26)
+**History**: [base-sync](HISTORY.md#base-sync) · [review-099](HISTORY.md#review-099) · [ui-kit](HISTORY.md#ui-kit) · [harvest-rk-totp-2026-09-23](HISTORY.md#harvest-rk-totp-2026-09-23) · [mfa-optional-2026-09-23](HISTORY.md#mfa-optional-2026-09-23) · [ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23) · [mfa-reminder-2026-09-23](HISTORY.md#mfa-reminder-2026-09-23) · [harvest-ice-a-2026-09-24](HISTORY.md#harvest-ice-a-2026-09-24) · [signup-switch-2026-09-24](HISTORY.md#signup-switch-2026-09-24) · [login-expiry-2026-09-26](history.d/2026-09-26-feat-login-expiry.md#login-expiry-2026-09-26) · [harvest2-lane3-2026-09-26](history.d/2026-09-26-harvest2-lane3-users.md#harvest2-lane3-2026-09-26)
 
 ## 2. Admin shell — sidebar, dashboard, surface hiding, UI kit
 
@@ -882,7 +930,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | CSS | `public/css/admin-accounts.css`, `admin-customers.css` |
 | Jest | `tests/integration/accounts.test.js`, `commission.test.js`, `commissionStatements.test.js`, `adminCustomers.test.js`, `adminCustomerNotes.test.js`, `staffAudit.test.js` |
 | e2e | `e2e/accounts.spec.js` (+ `e2e/lib/accounts.js`) |
-| Migrations | 064 (customer notes), 098, 099, 100, 102 |
+| Migrations | 064 (customer notes), 098, 099, 100, 102, 117 (`users.address1…country`, a customer's own address) |
 | Features | [commission](../features/commission.md), [customer-accounts](../features/customer-accounts.md), [customers-crm](../features/customers-crm.md), [staff-audit](../features/staff-audit.md) |
 | Feature doc | `docs/SALES-STAFF.md`; decisions D-003/D-005/D-019 in `company/DECISIONS.md` |
 
@@ -917,8 +965,45 @@ company/                  gitignored: plans, decisions, logs, market-research st
   must be listed there in the same change (a missing name is refused by
   `record()` and silently dropped by `recordSafe`). `user.deleted` rows name
   their user by `entity_id`, which is not a foreign key, so they outlive it.
+- **One customer: read, edit, invite — held to a PLAIN customer**
+  ([harvest2-lane3](history.d/2026-09-26-harvest2-lane3-users.md#harvest2-lane3-2026-09-26)):
+  `GET`/`PATCH /api/v1/admin/customers/:id` and `POST /:id/invite` are gated
+  on the `customers` view (Halli's scope, 2026-09-26), declared after every
+  fixed path in the router so `/:id` never captures `invite-template`. The
+  model refuses anything but a plain customer (`Customer.findEditable` /
+  `EDITABLE`: role `user`, no extra `user_roles` grant, not a party guest —
+  the `deleteCustomers` guards) with a 404, never 403. That guard is what keeps
+  a non-admin holder of the view from re-pointing a STAFF login's email and
+  taking it over through forgot-password; any new one-customer route uses it.
+- **A customer edit** ([harvest2-lane3](history.d/2026-09-26-harvest2-lane3-users.md#harvest2-lane3-2026-09-26))
+  may change the EMAIL only with admin (`hasRole(req.user, 'admin')`, the
+  session's set); from a `customers`-view-only holder a changed email is 403
+  `email_admin_only` and nothing in the request is written — name, phone and
+  address need only the view (Halli may loosen this). It
+  changes only the keys sent (blank clears to NULL; the email cannot be blank),
+  validated by `validateCustomerContact`; the email is lowercased and must not
+  be another login's (case-insensitive, 409) or a `noemail.invalid`
+  placeholder; the country is a two-letter code, stored upper-case. An email
+  change sets `email_verified = FALSE` and clears any set-password/reset token
+  in flight and `invited_at` (the seller area's proof of a real address), in
+  the same UPDATE. The address lives on the person (`users.address1, address2, city,
+  zip, country`, migration 117 — icelandicstore's column names exactly, so ice
+  aliases its `114_user_address`). Audited `user.updated` with the NAMES of
+  the changed fields only.
+- **The per-customer invite never returns the set-password link**
+  ([harvest2-lane3](history.d/2026-09-26-harvest2-lane3-users.md#harvest2-lane3-2026-09-26)):
+  `POST /:id/invite` mints a fresh token and sends through
+  `utils/inviteSend.sendWelcomeInvite` ("invite sent means sent" —
+  `invited` only on a confirmed, un-redirected send); the answer says what
+  happened and nothing more, because a holder of the `customers` view who got
+  the link could set the customer's password. 409 once the customer has a
+  password, 400 without a real email. Audited `user.invited`
+  (`via: 'customer_invite'`, `sent`). On Add, "Send the invite now" is OFF by
+  default: `send_invite: false` creates the account, mails nothing, returns no
+  link and audits `user.created`; an absent flag keeps the old send-on-create
+  behaviour for API callers.
 
-**History**: [accounts-commission](HISTORY.md#accounts-commission) · [review-099](HISTORY.md#review-099) · [migrations-100-102](HISTORY.md#migrations-100-102)
+**History**: [accounts-commission](HISTORY.md#accounts-commission) · [review-099](HISTORY.md#review-099) · [migrations-100-102](HISTORY.md#migrations-100-102) · [harvest2-lane3-2026-09-26](history.d/2026-09-26-harvest2-lane3-users.md#harvest2-lane3-2026-09-26)
 
 ## 9. Bookkeeping — invoices, VSK, Peppol, intake, settings, replay, payroll
 

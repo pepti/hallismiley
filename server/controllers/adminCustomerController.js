@@ -17,6 +17,8 @@ const { sendWelcomeInvite } = require('../utils/inviteSend');
 const { isPlaceholderEmail, realEmailSql } = require('../utils/placeholderEmail');
 // Time-limited logins (migration 114): the optional `expires_at` on create.
 const { parseExpiresAt } = require('../auth/accountExpiry');
+// The session's role set (after the 2FA withholding) — the email-change gate.
+const { hasRole } = require('../auth/roles');
 
 const MAX_IMPORT_ROWS = 1000;
 // Bulk delete is bounded so one request can't fan out across the whole base.
@@ -188,6 +190,21 @@ const adminCustomerController = {
         return res.status(409).json({ error: t(req.locale, 'errors.auth.emailRegistered'), code: 409 });
       }
       const { user, resetToken } = await Customer.create({ ...c, expiresAt });
+      // `send_invite: false` (the Add form's "Send the invite now" box, OFF by
+      // default — ported from icelandicstore #336): create the account and mail
+      // nothing. No link comes back either — the set-password URL is
+      // credential-equivalent and nobody asked for it; the admin sends later
+      // from the customer's edit dialog (POST /:id/invite), which mints a
+      // fresh token then. An absent flag keeps the old send-on-create shape
+      // for API callers.
+      const wantInvite = !(req.body?.send_invite === false || req.body?.send_invite === 'false');
+      if (!wantInvite) {
+        await staffAudit.recordSafe({
+          ...staffAudit.actorOf(req), action: 'user.created', entityType: 'user', entityId: user.id,
+          summary: { username: user.username, invite: false, ...(expiresAt ? { expires_at: expiresAt.toISOString() } : {}) },
+        });
+        return res.status(201).json({ customer: user, invited: false, invite_sent: false });
+      }
       await staffAudit.recordSafe({
         ...staffAudit.actorOf(req), action: 'user.invited', entityType: 'user', entityId: user.id,
         summary: { username: user.username, ...(expiresAt ? { expires_at: expiresAt.toISOString() } : {}) },
@@ -206,6 +223,144 @@ const adminCustomerController = {
       }
       return next(err);
     }
+  },
+
+  // ── One customer (harvest 2 lane 3; ported from icelandicstore #336) ───────
+  // Gated on the `customers` view (route middleware). Only a plain customer is
+  // found — a staff account, a party guest or an unknown id is 404
+  // (Customer.findEditable); that guard is what keeps a non-admin holder of the
+  // view from re-pointing a staff login's email.
+
+  // GET /api/v1/admin/customers/:id — the fields the edit dialog shows.
+  async getCustomer(req, res, next) {
+    try {
+      const customer = await Customer.findEditable(req.params.id);
+      if (!customer) return res.status(404).json({ error: t(req.locale, 'errors.admin.customerNotFound'), code: 404 });
+      return res.json({ customer });
+    } catch (err) { next(err); }
+  },
+
+  // PATCH /api/v1/admin/customers/:id
+  //   { email?, display_name?, phone?, address1?, address2?, city?, zip?, country? }
+  // A CHANGED email needs admin (403 email_admin_only for a customers-view-only
+  // holder); name, phone and address need only the view.
+  // Only the keys sent are touched; a blank clears to NULL (the email cannot be
+  // blank — validateCustomerContact refuses it); the email is lowercased and
+  // the country upper-cased. 409 when the email is another login's. Audited
+  // `user.updated` with the NAMES of the changed fields, never their values
+  // (staffAudit: summaries carry no contact details).
+  async updateCustomer(req, res, next) {
+    try {
+      const b = req.body || {};
+      const fields = {};
+      for (const k of ['display_name', 'phone', 'address1', 'address2', 'city', 'zip']) {
+        if (k in b) fields[k] = (typeof b[k] === 'string' && b[k].trim()) ? b[k].trim() : null;
+      }
+      if ('country' in b) {
+        const c = typeof b.country === 'string' ? b.country.trim() : '';
+        fields.country = c ? c.toUpperCase() : null;
+      }
+      if ('email' in b) {
+        const email = String(b.email).trim().toLowerCase();
+        // A reserved no-mailbox address is never typed in (utils/placeholderEmail).
+        if (isPlaceholderEmail(email)) {
+          return res.status(400).json({ error: t(req.locale, 'errors.admin.emailInvalid'), code: 400 });
+        }
+        fields.email = email;
+      }
+
+      const existing = await Customer.findEditable(req.params.id);
+      if (!existing) return res.status(404).json({ error: t(req.locale, 'errors.admin.customerNotFound'), code: 404 });
+
+      // Changing the EMAIL needs admin powers (tighten, never loosen — lane 3
+      // review follow-up, 2026-09-26). A new address plus the public
+      // forgot-password flow is a takeover of the customer's login, so the
+      // `customers` view alone may edit name, phone and address but not the
+      // address the login lives on. The role set is the session's (after the
+      // 2FA withholding), exactly what requireRole('admin') reads on the other
+      // customer writes. Re-sending the SAME address is not a change.
+      const emailChanges = 'email' in fields && fields.email !== String(existing.email || '').toLowerCase();
+      if (emailChanges && !hasRole(req.user, 'admin')) {
+        return res.status(403).json({
+          error: t(req.locale, 'errors.admin.customerEmailAdminOnly'), code: 403, reason: 'email_admin_only',
+        });
+      }
+
+      // A new address that is already somebody's login (case-insensitive, like
+      // findExistingEmails) — the UNIQUE index is case-sensitive, so check.
+      if (fields.email && fields.email !== String(existing.email || '').toLowerCase()) {
+        const taken = await Customer.findExistingEmails([fields.email]);
+        if (taken.has(fields.email)) {
+          return res.status(409).json({ error: t(req.locale, 'errors.auth.emailRegistered'), code: 409 });
+        }
+      }
+
+      // The fields whose value actually changes, for the audit line.
+      const changed = Object.keys(fields).filter(k => (fields[k] ?? null) !== (existing[k] ?? null));
+      let customer;
+      try {
+        customer = await Customer.updateContact(existing.id, fields);
+      } catch (err) {
+        if (err && err.code === '23505') {
+          return res.status(409).json({ error: t(req.locale, 'errors.auth.emailRegistered'), code: 409 });
+        }
+        throw err;
+      }
+      if (!customer) return res.status(404).json({ error: t(req.locale, 'errors.admin.customerNotFound'), code: 404 });
+      if (changed.length) {
+        // An email change un-verifies the address and drops any link in flight
+        // and invited_at in the SAME UPDATE (Customer.updateContact).
+        await staffAudit.recordSafe({
+          ...staffAudit.actorOf(req), action: 'user.updated', entityType: 'user', entityId: existing.id,
+          summary: { fields: changed },
+        });
+      }
+      return res.json({ customer });
+    } catch (err) { next(err); }
+  },
+
+  // POST /api/v1/admin/customers/:id/invite — send (or re-send) the welcome
+  // invite to one passwordless customer: the "Send invite" the Add form now
+  // leaves to the admin. Mints a fresh set-password token and sends it through
+  // the one invite path (utils/inviteSend.sendWelcomeInvite — same template,
+  // saved copy and "invite sent means sent" contract as create + bulk).
+  //
+  // Unlike the create path, this answer NEVER carries the set-password link,
+  // not even when the mail did not reach the customer: the endpoint is open to
+  // any holder of the `customers` view, and a link in the response would let
+  // that person set the customer's password themselves. The admin sees what
+  // happened (`invited`, `redirected`, `emailError`) and tries again. An
+  // account that already has a password gets 409 (that is a reset, not an
+  // invite); a name-only login has no mailbox (400).
+  async sendCustomerInvite(req, res, next) {
+    try {
+      const customer = await Customer.findEditable(req.params.id);
+      if (!customer) return res.status(404).json({ error: t(req.locale, 'errors.admin.customerNotFound'), code: 404 });
+      if (!customer.email) {
+        return res.status(400).json({ error: t(req.locale, 'errors.admin.inviteNoEmail'), code: 400 });
+      }
+      if (customer.has_password) {
+        return res.status(409).json({ error: t(req.locale, 'errors.admin.inviteHasPassword'), code: 409 });
+      }
+      const token = await Customer.mintInviteToken(customer.id);
+      if (!token) return res.status(409).json({ error: t(req.locale, 'errors.admin.inviteHasPassword'), code: 409 });
+
+      const { rows: [pref] } = await dbQuery('SELECT preferred_locale FROM users WHERE id = $1', [customer.id]);
+      const sent = await sendWelcomeInvite({
+        user: customer, token, locale: (pref && pref.preferred_locale) || req.locale, context: 'admin sendCustomerInvite',
+      });
+      const invited = !!(sent.emailed && !sent.redirected);
+      await staffAudit.recordSafe({
+        ...staffAudit.actorOf(req), action: 'user.invited', entityType: 'user', entityId: customer.id,
+        summary: { username: customer.username, via: 'customer_invite', sent: invited },
+      });
+      return res.json({
+        invited,
+        emailed: !!sent.emailed,
+        ...(sent.redirected ? { redirected: true } : {}),
+        ...(sent.emailError ? { emailError: sent.emailError } : {}),
+      });
+    } catch (err) { next(err); }
   },
 
   // POST /api/v1/admin/customers/import/preview  { rows } — read-only classify.

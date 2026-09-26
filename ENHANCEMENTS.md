@@ -268,6 +268,14 @@ The survey's headline is that **the harvest is not one-directional**. This repo'
 **Why.** The footer markup lives inside `HomeView.js` here, so most routes have no footer at all. icelandicstore's is a component with an explicit comment about the stale-locale trap it had to solve.
 **Effort.** S. **Risk.** Low.
 
+### 27. ✅ DONE 2026-09-26 (branch) — Roles by name, one permissions grid, edit one customer
+
+**Status.** Approved 2026-09-26 (harvest 2, lane 3) and built on branch `harvest2/lane3-users`: [harvest2-lane3-2026-09-26](docs/history.d/2026-09-26-harvest2-lane3-users.md#harvest2-lane3-2026-09-26). Engine migrations `116_role_label` and `117_user_address` (provisional numbers). All new strings DRAFT.
+
+**What.** From icelandicstore #421/#416/#336: create an admin role by its display name (the server derives the slug; reserved back-office names refused folded), one roles × admin-screens grid with a save bar that counts the people a change reaches, the Profile badge naming the session's roles, 409-with-count on deleting a role in use, and editing one customer's contact details and address with a per-customer invite that never returns the set-password link ("send now" off by default on Add).
+**Why.** The role form refused Icelandic names; the per-role modal made comparing roles hard; the Customers screen could not correct an email or keep an address.
+**Effort.** M. **Risk.** Low: changing a customer's email is admin-only (the `customers` view edits name, phone and address); Halli may loosen it.
+
 ### Reverse queue — this repo → icelandicstore and the base
 
 Where the core is ahead. Queue for icelandicstore's next window; fold into the base PR where it fits.

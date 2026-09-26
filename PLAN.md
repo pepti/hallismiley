@@ -234,6 +234,19 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
     `--on-accent` by lane 4b or a follow-up.
   - (d) Settled in the master merge: `AdminUsersView.js`'s raw date call is
     on `formatDate`, and the date guard has no pending exceptions left.
+- Harvest 2 lane 3 (2026-09-26, branch `harvest2/lane3-users`,
+  [harvest2-lane3-2026-09-26](docs/history.d/2026-09-26-harvest2-lane3-users.md#harvest2-lane3-2026-09-26)):
+  roles created by display name (`116_role_label`), one roles × screens grid,
+  role labels everywhere, the Profile badge, 409-with-count on a role in use,
+  and editing one customer (`117_user_address`, per-customer invite). Open:
+  (a) **every new `adminRoles.*`, `adminCustomers.*`, `profile.roles`,
+  `errors.admin.*` and `validation.*` string is DRAFT** (Halli; listed in the
+  fragment); (b) changing a customer's email is **done, admin-only; Halli may loosen**
+  (the `customers` view edits name, phone and address; a changed email from
+  a non-admin is 403 `email_admin_only`); (c) migration numbers 116/117
+  are provisional; icelandicstore aliases `117_user_address` →
+  `114_user_address` in its next sync; (d) the `user` role can no longer gain
+  a view (a downstream that granted one keeps it until removed).
 - Harvest 2 lane 4b (2026-09-26, branch `harvest2/lane4b-shop-i18n`,
   [harvest2-lane4b-2026-09-26](docs/history.d/2026-09-26-harvest2-lane4b-shop-i18n.md#harvest2-lane4b-2026-09-26)):
   shop VAT per rate, re-priced basket, postcode/phone rules, colour names, no
