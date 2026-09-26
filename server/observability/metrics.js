@@ -70,7 +70,14 @@ const dbQueryDuration = new client.Histogram({
 const authLoginAttempts = new client.Counter({
   name: 'auth_login_attempts_total',
   help: 'Total login attempts',
-  labelNames: ['result'], // success | failure | locked
+  // Incremented by authController (login, login/totp, the party magic link):
+  //   success        — a session was minted
+  //   failure        — wrong username/password, or a wrong/expired 2FA code
+  //   locked         — refused because the account is in its lockout window
+  //   refused        — right password, but the account is disabled / pending / declined
+  //   totp_required  — password ok, a 2FA challenge was issued (the session
+  //                    comes from /login/totp, which counts its own outcome)
+  labelNames: ['result'],
   registers: [register],
 });
 
