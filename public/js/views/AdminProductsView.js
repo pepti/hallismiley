@@ -52,6 +52,7 @@ export class AdminProductsView {
           <div class="admin-shop__header-actions">
             <button type="button" id="admin-products-export" class="admin-shop__primary-btn">${t('adminProducts.export')}</button>
             <button type="button" id="admin-products-import" class="admin-shop__primary-btn">${t('adminProducts.import')}</button>
+            <a class="admin-shop__primary-btn" href="${href('/admin/shop/products/duplicates')}" data-route="/admin/shop/products/duplicates">${t('adminProducts.duplicates')}</a>
             <button type="button" id="admin-new-product" class="admin-shop__primary-btn">${t('adminProducts.newProduct')}</button>
           </div>
         </header>

@@ -1,0 +1,126 @@
+/* Products → Duplicates and the merge preview (AdminProductDuplicatesView,
+   harvest 2 lane 6b; ported from icelandicstore #309/#312). Tokens only
+   (invariant 15): every colour here is a theme token, the signal badges use the
+   status washes, and "the survivor" is marked with weight + a left rule, not
+   a colour of its own. Layout holds at 375 px: tables scroll sideways inside
+   .admin-table-wrap, the group head wraps. */
+
+.pdup-back {
+  display: inline-block;
+  margin-bottom: var(--sp-3);
+  color: var(--accent-ink);
+  text-decoration: none;
+  font-size: 0.875rem;
+}
+.pdup-back:hover, .pdup-back:focus-visible { text-decoration: underline; }
+
+.pdup .admin-title:focus { outline: none; }
+.pdup .admin-title:focus-visible { outline: 2px solid var(--gold); outline-offset: 4px; }
+
+.pdup-status:empty { display: none; }
+.pdup-status {
+  margin: 0 0 var(--sp-4);
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--radius-md);
+  background: var(--success-dim);
+  color: var(--text-primary);
+  border-left: 3px solid var(--success);
+}
+.pdup-count, .pdup-empty, .pdup-hint { color: var(--text-secondary); font-size: 0.875rem; }
+.pdup-count { margin: 0 0 var(--sp-4); }
+
+.pdup-vh {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+.pdup-group {
+  margin: 0 0 var(--sp-6);
+  padding: var(--sp-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-lg);
+}
+.pdup-group__head {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-3);
+}
+.pdup-group__title { margin: 0; font-size: 1rem; display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+
+.pdup-badge {
+  display: inline-block;
+  padding: 0.1rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.72rem; font-weight: 600; letter-spacing: 0.03em;
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-dim);
+  white-space: nowrap;
+}
+/* The weakest signal is the headline: the admin should see the guess, not the proof. */
+.pdup-badge--main { font-weight: 700; color: var(--text-primary); }
+.pdup-badge--main.pdup-badge--barcode,
+.pdup-badge--main.pdup-badge--sku       { background: var(--success-dim); border-color: var(--success); }
+.pdup-badge--main.pdup-badge--identical,
+.pdup-badge--main.pdup-badge--colourway { background: var(--accent-amber-dim); border-color: var(--border); }
+.pdup-badge--main.pdup-badge--similar   { background: var(--warning-dim); border-color: var(--warning); }
+
+.pdup-table th[scope="row"], .pdup-units th[scope="row"] {
+  /* Row headers read as content, not as the muted uppercase column voice. */
+  text-transform: none; letter-spacing: normal; font-size: 0.875rem;
+  color: var(--text-primary); font-weight: 600;
+}
+.pdup-row--survivor th[scope="row"] { box-shadow: inset 3px 0 0 var(--accent-ink); }
+.pdup-name { min-width: 12rem; }
+.pdup-slug { display: block; font-weight: 400; font-size: 0.75rem; color: var(--text-secondary); word-break: break-all; }
+.pdup-draft, .pdup-muted { font-weight: 400; font-size: 0.75rem; color: var(--text-secondary); }
+.pdup-codes code { font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-primary); }
+.pdup-num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.pdup-role { font-size: 0.8rem; color: var(--text-secondary); }
+.pdup-role--master { font-weight: 700; color: var(--accent-ink); }
+.pdup-tell {
+  display: inline-block; margin-top: 2px;
+  font-size: 0.72rem; color: var(--text-primary);
+  background: var(--warning-dim); border-radius: var(--radius-sm); padding: 0 0.4rem;
+}
+
+.pdup-plan {
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--border-dim);
+}
+.pdup-plan__title { margin: 0 0 var(--sp-2); font-size: 1rem; }
+.pdup-plan__title:focus { outline: none; }
+.pdup-plan__title:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.pdup-plan__sum { margin: 0 0 var(--sp-3); color: var(--text-primary); }
+.pdup-target { min-width: 14rem; max-width: 100%; }
+.pdup-target[aria-invalid="true"] { border-color: var(--error); box-shadow: 0 0 0 1px var(--error); }
+
+.pdup-refusals {
+  margin: var(--sp-3) 0;
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--error-dim);
+  border-left: 3px solid var(--error);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+}
+.pdup-refusals__lead { margin: 0 0 var(--sp-1); font-weight: 700; }
+.pdup-refusals ul, .pdup-warnings { margin: 0; padding-left: 1.2rem; }
+.pdup-refusals code { font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-secondary); word-break: break-all; }
+.pdup-warnings {
+  margin: var(--sp-3) 0;
+  padding: var(--sp-2) var(--sp-4) var(--sp-2) calc(var(--sp-4) + 1.2rem);
+  background: var(--warning-dim);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+}
+.pdup-plan__actions { display: flex; gap: var(--sp-3); margin-top: var(--sp-3); }
+
+@media (max-width: 600px) {
+  .pdup-group { padding: var(--sp-3); }
+  .pdup-group__head .btn { width: 100%; }
+  .pdup-plan__actions .btn { width: 100%; }
+  .pdup-target { min-width: 11rem; }
+}

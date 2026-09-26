@@ -72,3 +72,46 @@ export async function adminProductAdjustments(id, { limit = 50 } = {}) {
   if (!res.ok) throw new Error(data.error || 'Failed to load stock history');
   return data; // { adjustments }
 }
+
+// ── Products → Duplicates and the merge (migration 120, ice #309/#311/#312) ──
+
+// An Error carrying the envelope's code/reason/refusals, so the screen can say
+// WHY a merge was refused and re-plan on a stale preview.
+function mergeFailure(res, data, fallback) {
+  const e = new Error(data.error || fallback);
+  e.status = res.status;
+  e.reason = data.reason || null;
+  e.refusals = Array.isArray(data.refusals) ? data.refusals : [];
+  return e;
+}
+
+// GET /products/duplicates → { groups } (read-only suggestions + evidence).
+export async function adminGetProductDuplicates() {
+  const res = await fetch('/api/v1/admin/shop/products/duplicates', { credentials: 'include' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw mergeFailure(res, data, 'Failed to load duplicates');
+  return data;
+}
+
+// POST /products/merge/preview { master, ids, variant_map? } → the plan,
+// `request` and `expect` (writes nothing).
+export async function adminPreviewProductMerge(body, { signal } = {}) {
+  const headers = await getCsrfHeaders();
+  const res = await fetch('/api/v1/admin/shop/products/merge/preview', {
+    method: 'POST', credentials: 'include', headers, body: JSON.stringify(body), signal,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw mergeFailure(res, data, 'Preview failed');
+  return data;
+}
+
+// POST /products/merge { …request, expect } → { mergeIds, masterId, merged, counts, summary }.
+export async function adminMergeProducts(body) {
+  const headers = await getCsrfHeaders();
+  const res = await fetch('/api/v1/admin/shop/products/merge', {
+    method: 'POST', credentials: 'include', headers, body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw mergeFailure(res, data, 'Merge failed');
+  return data;
+}
