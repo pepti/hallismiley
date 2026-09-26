@@ -38,6 +38,9 @@ const ACTIONS = [
   // Settlement (migration 102 / D-019): issuing a statement, recording that it
   // was paid, and any manual move of a balance. All three move real money.
   'commission.statement_issued', 'commission.payout_recorded', 'commission.adjustment_recorded',
+  // Product merge (migration 120, harvest 2 lane 6b): written inside the merge
+  // transaction, entity = the surviving product, summary = the merged ids.
+  'product.merged',
 ];
 
 /**

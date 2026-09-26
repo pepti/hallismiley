@@ -3,6 +3,7 @@ const multer  = require('multer');
 const router  = express.Router();
 
 const adminShop                = require('../controllers/adminShopController');
+const productMerge             = require('../controllers/adminProductMergeController');
 const { requireAuth }          = require('../auth/middleware');
 const { requireView }          = require('../auth/requireView');
 const { csrfProtect }          = require('../middleware/csrf');
@@ -47,6 +48,17 @@ router.post('/products/import/parse-file', csrfProtect, productImportUpload, adm
 router.post('/products/import/preview', ...importBody, adminShop.previewProductImport);
 router.post('/products/import/apply',   csrfProtect, ...importBody, adminShop.applyProductImport);
 router.post('/products/bulk',           csrfProtect, adminShop.bulkUpdateProducts);
+// Products → Duplicates and the merge (migration 120, ported from
+// icelandicstore #309/#311/#312/#315; controllers/adminProductMergeController).
+// Literal paths, so before /products/:id. The preview writes nothing but is a
+// POST with a body, so it carries CSRF like the merge.
+router.get('/products/duplicates',      productMerge.getProductDuplicates);
+router.post('/products/merge/preview',  csrfProtect, productMerge.previewProductMerge);
+router.post('/products/merge',          csrfProtect, productMerge.mergeProducts);
+// A merged product is frozen: every WRITE through its own id (the product, its
+// images, variants and collections) answers 409 product_merged + movedTo.
+router.use('/products/:id', (req, res, next) =>
+  (req.method === 'GET' || req.method === 'HEAD' ? next() : productMerge.refuseMergedProduct(req, res, next)));
 router.get('/products/:id',       adminShop.getProduct);
 router.get('/products/:id/adjustments', adminShop.productAdjustments);
 router.post('/products',          csrfProtect, adminShop.createProduct);

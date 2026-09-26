@@ -317,7 +317,7 @@ router's own gate still applies behind it.
 | `/api/v1/analytics` | `analyticsRoutes.js` | public beacon | `RUNBOOK.md` (Analytics) |
 | `/api/v1/change-requests` | `changeRequestRoutes.js` | `changeRequestGate` (admin, and non-prod or switch on) | — |
 | `/api/v1/system` | `systemRoutes.js` | `/changes` admin (above the module gate); `/version`, `/updates` and the writes are behind the `modules.selfUpdate.enabled` gate (404 when off) and the `updates` view / admin | `docs/SELF-UPDATE.md` |
-| `/api/v1/admin/shop` | `adminShopRoutes.js` | `products` / `collections` / `sales` views per sub-path (hidden retail surface) | — |
+| `/api/v1/admin/shop` | `adminShopRoutes.js` | `products` / `collections` / `sales` views per sub-path (hidden retail surface). Products → Duplicates (migration 120): `GET /products/duplicates` → `{ groups }` (read-only); `POST /products/merge/preview` CSRF `{ master, ids[≤20], variant_map? }` → the plan + `request` + `expect` (writes nothing); `POST /products/merge` CSRF `{ …request, expect }` → `{ mergeIds, masterId, merged, counts, summary }` — 400 `reason` (`master_in_sources` = into itself, `ids_missing`, …), 404 unknown id, 409 `merge_refused` + `refusals[]` / `stale_preview` / `merge_busy` (`Retry-After`), 503 `schema_drift`. Every non-GET under `/products/:id` of a merged product → 409 `product_merged` + `movedTo` | [ARCHITECTURE §11](ARCHITECTURE.md#11-shop--cart-checkout-orders-products-collections-bins-discounts-hidden-surface) · [HISTORY](history.d/2026-09-26-harvest2-lane6b-merge-ai.md#harvest2-lane6b-2026-09-26) |
 | `/api/v1/admin/analytics` | `analyticsAdminRoutes.js` | `analytics` view | — |
 | `/api/v1/admin/general-settings` | `adminGeneralSettingsRoutes.js` | `general` view | — |
 | `/api/v1/admin/discounts` | `adminDiscountRoutes.js` | admin views (hidden) | — |
@@ -346,7 +346,7 @@ router's own gate still applies behind it.
 | `/api/v1/ambience` | `ambienceRoutes.js` | public, always 200 (`{available:false}` on failure) | [ARCHITECTURE §4](ARCHITECTURE.md#4-themes-scenes-ambience) · [HISTORY](HISTORY.md#scene-engine) |
 | `/api/v1/news` | `newsRoutes.js` | public reads (hidden surface) | — |
 | `/api/v1/party` | `partyRoutes.js` | party module (hidden) | — |
-| `/api/v1/shop` | `shopRoutes.js` | public storefront (hidden surface) | — |
+| `/api/v1/shop` | `shopRoutes.js` | public storefront (hidden surface); `GET /products/:slug` of a merged product → 301 `no-store` to the survivor's slug (the SSR `/shop/:slug` page too); checkout naming a merged product → 409 `PRODUCT_MERGED` | [HISTORY](history.d/2026-09-26-harvest2-lane6b-merge-ai.md#harvest2-lane6b-2026-09-26) |
 
 Root-level operational routes: `GET /health` (liveness, no DB), `GET /ready`
 (DB + breaker + memory, `503` when not ready — anyone gets `status`, `uptime`

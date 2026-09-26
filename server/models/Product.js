@@ -32,7 +32,9 @@ class Product {
     const cols  = locale ? publicCols(locale) : COLUMNS;
     // Build WHERE incrementally so the `category` filter is optional and the
     // generated SQL is identical to the old shape when it's not used.
-    const conds  = [];
+    // A merged product (migration 120) is a redirect to its survivor, not a
+    // product: never listed, not even to admins.
+    const conds  = ['merged_into_id IS NULL'];
     const params = [];
     if (activeOnly) conds.push('active = TRUE');
     if (category != null) {
@@ -103,7 +105,7 @@ class Product {
               COALESCE(v.price_isk, p.price_isk) AS price_isk,
               COALESCE(v.price_eur, p.price_eur) AS price_eur,
               v.stock, v.attributes,
-              (p.active AND v.active) AS active
+              (p.active AND v.active) AS active, p.merged_into_id
          FROM product_variants v
          JOIN products p ON p.id = v.product_id
         WHERE v.sku = $1 OR v.barcode = $1
@@ -111,6 +113,19 @@ class Product {
         LIMIT 1`,
       [c]
     );
+    if (v[0] && v[0].merged_into_id) {
+      // A code a product merge retired scans to the live row it went to
+      // (migration 120); the target is never itself merged, so this recursion
+      // is one step deep.
+      const live = await Product._mergedTarget(v[0].variant_id);
+      if (live && live.kind === 'variant' && live.current.sku) return Product.resolveByCode(live.current.sku);
+      if (live && live.kind === 'product') {
+        const { rows: lp } = await db.query(
+          `SELECT id AS product_id, slug, name, sku, bin, barcode, price_isk, price_eur, stock, active
+             FROM products WHERE id = $1`, [live.productId]);
+        if (lp[0]) return Product._scanShape(lp[0], null, null);
+      }
+    }
     if (v[0]) return Product._scanShape(v[0], v[0].variant_id, v[0].attributes);
 
     // 2) Otherwise a product-level sku/barcode match (single-SKU products).
@@ -468,8 +483,10 @@ class Product {
       [list]
     );
     const { rows: vrows } = await db.query(
-      `SELECT id AS variant_id, product_id, sku, bin, price_isk, price_eur, stock, active
-         FROM product_variants WHERE sku = ANY($1::text[])`,
+      `SELECT v.id AS variant_id, v.product_id, v.sku, v.bin, v.price_isk, v.price_eur, v.stock, v.active,
+              p.merged_into_id
+         FROM product_variants v JOIN products p ON p.id = v.product_id
+        WHERE v.sku = ANY($1::text[])`,
       [list]
     );
     // Products first, then variants override the same sku (variant precedence).
@@ -477,9 +494,42 @@ class Product {
       bySku.set(r.sku, { kind: 'product', productId: r.product_id, current: r });
     }
     for (const r of vrows) {
-      bySku.set(r.sku, { kind: 'variant', variantId: r.variant_id, productId: r.product_id, current: r });
+      // A SKU a product merge retired (it stays on the switched-off row under
+      // the merged product) updates the LIVE row it went to, never the hidden
+      // one; one that resolves nowhere matches nothing (migration 120).
+      const live = r.merged_into_id ? await Product._mergedTarget(r.variant_id) : null;
+      if (r.merged_into_id && !live) { bySku.delete(r.sku); continue; }
+      bySku.set(r.sku, live || { kind: 'variant', variantId: r.variant_id, productId: r.product_id, current: r });
     }
     return bySku;
+  }
+
+  // Where a variant of a MERGED product lives now, in findForImport's entry
+  // shape ({ kind, productId, variantId?, current }), or null.
+  static async _mergedTarget(variantId) {
+    const ProductMerge = require('./ProductMerge');
+    const live = await ProductMerge.resolveLive({ variantId });
+    if (!live) return null;
+    if (live.variantId) {
+      const { rows } = await db.query(
+        `SELECT id AS variant_id, product_id, sku, bin, price_isk, price_eur, stock, active
+           FROM product_variants WHERE id = $1`, [live.variantId]);
+      return rows[0] ? { kind: 'variant', variantId: rows[0].variant_id, productId: rows[0].product_id, current: rows[0] } : null;
+    }
+    // Product level only for a product without variants: a switched-off row
+    // that was not part of the merge must not start writing the survivor's
+    // product-level stock.
+    const { rows } = await db.query(
+      `SELECT id AS product_id, sku, bin, price_isk, price_eur, stock, active FROM products
+        WHERE id = $1 AND variant_axes = '[]'::jsonb
+          AND NOT EXISTS (SELECT 1 FROM product_variants WHERE product_id = $1)`, [live.productId]);
+    return rows[0] ? { kind: 'product', productId: rows[0].product_id, current: rows[0] } : null;
+  }
+
+  // The survivor a product was merged into (migration 120), or null.
+  static async mergedInto(id) {
+    const { rows } = await db.query('SELECT merged_into_id FROM products WHERE id = $1', [String(id)]);
+    return rows[0] && rows[0].merged_into_id ? rows[0].merged_into_id : null;
   }
 
   // Resolve a batch of BARCODES for import — the FALLBACK match key when a row's

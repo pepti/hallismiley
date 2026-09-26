@@ -1026,17 +1026,17 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | | |
 |---|---|
 | Routes | `server/routes/shopRoutes.js` → `/api/v1/shop` · `adminShopRoutes.js` → `/api/v1/admin/shop` · `adminDiscountRoutes.js` → `/api/v1/admin/discounts` · `adminBinsRoutes.js` → `/api/v1/admin/bins` |
-| Controllers | `server/controllers/shopController.js`, `adminShopController.js`, `adminDiscountController.js`, `adminBinsController.js` |
-| Models | `server/models/Product.js`, `ProductVariant.js`, `Collection.js`, `Order.js`, `Discount.js`, `Bin.js`, `Inventory.js` (On hand / Committed / Available, the one audited stock writer, the lock order) |
-| Services | `server/services/stripeService.js`, `discountEngine.js`, `orderExport.js` (the orders list as .xlsx); `server/services/productImport/parseFile.js`, `headerMap.js`, `parseXlsx.js`, `parsePdf.js`, `headerHints.js`, `tradeLabels.js`, `variantCell.js`, `variantGroups.js` (the one reader for every product file, harvested from icelandicstore); `server/config/stripe.js`, `shipping.js`; `server/utils/qr.js`, `variantAxis.js` |
+| Controllers | `server/controllers/shopController.js`, `adminShopController.js`, `adminProductMergeController.js` (Products → Duplicates + the merge), `adminDiscountController.js`, `adminBinsController.js` |
+| Models | `server/models/Product.js`, `ProductVariant.js`, `Collection.js`, `Order.js`, `Discount.js`, `Bin.js`, `Inventory.js` (On hand / Committed / Available, the one audited stock writer, the lock order), `ProductMerge.js` (duplicate suggestions, `movedTo`, `resolveLive`) |
+| Services | `server/services/stripeService.js`, `discountEngine.js`, `orderExport.js` (the orders list as .xlsx); `server/services/productImport/parseFile.js`, `headerMap.js`, `parseXlsx.js`, `parsePdf.js`, `headerHints.js`, `tradeLabels.js`, `variantCell.js`, `variantGroups.js` (the one reader for every product file, harvested from icelandicstore); `server/services/productMerge/engine.js`, `planner.js`, `repointSpec.js` (the one-transaction product merge); `server/config/stripe.js`, `shipping.js`; `server/utils/qr.js`, `variantAxis.js`, `productDedupe.js` (the duplicate signals, pure) |
 | Views | `public/js/views/ShopView.js`, `ProductView.js`, `CartView.js`, `CheckoutView.js`, `CheckoutSuccessView.js`, `CheckoutCancelView.js`, `OrderHistoryView.js`, `AdminProductsView.js`, `AdminOrdersView.js`, `AdminOrderDetailView.js`, `AdminCollectionsView.js`, `AdminDiscountsView.js`, `AdminBinsView.js`, `AdminSalesView.js` |
 | Components | `public/js/components/ProductCard.js`, `ShopFilters.js`, `CartIcon.js`, `CurrencySelector.js`, `BarcodeScanner.js` |
 | Client | `public/js/services/cart.js`, `adminProducts.js`, `adminOrders.js`, `adminCollections.js`, `adminDiscounts.js`, `adminBins.js`; `public/js/utils/availability.js` (the basket's sold-out gate), `imageUrl.js` (the `.thumb.webp` URL), `colorLabels.js` (colour names + picker labels as locale keys), `duplicateNames.js` (the SKU chip on a shared name), `vat.js` (the per-rate VAT display — twin of `server/utils/vat.js` + `invoiceService.buildLines`) |
 | Scripts | `server/scripts/seed-shop.js`, `import-products-csv.js` |
 | CSS | `public/css/shop.css`, `admin-products.css`, `admin-orders.css`, `admin-collections.css`, `admin-discounts.css`, `admin-bins.css`, `admin-sales.css`, `barcode-scanner.css` |
-| Jest | `tests/integration/shop.test.js`, `discounts.test.js`, `adminOrderBulk.test.js`, `adminProductImportExport.test.js`, `sections.test.js`, `inventoryThreeNumbers.test.js`, `adminProductImportFile.test.js`, `adminOrderExport.test.js`; `tests/unit/discountEngine.test.js`, `shopFilters.test.js`, `bins-grid.test.js`, `qr.test.js`, `availability.client.test.js`, `productImportParseFile.test.js`, `productImportVariantCell.test.js`, `productImportVariantGroups.test.js`, `parsePdfWorker.test.js`, `imageUrl.test.js` (fixture `tests/fixtures/pdfFixture.js`), `colorLabels.client.test.js`, `duplicateNames.client.test.js`, `vatDisplay.client.test.js`, `cartPriceSync.client.test.js` |
+| Jest | `tests/integration/shop.test.js`, `discounts.test.js`, `adminOrderBulk.test.js`, `adminProductImportExport.test.js`, `sections.test.js`, `inventoryThreeNumbers.test.js`, `adminProductImportFile.test.js`, `adminOrderExport.test.js`, `productMerge.test.js`; `tests/unit/discountEngine.test.js`, `productDedupe.test.js`, `productMergePlanner.test.js`, `shopFilters.test.js`, `bins-grid.test.js`, `qr.test.js`, `availability.client.test.js`, `productImportParseFile.test.js`, `productImportVariantCell.test.js`, `productImportVariantGroups.test.js`, `parsePdfWorker.test.js`, `imageUrl.test.js` (fixture `tests/fixtures/pdfFixture.js`), `colorLabels.client.test.js`, `duplicateNames.client.test.js`, `vatDisplay.client.test.js`, `cartPriceSync.client.test.js` |
 | e2e | `e2e/admin-product-group.spec.js`, `cart-sold-out.spec.js` |
-| Migrations | 022–025, 045, 048, 049, 050, 054, 055, 057, 074, 112, 113, 115 (`orders.notes`, the checkout note) |
+| Migrations | 022–025, 045, 048, 049, 050, 054, 055, 057, 074, 112, 113, 115 (`orders.notes`, the checkout note), 120 (`products.merged_into_id` + `product_merges`, the product merge) |
 | Features | [cart-checkout](../features/cart-checkout.md), [discounts](../features/discounts.md), [orders](../features/orders.md), [shop-catalog](../features/shop-catalog.md) |
 | Feature doc | — (retail is hidden here; ENHANCEMENTS #22, #23, #25 landed by the 2026-09-24 ice harvest, #24 in part; #26 remains) |
 
@@ -1098,6 +1098,29 @@ company/                  gitignored: plans, decisions, logs, market-research st
   `--warning` ink on `--warning-dim`; no status pill carries a colour literal.
 - Bulk product edit (`POST /products/bulk`) sets type, subcategory, VAT rate,
   status and bin only — never name, price or stock.
+- **Merging duplicate products is ONE transaction** ([harvest2-lane6b](history.d/2026-09-26-harvest2-lane6b-merge-ai.md#harvest2-lane6b-2026-09-26),
+  migration 120; `services/productMerge/engine.js`): staff with the `products`
+  view, CSRF, preview → apply with the preview's `expect` token (any change to a
+  row the merge reads → 409 `stale_preview`). Locks follow the stock lock order
+  — the orders that reference the products FOR UPDATE, then parent products,
+  variants, level products FOR UPDATE, each sorted — under a 3 s
+  `lock_timeout` (busy → 409 `merge_busy`). FOR UPDATE, not NO KEY UPDATE: it
+  blocks a checkout's order-line KEY SHARE, and `Order.createWithItems`
+  refuses a line on a merged product afterwards (409 `PRODUCT_MERGED`). Stock
+  moves ONLY through one `Inventory.applyLines` (`merge_out`/`merge_in`, net
+  zero; a zero-delta `merge` row per moved variant). Every FK to
+  products/variants has a policy in `repointSpec.js` and `assertCovers` checks
+  it against `pg_constraint` before any write — a new product FK with no
+  policy switches merging off (503 `schema_drift`); `productMerge.test.js`
+  fails CI until it gets one. Order lines follow their unit (their snapshots
+  keep what the order said); ISSUED invoice lines never change (only drafts
+  follow — the books' trigger would refuse it anyway); inventory history stays
+  where it happened. Nothing is deleted: the merged product becomes inactive
+  with `merged_into_id` and cleared codes, is hidden from every list, frozen
+  for writes (409 `product_merged` + `movedTo`), and its shop API and SSR URLs
+  answer **301 `no-store`** to the survivor (≤ 5 hops, only to a live product).
+  A retired SKU resolves to the live row it went to (import match, scanner).
+  There is no un-merge; `product_merges` is the record.
 - **One reader for every product file** ([harvest-ice-d-2026-09-24](HISTORY.md#harvest-ice-d-2026-09-24)): `POST /products/import/parse-file`
   (multipart, memory-only, 10 MB, CSRF) reads the export's own CSV (csv-parse —
   a quoted line break survives), a supplier .xlsx (exceljs) or a generated PDF
@@ -1131,7 +1154,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
   `sanitizeBody` re-applied; `app.js` skips its global parser for that path.
   Never mount a large parser for an admin path at app level again ([ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23)).
 
-**History**: [harvest-2](HISTORY.md#harvest-2) · [ui-kit](HISTORY.md#ui-kit) · [ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23) · [harvest-ice-c-2026-09-24](HISTORY.md#harvest-ice-c-2026-09-24) · [harvest-ice-d-2026-09-24](HISTORY.md#harvest-ice-d-2026-09-24)
+**History**: [harvest-2](HISTORY.md#harvest-2) · [ui-kit](HISTORY.md#ui-kit) · [ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23) · [harvest-ice-c-2026-09-24](HISTORY.md#harvest-ice-c-2026-09-24) · [harvest-ice-d-2026-09-24](HISTORY.md#harvest-ice-d-2026-09-24) · [harvest2-lane6b](history.d/2026-09-26-harvest2-lane6b-merge-ai.md#harvest2-lane6b-2026-09-26)
 
 ## 12. News, projects, party, bio (hidden portfolio)
 
