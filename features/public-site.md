@@ -36,6 +36,9 @@ paths:
   - public/js/utils/productSite.js
   - public/js/utils/sanitizeHtml.js
   - public/js/utils/slug.js
+  - public/js/utils/contactFormat.js
+  - server/utils/contactFormat.js
+  - tests/unit/contactFormat.test.js
   - public/css/home.css
   - public/css/business-pages.css
   - public/css/contact.css
@@ -59,7 +62,7 @@ paths:
 migrations: [017_home_stats_content]
 since: 2026-08-09
 origin: null
-history: [homepage, r1, services-page, ui-kit, go-live, identity-seam-2-2026-09-23, identity-seam-3-2026-09-23, rk-feed-2026-09-23, ssr-replace-literal-2026-09-23, harvest-ice-e-2026-09-24, legal-pages-site-host-2026-09-25]
+history: [homepage, r1, services-page, ui-kit, go-live, identity-seam-2-2026-09-23, identity-seam-3-2026-09-23, rk-feed-2026-09-23, ssr-replace-literal-2026-09-23, harvest-ice-e-2026-09-24, legal-pages-site-host-2026-09-25, harvest2-lane4b-2026-09-26]
 ---
 
 The SPA shell and the visitor pages: home (video hero), `/thjonusta`, `/um-okkur`, `/hafa-samband` (the contact form that becomes a lead), `/personuvernd`, terms and 404; the router with View Transitions; SSR meta + JSON-LD (`ssrMeta.js`), robots + sitemap, IndexNow pings and the hidden-route policy (`publicSurface.js`). The company copy itself is the product's (`os/company-content`); the engine ships the structure and the JS fallbacks. `HomeView._tiers()/_steps()` are dormant with their i18n.

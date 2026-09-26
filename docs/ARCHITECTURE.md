@@ -294,9 +294,9 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Config / middleware | `server/config/publicSurface.js`, `clientConfig.js`, `identity.js` (the resolved `identity.*` + the head helpers), `appEnv.js`, `version.js`, `paths.js`; `server/middleware/ssrMeta.js` (`ROUTE_META`, `DEFAULT_META` page parts, `SERVICE_OFFERINGS`, JSON-LD incl. the Organization) |
 | Views | `public/js/views/HomeView.js`, `ThjonustaView.js`, `UmOkkurView.js`, `ContactView.js`, `PrivacyView.js`, `TermsView.js`, `NotFoundView.js`; `HalliView.js` serves the hidden `/about`/`/halli` (`AboutView.js` is dead — see Ownership notes) |
 | Components | `public/js/components/NavBar.js` |
-| Client | `public/js/router.js` (lazy `VIEWS` table + `make()`), `routePatterns.json` (the route list the server 404s against; `server/utils/spaRoutes.js` reads it), `navigate.js`, `main.js`, `consent.js`; `public/js/utils/identity.js` (the client half of the identity seam), `reveal.js`, `motion.js`, `productSite.js`, `sanitizeHtml.js`, `slug.js`, `features.js` |
+| Client | `public/js/router.js` (lazy `VIEWS` table + `make()`), `routePatterns.json` (the route list the server 404s against; `server/utils/spaRoutes.js` reads it), `navigate.js`, `main.js`, `consent.js`; `public/js/utils/identity.js` (the client half of the identity seam), `reveal.js`, `motion.js`, `productSite.js`, `sanitizeHtml.js`, `slug.js`, `features.js`; `public/js/utils/contactFormat.js` + its server twin `server/utils/contactFormat.js` (the phone + Icelandic postcode shapes; also used by `validate.js` and the checkout) |
 | CSS | `public/css/home.css`, `business-pages.css`, `contact.css`, `video-section.css`, `fonts.css` |
-| Jest | `tests/integration/contact.test.js`, `contactContentOs002.test.js`, `sitemap.test.js`, `llms.test.js`, `ssrMeta.test.js`, `identityDownstream.test.js`, `spaStatus.test.js`; `tests/unit/routePatterns.test.js`, `routerLazyViews.test.js`; `tests/unit/clientConfig.test.js`, `identityConfig.test.js`, `appEnv.test.js`, `slug.test.js`, `slug.client.test.js`, `outboundAllowlist.test.js`, `version.test.js`, `buildManifest.test.js` |
+| Jest | `tests/integration/contact.test.js`, `contactContentOs002.test.js`, `sitemap.test.js`, `llms.test.js`, `ssrMeta.test.js`, `identityDownstream.test.js`, `spaStatus.test.js`; `tests/unit/routePatterns.test.js`, `routerLazyViews.test.js`, `contactFormat.test.js`; `tests/unit/clientConfig.test.js`, `identityConfig.test.js`, `appEnv.test.js`, `slug.test.js`, `slug.client.test.js`, `outboundAllowlist.test.js`, `version.test.js`, `buildManifest.test.js` |
 | e2e | `e2e/business-routes.spec.js`, `lazy-views.spec.js`, `contact.spec.js`, `navigation.spec.js`, `responsive.spec.js`, `responsive-screenshots.spec.js`, `editable-homepage.spec.js` |
 | Migrations | 005, 017, 091, 092, os_002 (seeded company copy) |
 | Features | [public-site](../features/public-site.md), [company-content](../features/os/company-content.md) (os) |
@@ -349,6 +349,12 @@ company/                  gitignored: plans, decisions, logs, market-research st
   the old product values). A contact-copy change ships with a product
   migration for the seeded rows; `contactContentOs002.test.js` checks the
   ContactView defaults and os_002 agree.
+- **One phone rule, one postcode rule, two twins** ([harvest2-lane4b](history.d/2026-09-26-harvest2-lane4b-shop-i18n.md#harvest2-lane4b-2026-09-26)):
+  `server/utils/contactFormat.js` (`PHONE_RE`, `isValidZip`) and its ESM twin
+  are the only definitions; `validate.js` (signup/profile phone), the contact
+  form (`errors.contact.phoneInvalid`, still `{ errors: [...] }`) and the
+  checkout address import them. `tests/unit/contactFormat.test.js` runs both
+  through one corpus.
 - Homepage = the hallismiley composition: dark video hero, light site below;
   the media-hero surfaces are fixed dark on EVERY theme (`home.css`), which is
   how invariant 15 is met. A new hero clip gets a NEW filename (the `public/`
@@ -547,6 +553,12 @@ company/                  gitignored: plans, decisions, logs, market-research st
   both interpolations (`server/i18n/index.js`, `public/js/i18n/i18n.js`)
   pass a replacer function, so `$&`, `$'` and `$$` in a name or a config
   string are never expanded as replacement patterns.
+- **No English literal reaches a page through module state** ([harvest2-lane4b](history.d/2026-09-26-harvest2-lane4b-shop-i18n.md#harvest2-lane4b-2026-09-26)):
+  a default-copy object is BUILT at render through `t()` (ProductView's
+  `defaultChrome()`), never a module-level object of literals — the locale table
+  is not loaded when a module is first evaluated. Label maps hold locale KEYS
+  (`utils/colorLabels.js`). Static chrome outside `#app` (the skip link, the nav
+  landmark's `aria-label`) is re-translated on `localechange`.
 - **Tests assert the visitor default, not Icelandic** ([identity-seam-2](HISTORY.md#identity-seam-2-2026-09-23)):
   `tests/lib/locale.js` (`PUBLIC_DEFAULT_LOCALE`, `tx()`, `tClient()`,
   `localePrefix()`; `e2e/lib/locale.js` re-exports it) is where an engine
@@ -841,10 +853,10 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Services | `server/services/stripeService.js`, `discountEngine.js`, `orderExport.js` (the orders list as .xlsx); `server/services/productImport/parseFile.js`, `headerMap.js`, `parseXlsx.js`, `parsePdf.js`, `headerHints.js`, `tradeLabels.js`, `variantCell.js`, `variantGroups.js` (the one reader for every product file, harvested from icelandicstore); `server/config/stripe.js`, `shipping.js`; `server/utils/qr.js`, `variantAxis.js` |
 | Views | `public/js/views/ShopView.js`, `ProductView.js`, `CartView.js`, `CheckoutView.js`, `CheckoutSuccessView.js`, `CheckoutCancelView.js`, `OrderHistoryView.js`, `AdminProductsView.js`, `AdminOrdersView.js`, `AdminOrderDetailView.js`, `AdminCollectionsView.js`, `AdminDiscountsView.js`, `AdminBinsView.js`, `AdminSalesView.js` |
 | Components | `public/js/components/ProductCard.js`, `ShopFilters.js`, `CartIcon.js`, `CurrencySelector.js`, `BarcodeScanner.js` |
-| Client | `public/js/services/cart.js`, `adminProducts.js`, `adminOrders.js`, `adminCollections.js`, `adminDiscounts.js`, `adminBins.js`; `public/js/utils/availability.js` (the basket's sold-out gate), `imageUrl.js` (the `.thumb.webp` URL), `colorLabels.js` (colour names + picker labels as locale keys) |
+| Client | `public/js/services/cart.js`, `adminProducts.js`, `adminOrders.js`, `adminCollections.js`, `adminDiscounts.js`, `adminBins.js`; `public/js/utils/availability.js` (the basket's sold-out gate), `imageUrl.js` (the `.thumb.webp` URL), `colorLabels.js` (colour names + picker labels as locale keys), `duplicateNames.js` (the SKU chip on a shared name), `vat.js` (the per-rate VAT display — twin of `server/utils/vat.js` + `invoiceService.buildLines`) |
 | Scripts | `server/scripts/seed-shop.js`, `import-products-csv.js` |
 | CSS | `public/css/shop.css`, `admin-products.css`, `admin-orders.css`, `admin-collections.css`, `admin-discounts.css`, `admin-bins.css`, `admin-sales.css`, `barcode-scanner.css` |
-| Jest | `tests/integration/shop.test.js`, `discounts.test.js`, `adminOrderBulk.test.js`, `adminProductImportExport.test.js`, `sections.test.js`, `inventoryThreeNumbers.test.js`, `adminProductImportFile.test.js`, `adminOrderExport.test.js`; `tests/unit/discountEngine.test.js`, `shopFilters.test.js`, `bins-grid.test.js`, `qr.test.js`, `availability.client.test.js`, `productImportParseFile.test.js`, `productImportVariantCell.test.js`, `productImportVariantGroups.test.js`, `parsePdfWorker.test.js`, `imageUrl.test.js` (fixture `tests/fixtures/pdfFixture.js`), `colorLabels.client.test.js` |
+| Jest | `tests/integration/shop.test.js`, `discounts.test.js`, `adminOrderBulk.test.js`, `adminProductImportExport.test.js`, `sections.test.js`, `inventoryThreeNumbers.test.js`, `adminProductImportFile.test.js`, `adminOrderExport.test.js`; `tests/unit/discountEngine.test.js`, `shopFilters.test.js`, `bins-grid.test.js`, `qr.test.js`, `availability.client.test.js`, `productImportParseFile.test.js`, `productImportVariantCell.test.js`, `productImportVariantGroups.test.js`, `parsePdfWorker.test.js`, `imageUrl.test.js` (fixture `tests/fixtures/pdfFixture.js`), `colorLabels.client.test.js`, `duplicateNames.client.test.js`, `vatDisplay.client.test.js`, `cartPriceSync.client.test.js` |
 | e2e | `e2e/admin-product-group.spec.js`, `cart-sold-out.spec.js` |
 | Migrations | 022–025, 045, 048, 049, 050, 054, 055, 057, 074, 112, 113 |
 | Features | [cart-checkout](../features/cart-checkout.md), [discounts](../features/discounts.md), [orders](../features/orders.md), [shop-catalog](../features/shop-catalog.md) |
@@ -878,6 +890,29 @@ company/                  gitignored: plans, decisions, logs, market-research st
 - Checkout `required` must be re-applied after `syncShipping()` ([ui-kit](HISTORY.md#ui-kit)).
 - The shop search box toggles its buttons with `[hidden]` and never repaints
   under the typist (`ShopFilters._syncSearchControls`).
+- **The VAT shown is the VAT the invoice books** ([harvest2-lane4b](history.d/2026-09-26-harvest2-lane4b-shop-i18n.md#harvest2-lane4b-2026-09-26)):
+  the cart, the checkout and the admin order page print "Þar af VSK n%" per
+  rate UNDER the total (prices are VAT-inclusive), from `public/js/utils/vat.js`
+  — a twin of `server/utils/vat.js` and of `invoiceService.buildLines` (line at
+  its product's rate, shipping 24 %, a discount spread in proportion, an order
+  shipped abroad zero-rated on goods and shipping, a service keeps its rate).
+  `tests/unit/vatDisplay.client.test.js` holds all three together; change one,
+  change the others. Never a fixed "includes 24% VAT" sentence. The rate
+  reaches the browser in the public catalogue (`Product.publicCols`, both
+  locales) and on `Order.listItems`.
+- **The basket is re-priced from the catalogue on every cart/checkout load**
+  (`cart.syncPrices`, ice #343): the charge is the server's current price, so
+  the page shows it and says which lines moved. A payload without prices never
+  wipes a stored one. Cart lines carry `vatRate` + `isService`; a line stored
+  before they did gets them from the same sync.
+- **An Icelandic shipping address needs a three-digit postnúmer; abroad the
+  postcode is free text**; a phone, when given, matches the shared `PHONE_RE`
+  (`validate.validateCheckoutContact` on `POST /shop/checkout`, the client
+  twin in `CheckoutView`; `utils/contactFormat.js`).
+- A name two different products share gets the SKU chip on the card
+  (`utils/duplicateNames.js`); rows of one product never collide.
+- "Needs action" order pills (not paid, not sent, partly sent) are the
+  `--warning` ink on `--warning-dim`; no status pill carries a colour literal.
 - Bulk product edit (`POST /products/bulk`) sets type, subcategory, VAT rate,
   status and bin only — never name, price or stock.
 - **One reader for every product file** ([harvest-ice-d-2026-09-24](HISTORY.md#harvest-ice-d-2026-09-24)): `POST /products/import/parse-file`
