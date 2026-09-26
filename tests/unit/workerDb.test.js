@@ -106,6 +106,29 @@ describe('scopedTestDbName', () => {
     expect(INFIX_RESERVE).toBe(17);
     expect(scoped).toBe(`${P}_${'x'.repeat(room)}_test`);
   });
+  test('a slug that ends like a run infix gets `_b`, so no base\'s run pattern matches another branch', () => {
+    expect(scopedTestDbName(BASE, 'feat/x-w2')).toBe(`${P}_feat_x_w2_b_test`);
+    expect(scopedTestDbName(BASE, 'feat/x-tmpl')).toBe(`${P}_feat_x_tmpl_b_test`);
+    expect(scopedTestDbName(BASE, 'w2')).toBe(`${P}_w2_b_test`);
+    expect(scopedTestDbName(BASE, 'feat/w2x')).toBe(`${P}_feat_w2x_test`);
+    const other = scopedTestDbName(BASE, 'feat/x-w2');
+    const theirs = [templateDbName(other), workerDbUrl(1, `postgresql://u:p@h/${other}`).name];
+    for (const base of [`${P}_feat_x_test`, BASE]) {
+      for (const n of theirs) expect(runDbPattern(base).test(n)).toBe(false);
+    }
+    // At the trim point too: still fits, still ends in _b.
+    const long = scopedTestDbName(BASE, `${'z'.repeat(80)}_w2`);
+    expect(long.length).toBeLessThanOrEqual(63 - INFIX_RESERVE);
+    const cut = scopedTestDbName(BASE, `${'z'.repeat(63 - P.length - 1 - INFIX_RESERVE - 5 - 3)}_w2`);
+    expect(cut.endsWith('_b_test')).toBe(true);
+    expect(extraTestDbUrl('x'.repeat(12), workerDbUrl(99, `postgresql://u:p@h/${cut}`).url).name.length)
+      .toBeLessThanOrEqual(63);
+  });
+  test('the legacy reserve (5) re-derives pre-2026-09-26 names', () => {
+    expect(scopedTestDbName('orangesmiley_test', 'x'.repeat(100), 5))
+      .toBe(`orangesmiley_${'x'.repeat(63 - 12 - 1 - 5 - 5)}_test`);
+    expect(scopedTestDbName('orangesmiley_test', 'feat/x-w2', 5)).toBe('orangesmiley_feat_x_w2_test');
+  });
   test('never leaves a dangling underscore at the trim point', () => {
     const room = 63 - P.length - 1 - INFIX_RESERVE - 5;
     const scope = `${'a'.repeat(room - 1)}_bbbbbbbb`; // cut lands right after the `_`

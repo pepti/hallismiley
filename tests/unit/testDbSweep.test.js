@@ -217,3 +217,37 @@ describe('planSweep — base (the interrupted run)', () => {
     });
   });
 });
+
+describe('the test server guards (tests/lib/testPg.js)', () => {
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  const { confValue, assertThrowawayCluster, assertNotSharedPort } = require('../lib/testPg');
+
+  const dirs = [];
+  function dataDir(conf, auto = '') {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'testpg-guard-'));
+    dirs.push(dir);
+    fs.writeFileSync(path.join(dir, 'postgresql.conf'), conf);
+    if (auto) fs.writeFileSync(path.join(dir, 'postgresql.auto.conf'), auto);
+    return dir;
+  }
+  afterAll(() => { for (const d of dirs) fs.rmSync(d, { recursive: true, force: true }); });
+
+  test('confValue reads the last effective assignment, ignoring comments; auto.conf wins', () => {
+    const d = dataDir('#fsync = on\nfsync = on\nport = 5433 # test\nfsync = off\n', "port = '5435'\n");
+    expect(confValue(d, 'fsync')).toBe('off');
+    expect(confValue(d, 'port')).toBe('5435');
+    expect(confValue(d, 'max_wal_size')).toBe('');
+  });
+  test('only an fsync=off cluster off :5432 may be started or stopped by the test tooling', () => {
+    expect(() => assertThrowawayCluster(dataDir('port = 5433\nfsync = off\n'))).not.toThrow();
+    expect(() => assertThrowawayCluster(dataDir('port = 5433\n'))).toThrow(/Refusing/);
+    expect(() => assertThrowawayCluster(dataDir('fsync = off\n'))).toThrow(/Refusing/); // default port 5432
+  });
+  test('TEST_PG_URL may not name :5432', () => {
+    expect(() => assertNotSharedPort('postgres://u:p@localhost:5432')).toThrow(/5432/);
+    expect(() => assertNotSharedPort('postgres://u:p@localhost')).toThrow(/5432/);
+    expect(() => assertNotSharedPort('postgres://u:p@localhost:5433')).not.toThrow();
+  });
+});

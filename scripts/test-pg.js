@@ -31,6 +31,7 @@ const os = require('os');
 const path = require('path');
 const {
   CLUSTER_SETTINGS, DEFAULT_PORT, defaultDataDir, pgBin, logFileFor, ensureTestServer, probe, adminUrlOf,
+  assertThrowawayCluster,
 } = require('../tests/lib/testPg');
 const { fileEnvValue } = require('../tests/workerDb');
 
@@ -104,6 +105,7 @@ async function start({ url, port, dataDir }) {
 
 function stop({ port, dataDir }) {
   refuseSharedPort(port);
+  assertThrowawayCluster(dataDir); // never stop the shared cluster by a wrong TEST_PG_DATA
   process.exit(run(pgBin('pg_ctl'), ['-D', dataDir, 'stop', '-m', 'fast']) || 0);
 }
 

@@ -247,8 +247,12 @@ TEST_PG_BIN=C:/Program Files/PostgreSQL/17/bin # optional: where pg_ctl/initdb l
 | `E2E_DATABASE_URL` | Playwright's explicit pin (CI). |
 | `TEST_PG_DATA` / `TEST_PG_BIN` | Auto-start: when `TEST_PG_URL` refuses connections, globalSetup (and `e2e/global-setup.js`) runs `pg_ctl -D $TEST_PG_DATA -l <data>/../pg_ctl.log start` detached and waits up to 30 s. |
 
-Unset `TEST_PG_URL` = exactly the old behaviour. CI is unchanged: it pins
-`TEST_DATABASE_URL`/`E2E_DATABASE_URL` against its own `postgres:16` container.
+Unset `TEST_PG_URL` = the old server choice (`DATABASE_URL`'s host); the
+names, labels, sweep, teardown and DELETE cleanup below apply either way. A
+`TEST_PG_URL` on `:5432` is refused, and the auto-start/`test:pg:start`/`stop`
+refuse a data directory whose config is not `fsync = off` on another port. CI
+is unchanged: it pins `TEST_DATABASE_URL`/`E2E_DATABASE_URL` against its own
+`postgres:16` container.
 
 ### Names are per product
 
@@ -268,7 +272,9 @@ another repo's live run.
 | Playwright | `os_e2e_feat_harvest_h2_test` |
 
 The slug is trimmed so the longest name — a worker extra, `_w99_` + 12
-characters — fits Postgres's 63 bytes. A test that needs its own database uses
+characters — fits Postgres's 63 bytes. A slug that ends like a run infix
+(`feat/x-w2`, `…-tmpl`) gets `_b` appended (`os_feat_x_w2_b_test`), or branch
+`feat/x`'s run pattern would match its workers. A test that needs its own database uses
 `createExtraTestDb(suffix)` / `extraTestDbUrl(suffix)` from `tests/workerDb.js`
 (suffix: 1–12 of `[a-z0-9]`): the run's teardown and the sweep own the name,
 so a test that dies before its `afterAll` does not leak it.
@@ -302,13 +308,17 @@ idle for over 6 h can lose its databases to another run's sweep.
 ### Teardown and interrupts
 
 - `globalTeardown` drops by pattern (`^<base root>_(w<N>|tmpl)(_<extra>)?_test$`),
-  not by counting workers, with `DROP DATABASE … WITH (FORCE)`. A failed drop
-  fails the run with the retry command — no more stderr-only leaks.
+  not by counting workers, with `DROP DATABASE … WITH (FORCE)` — except a
+  match labelled on another host or by a different LIVE pid here, which it
+  reports and leaves. A failed drop fails the run with the retry command — no
+  more stderr-only leaks.
 - `KEEP_TEST_DB=1` keeps them and prints the exact drop command.
 - Ctrl-C / SIGTERM / SIGHUP during a run: globalSetup's handler spawns a
   detached `node scripts/drop-test-dbs.js --base <base> --owner-pid <pid>
-  --wait --yes` and exits 130/143/129. A hard kill runs nothing; the next run's
-  sweep finds the dead pid.
+  --wait --yes` and exits 130/143/129. A hard kill runs nothing, and a
+  terminal that kills its whole process tree on close (a kill-on-close job
+  object: some IDE terminals, CI runners) takes the detached cleaner with it;
+  either way the next run's sweep finds the dead pid.
 - A migration that fails in globalSetup drops its half-built template before
   the error surfaces.
 - The advisory lock is per base (`pg_advisory_lock(<"hall">, hash(base))`), so
@@ -325,7 +335,8 @@ npm run test:db:clean -- --sweep [--yes]   # the per-run rules (dry run without 
 npm run test:db:clean -- --gone  [--yes]   # branch AND worktree gone (labels first, then slugs)
 npm run test:db:clean -- --legacy …        # also the old orangesmiley_* names — shared by
                                            # downstreams that have not synced yet: read the plan first
-npm run test:db:clean -- --base os_x_test --yes   # one run's set
+npm run test:db:clean -- --base os_x_test --yes   # one run's set (add --owner-pid <pid> to take
+                                                  # only that run's labels; without it, every idle match goes)
 ```
 
 The wider modes are a dry run until `--yes`. To clean another server, point
@@ -372,10 +383,19 @@ registry entries fixed since). With DELETE every row was green.
 `wal_level=minimal` made TRUNCATE worse still: a relation created in the same
 transaction is WAL-logged whole at commit.
 
-The DELETE form keeps TRUNCATE's semantics. It empties the FK closure that
-`CASCADE` would, with `session_replication_role = replica` (FK and ordinary
-triggers off, so order and cycles do not matter), and resets every sequence
-those tables own to its start, which is what `RESTART IDENTITY` did.
+The DELETE form keeps TRUNCATE's semantics in one transaction:
+- It empties the FK closure that `CASCADE` would. The closure is re-read from
+  the catalog on every call, so a table created mid-suite is covered.
+- It deletes roots first. A late fire-and-forget insert into a child then
+  fails its own FK check or is caught by the child's DELETE. This stands in
+  for TRUNCATE's lock.
+- It runs with `session_replication_role = replica`: FK and ordinary triggers
+  are off, as with TRUNCATE.
+- It resets every sequence those tables own to its start, which is what
+  `RESTART IDENTITY` did.
+
+A trigger set `ENABLE ALWAYS` on one of these tables would still fire. None
+exists today.
 `TEST_CLEAN_MODE=truncate` brings back the old statement. So does a test role
 that may not set `session_replication_role`, which means a non-superuser.
 

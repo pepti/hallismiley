@@ -2,7 +2,7 @@ const { execSync } = require('child_process');
 const { Pool }     = require('pg');
 const { e2eDatabaseUrl } = require('./lib/dbUrl');
 const sweep = require('../tests/lib/testDbSweep');
-const { ensureTestServer } = require('../tests/lib/testPg');
+const { ensureTestServer, assertNotSharedPort } = require('../tests/lib/testPg');
 const { fileEnvValue } = require('../tests/workerDb');
 
 // Provisions a deterministic, ISOLATED test database for the e2e suite:
@@ -21,9 +21,11 @@ module.exports = async function globalSetup() {
   const dbUrl = e2eDatabaseUrl();
   // The local test cluster may be down: with TEST_PG_DATA known and the
   // database on the TEST_PG_URL server, start it (tests/lib/testPg.js).
+  // TEST_PG_URL names the throwaway test server — never the shared :5432 one.
   const dataDir = process.env.TEST_PG_DATA || fileEnvValue('TEST_PG_DATA');
-  if (dataDir && process.env.TEST_PG_URL && sameServer(dbUrl, process.env.TEST_PG_URL)) {
-    await ensureTestServer(dbUrl, { dataDir, log: (m) => console.log(`[e2e] ${m}`) });
+  if (process.env.TEST_PG_URL && sameServer(dbUrl, process.env.TEST_PG_URL)) {
+    assertNotSharedPort(process.env.TEST_PG_URL);
+    if (dataDir) await ensureTestServer(dbUrl, { dataDir, log: (m) => console.log(`[e2e] ${m}`) });
   }
   await ensureDatabase(dbUrl);
 

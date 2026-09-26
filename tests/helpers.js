@@ -191,47 +191,79 @@ const CLEAN_ROOTS = [
 // with TRUNCATE and 49 s with DELETE on an fsync=on cluster, 389 s and 49 s on
 // the fsync=off test cluster. Every TRUNCATE gives each table of the users FK
 // closure (and its indexes, toast and sequences) new files; the old ones are
-// unlinked at the next checkpoint, and every DROP DATABASE
-// forces one — minutes of it on Windows, fsync or not.
+// unlinked at the next checkpoint, and every DROP DATABASE forces one —
+// minutes of it on Windows, fsync or not.
 //
 // This is the DELETE equivalent of `TRUNCATE <roots> RESTART IDENTITY
-// CASCADE`: every table an FK chain leads back to a root (what CASCADE
-// empties), deleted with FK triggers off (session_replication_role = replica,
-// so order and cycles do not matter and ordinary triggers do not fire — as
-// with TRUNCATE), then every sequence those tables own reset to its start
-// (what RESTART IDENTITY does). The plan is read from the catalog once per
-// suite. TEST_CLEAN_MODE=truncate restores the old statement; so does a test
-// role that may not set session_replication_role (not a superuser).
-let deletePlan = null;
+// CASCADE`, in one transaction:
+//   • the tables: every table an FK chain leads back to a root (what CASCADE
+//     empties), read from the catalog on EVERY call — a suite that creates a
+//     table referencing `users` mid-suite is covered, as CASCADE would cover it;
+//   • deleted ROOTS FIRST (breadth-first from the roots), so a late
+//     fire-and-forget insert into a child either fails its own FK check against
+//     the deleted parent or is caught by the child's DELETE, which takes a fresh
+//     snapshot — TRUNCATE's lock blocked such writers; this order stands in for
+//     it;
+//   • with session_replication_role = replica: FK triggers and ordinary
+//     triggers off (as with TRUNCATE), so cycles and self-references are moot;
+//   • then every sequence those tables own reset to its start (what RESTART
+//     IDENTITY does), inside the same transaction.
+// TEST_CLEAN_MODE=truncate restores the old statement; so does a test role that
+// may not set session_replication_role (not a superuser).
 let deleteRefused = false;
-async function deleteCleanTables() {
-  if (!deletePlan) {
-    const { rows: rels } = await db.query(
-      `WITH RECURSIVE t(oid) AS (
-         SELECT c.oid FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-          WHERE n.nspname = current_schema() AND c.relname = ANY($1::text[])
-         UNION
-         SELECT con.conrelid FROM pg_constraint con JOIN t ON con.confrelid = t.oid
-          WHERE con.contype = 'f'
-       )
-       SELECT t.oid, t.oid::regclass::text AS rel FROM t`,
-      [CLEAN_ROOTS]
-    );
-    const { rows: seqs } = await db.query(
-      `SELECT DISTINCT s.seqrelid::regclass::text AS seq, s.seqstart::text AS start
-         FROM pg_sequence s
-         JOIN pg_depend d ON d.objid = s.seqrelid AND d.classid = 'pg_class'::regclass
-                         AND d.refclassid = 'pg_class'::regclass AND d.deptype IN ('a', 'i')
-        WHERE d.refobjid = ANY($1::oid[])`,
-      [rels.map((r) => r.oid)]
-    );
-    deletePlan = { rels: rels.map((r) => r.rel), seqs };
+
+async function deletePlanFor(client) {
+  const { rows: roots } = await client.query(
+    `SELECT c.oid::text AS oid FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = current_schema() AND c.relname = ANY($1::text[])`,
+    [CLEAN_ROOTS]
+  );
+  const { rows: edges } = await client.query(
+    "SELECT conrelid::text AS child, confrelid::text AS parent FROM pg_constraint WHERE contype = 'f'"
+  );
+  const children = new Map();
+  for (const { child, parent } of edges) {
+    if (!children.has(parent)) children.set(parent, []);
+    children.get(parent).push(child);
   }
+  // Breadth-first from the roots: each table at its shallowest depth.
+  const order = roots.map((r) => r.oid);
+  const seen = new Set(order);
+  for (let i = 0; i < order.length; i++) {
+    for (const child of children.get(order[i]) || []) {
+      if (!seen.has(child)) { seen.add(child); order.push(child); }
+    }
+  }
+  const { rows: rels } = await client.query(
+    `SELECT x.oid::oid::regclass::text AS rel
+       FROM unnest($1::text[]) WITH ORDINALITY AS x(oid, ord) ORDER BY x.ord`,
+    [order]
+  );
+  const { rows: seqs } = await client.query(
+    `SELECT DISTINCT s.seqrelid::regclass::text AS seq, s.seqstart::text AS start
+       FROM pg_sequence s
+       JOIN pg_depend d ON d.objid = s.seqrelid AND d.classid = 'pg_class'::regclass
+                       AND d.refclassid = 'pg_class'::regclass AND d.deptype IN ('a', 'i')
+      WHERE d.refobjid = ANY($1::text[]::oid[])`,
+    [order]
+  );
+  return { rels: rels.map((r) => r.rel), seqs };
+}
+
+async function deleteCleanTables() {
   const client = await db.pool.connect();
   try {
     await client.query('BEGIN');
     await client.query('SET LOCAL session_replication_role = replica');
-    await client.query(deletePlan.rels.map((r) => `DELETE FROM ${r}`).join('; '));
+    const plan = await deletePlanFor(client);
+    await client.query(plan.rels.map((r) => `DELETE FROM ${r}`).join('; '));
+    if (plan.seqs.length) {
+      await client.query(
+        `SELECT setval(x.seq::regclass, x.start::bigint, false)
+           FROM unnest($1::text[], $2::text[]) AS x(seq, start)`,
+        [plan.seqs.map((s) => s.seq), plan.seqs.map((s) => s.start)]
+      );
+    }
     await client.query('COMMIT');
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
@@ -242,13 +274,6 @@ async function deleteCleanTables() {
     throw err;
   } finally {
     client.release();
-  }
-  if (deletePlan.seqs.length) {
-    await db.query(
-      `SELECT setval(x.seq::regclass, x.start::bigint, false)
-         FROM unnest($1::text[], $2::text[]) AS x(seq, start)`,
-      [deletePlan.seqs.map((s) => s.seq), deletePlan.seqs.map((s) => s.start)]
-    );
   }
   return true;
 }

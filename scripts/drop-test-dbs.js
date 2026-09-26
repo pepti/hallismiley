@@ -73,6 +73,8 @@ function knownNames() {
     for (const s of scopes) {
       if (!s) continue;
       knownJestRoots.add(scopedTestDbName(`${p}_test`, s).replace(/_test$/, ''));
+      // Legacy names were trimmed with the pre-2026-09-26 reserve (5, `_tmpl`).
+      if (p === LEGACY_PREFIX) knownJestRoots.add(scopedTestDbName(`${p}_test`, s, 5).replace(/_test$/, ''));
       knownE2eNames.add(e2eTestDbName(s, p));
     }
   }

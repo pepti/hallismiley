@@ -7,7 +7,7 @@
 //
 // Jest runs suites in parallel workers since the per-worker-DB rework, and the
 // suites are provably unsafe against ONE shared database (fixed fixture ids,
-// cleanTables()'s TRUNCATE … CASCADE, the app_settings singleton,
+// cleanTables() emptying the whole users FK closure, the app_settings singleton,
 // migrateRunner touching schema_migrations). So every worker gets its own
 // database, derived from the BASE test URL by inserting the worker id BEFORE
 // the `_test` suffix — `os_master_test` → `os_master_w2_test` — so the
@@ -163,16 +163,27 @@ function testScope() {
  * `<product>_test` + scope → `<product>_<scope>_test`, trimmed so the longest
  * derived name (template / worker / worker extra) still fits in 63 bytes. An
  * empty scope returns the base name unchanged.
+ *
+ * A slug that ENDS like a run infix (`…_w2`, `…_tmpl`, or is one) gets `_b`
+ * appended: otherwise branch `feat/x-w2`'s workers (`os_feat_x_w2_w1_test`)
+ * would match branch `feat/x`'s run pattern and its teardown, which drops
+ * WITH (FORCE). `reserve` is injectable only to re-derive pre-2026-09-26
+ * names (the old reserve was 5) for the sweep's --legacy mode.
  */
-function scopedTestDbName(baseName, scope) {
+function scopedTestDbName(baseName, scope, reserve = INFIX_RESERVE) {
   assertTestName(baseName);
   const prefix = baseName.slice(0, -TEST_SUFFIX.length);
   const slug = slugify(scope);
   if (!slug) return baseName;
-  const room = MAX_IDENTIFIER - prefix.length - 1 - INFIX_RESERVE - TEST_SUFFIX.length;
-  const trimmed = slug.slice(0, Math.max(0, room)).replace(/_+$/, '');
+  const room = Math.max(0, MAX_IDENTIFIER - prefix.length - 1 - reserve - TEST_SUFFIX.length);
+  let trimmed = slug.slice(0, room).replace(/_+$/, '');
+  if (reserve === INFIX_RESERVE && RUN_INFIX_TAIL_RE.test(trimmed)) {
+    trimmed = `${trimmed.slice(0, Math.max(0, room - 2)).replace(/_+$/, '')}_b`.replace(/^_/, '');
+  }
   return trimmed ? `${prefix}_${trimmed}${TEST_SUFFIX}` : baseName;
 }
+// A slug tail that would read as a run infix: `w<N>` or `tmpl`, alone or after `_`.
+const RUN_INFIX_TAIL_RE = /(^|_)(w\d+|tmpl)$/;
 
 /** The Playwright database: `<product>_e2e[_<scope>]_test`, trimmed to 63 bytes. */
 function e2eTestDbName(scope, product = PRODUCT) {
@@ -278,6 +289,9 @@ async function createExtraTestDb(suffix, { template } = {}) {
   const { Client } = require('pg');
   const sweep = require('./lib/testDbSweep');
   const { url, name } = extraTestDbUrl(suffix);
+  if (template !== undefined && !/^[a-z0-9_]{1,63}$/.test(String(template))) {
+    throw new Error(`Template "${template}" must be a plain identifier ([a-z0-9_]).`);
+  }
   const admin = new Client({ connectionString: adminDbUrl(url) });
   await admin.connect();
   try {

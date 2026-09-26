@@ -24,7 +24,7 @@ const {
   fileEnvValue,
 } = require('./workerDb');
 const sweep = require('./lib/testDbSweep');
-const { ensureTestServer } = require('./lib/testPg');
+const { ensureTestServer, assertNotSharedPort } = require('./lib/testPg');
 
 // Two-key advisory lock on the admin DB, one per BASE (workerDb.setupLockKeys:
 // the "hall" namespace + a hash of the base name). Serialises the DROP/CREATE
@@ -92,10 +92,12 @@ module.exports = async function globalSetup(globalConfig) {
     `template ${templateName}, workers ${workers.map(w => w.name).join(', ')}`
   );
 
+  // TEST_PG_URL names the throwaway test server — never the shared :5432 one.
   // The local test cluster may be down: with TEST_PG_DATA known, start it.
   const dataDir = process.env.TEST_PG_DATA || fileEnvValue('TEST_PG_DATA');
-  if (server === 'TEST_PG_URL' && dataDir) {
-    await ensureTestServer(baseUrl, { dataDir, log });
+  if (server === 'TEST_PG_URL') {
+    assertNotSharedPort(baseUrl);
+    if (dataDir) await ensureTestServer(baseUrl, { dataDir, log });
   }
 
   installInterruptCleanup(dbName);
@@ -153,7 +155,7 @@ module.exports = async function globalSetup(globalConfig) {
           await label(lockClient, w.name);
           // Throwaway per-worker database: a lost commit on crash is
           // meaningless here, and this takes the WAL fsync out of the ~2100
-          // TRUNCATE-and-reseed cycles a full run performs.
+          // clean-and-reseed cycles a full run performs.
           await lockClient.query(
             `ALTER DATABASE "${w.name}" SET synchronous_commit = off`
           );

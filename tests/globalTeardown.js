@@ -39,13 +39,27 @@ module.exports = async function globalTeardown() {
       [`${root}_`]
     );
     const names = rows.map((r) => r.datname).filter((n) => pattern.test(n));
+    const host = require('os').hostname();
+    // Scoped names cannot collide since workerDb appends `_b` to a slug that
+    // ends like a run infix, but a database another run labelled — another
+    // host, or a different live pid here — is never this run's to touch.
+    const foreignOwner = (label) => {
+      if (!label) return null;
+      if (label.host && label.host !== host) return `labelled on host ${label.host}`;
+      const pid = Number(label.pid);
+      const mine = pid === process.pid || pid === Number(process.env.TEST_DB_OWNER_PID);
+      if (!mine && sweep.isPidAlive(pid)) return `owned by live pid ${label.pid}`;
+      return null;
+    };
 
     if (process.env.KEEP_TEST_DB) {
       const client = await admin.connect();
       try {
         for (const name of names) {
-          const label = (await sweep.readLabel(client, name)) || sweep.buildLabel('jest');
-          await sweep.labelDatabase(client, name, { ...label, keep: true }).catch(() => {});
+          const label = await sweep.readLabel(client, name);
+          if (foreignOwner(label)) continue;
+          await sweep.labelDatabase(client, name, { ...(label || sweep.buildLabel('jest')), keep: true })
+            .catch(() => {});
         }
       } finally {
         client.release();
@@ -60,17 +74,12 @@ module.exports = async function globalTeardown() {
 
     const failures = [];
     const client = await admin.connect();
-    const host = require('os').hostname();
     try {
       for (const name of names) {
         try {
-          // The pattern is per base, but an UNSCOPED base (`<product>_test`)
-          // also matches a branch literally named `w2`'s workers. Never
-          // force-drop a database a different live process on this host owns.
-          const label = await sweep.readLabel(client, name);
-          if (label && label.host === host && Number(label.pid) !== process.pid &&
-              sweep.isPidAlive(Number(label.pid))) {
-            process.stdout.write(`[jest] keeping ${name}: owned by live pid ${label.pid}\n`);
+          const foreign = foreignOwner(await sweep.readLabel(client, name));
+          if (foreign) {
+            process.stdout.write(`[jest] keeping ${name}: ${foreign}\n`);
             continue;
           }
           await sweep.forceDropDatabase(client, name);

@@ -2,9 +2,9 @@
 //
 // ⚠️ THROWAWAY TEST DATA ONLY. The cluster this module describes runs with
 // fsync=off, full_page_writes=off and synchronous_commit=off: a crash or a
-// power cut corrupts it beyond repair. That is the point — Jest's
-// TRUNCATE-and-reseed churn and CREATE DATABASE … TEMPLATE copies stop
-// costing checkpoint fsyncs — and it is also why NOTHING that matters may ever
+// power cut corrupts it beyond repair. That is the point — per-test cleanup
+// and CREATE DATABASE … TEMPLATE copies stop costing checkpoint fsyncs — and
+// it is also why NOTHING that matters may ever
 // live on it. Never point TEST_PG_URL at a server that holds a real database
 // (the books, a dev database, a customer's data).
 //
@@ -96,8 +96,52 @@ async function probe(url) {
   }
 }
 
+const SHARED_PORT = 5432;
+
+/** The effective value of `key` in a data directory's config files ('' when unset). */
+function confValue(dataDir, key) {
+  let value = '';
+  for (const file of ['postgresql.conf', 'postgresql.auto.conf']) {
+    let text;
+    try { text = fs.readFileSync(path.join(dataDir, file), 'utf8'); } catch { continue; }
+    for (const line of text.split(/\r?\n/)) {
+      const m = line.replace(/#.*/, '').match(new RegExp(`^\\s*${key}\\s*=\\s*'?([^'\\s]*)'?`));
+      if (m) value = m[1]; // the last assignment wins, as in Postgres
+    }
+  }
+  return value;
+}
+
+/**
+ * Refuse to start or stop a cluster that is not a throwaway test cluster: its
+ * config must say fsync = off and a port other than 5432. A TEST_PG_DATA that
+ * points at the shared cluster (the books) must never be driven from here.
+ */
+function assertThrowawayCluster(dataDir) {
+  const fsync = confValue(dataDir, 'fsync').toLowerCase();
+  const port = Number(confValue(dataDir, 'port') || SHARED_PORT);
+  if (!['off', 'false', '0', 'no'].includes(fsync) || port === SHARED_PORT) {
+    throw new Error(
+      `Refusing to drive the cluster in ${dataDir}: a test cluster runs with fsync = off on a port ` +
+      `other than ${SHARED_PORT} (found fsync=${fsync || 'on (default)'}, port=${port}). ` +
+      'TEST_PG_DATA must name the throwaway test cluster, never a real one.'
+    );
+  }
+}
+
+/** Refuse a test server URL on the shared cluster's port. */
+function assertNotSharedPort(url) {
+  if (Number(new URL(url).port || SHARED_PORT) === SHARED_PORT) {
+    throw new Error(
+      `TEST_PG_URL points at port ${SHARED_PORT}, the shared cluster (real books + dev DBs). ` +
+      'It must name the throwaway test server (default :5433) — docs/TESTING.md.'
+    );
+  }
+}
+
 /** Start the cluster detached (it must outlive this process). Returns the log path. */
 function startDetached(dataDir, env = process.env) {
+  assertThrowawayCluster(dataDir);
   const log = logFileFor(dataDir);
   const child = spawn(pgBin('pg_ctl', env), ['-D', dataDir, '-l', log, 'start'], {
     detached: true,
@@ -155,6 +199,9 @@ module.exports = {
   logFileFor,
   adminUrlOf,
   isRefused,
+  confValue,
+  assertThrowawayCluster,
+  assertNotSharedPort,
   probe,
   ensureTestServer,
 };

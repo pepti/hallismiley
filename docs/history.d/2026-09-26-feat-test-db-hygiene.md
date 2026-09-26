@@ -66,10 +66,36 @@ five causes:
 | :5434 fsync on | DELETE | 49 s | 0.16 GB | 10 s |
 
 The TRUNCATE churn was the cost. The time did not go into fsync: every `TRUNCATE … RESTART IDENTITY
-CASCADE` gives ~100 relations new files, the old files wait for the next checkpoint to be unlinked,
+CASCADE` gives every table of the users FK closure (with its indexes, toast and sequences) new
+files, the old files wait for the next checkpoint to be unlinked,
 and every DROP DATABASE forces an immediate checkpoint. One such checkpoint took 121 s with fsync off
 (write 1.9 s, sync 0.04 s, the rest unlinks), and each TRUNCATE statement took 0.4–0.9 s on
 Windows. So the switch was made on the measurement, on both modes, as the brief required.
+
+**Review pass** (the `invariant-reviewer` agent on the first commit): no invariant was broken, CI
+is unaffected, and the sweep cannot drop a non-test database or one with a session. Fixed on the
+branch:
+- (1) Teardown's per-base pattern also matched another branch's run when that branch's slug ended
+  in `_w<N>` or `_tmpl` (`feat/x-w2` → `os_feat_x_w2_w1_test`), and teardown forces its drops.
+  Such a slug now gets `_b` appended. Teardown also leaves a match that is labelled on another host
+  or by a different live pid.
+- (2) The DELETE clean now deletes roots first (standing in for TRUNCATE's lock against late
+  child inserts), resets the sequences inside the same transaction, and re-reads the FK closure on
+  every call instead of caching it per suite.
+- (4) `test:pg:start`/`stop` and the auto-start refuse a data directory whose config is not
+  `fsync = off` on a port other than 5432, and a `TEST_PG_URL` on `:5432` is refused.
+- (5) `--legacy --gone` re-derives the old names with the old identifier reserve.
+- (7) `createExtraTestDb`'s template name is validated.
+- (8) Stale comments and docs.
+
+Won't fix, recorded here:
+- (3) host + pid is a weak liveness key when WSL2 and Windows share one hostname against the same
+  server. Nobody runs the suites from WSL here. The session check and the non-FORCE sweep drop
+  bound the damage.
+- (6) A kill-on-close job object takes the detached Ctrl-C cleaner down with its terminal. The
+  next run's sweep is the fallback (documented in `docs/TESTING.md`).
+- (2d) A future `ENABLE ALWAYS` trigger on the closure would fire under replica mode. None exists
+  today (documented).
 
 **Not done / owed.**
 - The downstreams keep deriving `orangesmiley_*` names until their next engine-sync. After that,
