@@ -256,9 +256,13 @@ nothing:
   controllers set it inline the same way (`password_required`,
   `username_taken`, `POSSIBLE_DUPLICATE`, `INSUFFICIENT_STOCK`…). A 5xx never
   carries one.
-- **`retryable: true`** — only on the `409` `reason: "BUSY"` answer to a
-  Postgres deadlock victim (40P01): nothing happened, send the same request
-  again.
+- **`retryable: true`** — on the two "busy, send it again" answers; nothing
+  happened, send the same request again:
+
+| Status | Body | When |
+|--------|------|------|
+| `409` | `{ "error": …, "code": 409, "reason": "BUSY", "retryable": true }` | Postgres picked the request as a deadlock victim (40P01); nothing was changed |
+| `429` + `Retry-After: <seconds>` | `{ "error": …, "code": 429, "reason": "AI_BUSY", "retryable": true }` | a request-path paid AI call found every `aiGate` slot taken (`AI_MAX_CONCURRENT`, default 4; `server/services/aiGate.js`, [harvest2-lane1b](history.d/2026-09-26-harvest2-lane1b-defects.md#harvest2-lane1b-2026-09-26)). No engine route raises it yet — the translator, today's only Claude caller, queues for a slot instead and never fails a save — so it is the contract for the next request-path AI endpoint |
 
 ## Rate limits (`express-rate-limit`, all skipped when `NODE_ENV` is `test` or `development`)
 

@@ -161,6 +161,24 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
   `docs/HISTORY.md` is the frozen archive; every chunk gets a review pass
   before it merges; `docs/TESTING.md` gained the deployed-environment
   walkthrough. This settles chunk F's open item (d) below.
+- Harvest 2 lane 1b (branch `harvest2/lane1b-defects`; from ice `941cf51d`;
+  [harvest2-lane1b-2026-09-26](docs/history.d/2026-09-26-harvest2-lane1b-defects.md#harvest2-lane1b-2026-09-26)):
+  one nav menu closer (#379), `auth_login_attempts_total` wired (#55), signup
+  no longer waits on email + cancelled confirms say so (#199), translator JSON
+  salvage + `stop_reason` (#216), `aiGate` concurrency cap with the 429
+  contract (#218), and the staff-audit gaps (Users-page role dropdown, role
+  create/delete, user delete; `user.totp_reset` / `user.password_replaced`
+  were refused by the vocabulary). Open: (a) **Halli** approves the new DRAFT
+  strings `admin.actionCancelled` and `errors.ai.busy` (EN + IS); (b)
+  **decision for Halli — the `staff_audit_log` FK vs its immutability**:
+  deleting a user who ever acted in the log fails 500, because the
+  `actor_id` FK's `ON DELETE SET NULL` is an UPDATE the append-only trigger
+  refuses (pre-existing). Either drop the FK (keep `actor_id` as plain text,
+  like `entity_id`), or let the trigger allow an update that only nulls
+  `actor_id`, or refuse the delete up front with a 409 ("disable instead") —
+  each is a migration or a contract change; (c) no engine route raises the
+  429 yet (the translator queues) — ice's shutdown handshake comes with the
+  first request-path AI call that can outlive the 10 s grace.
 - Upward harvest from icelandicstore `4694289`, lane 1 (chunks A then B, branch
   `harvest/ice-2026-09-24-ab`, not merged). Chunk A landed on the branch
   ([harvest-ice-a-2026-09-24](docs/HISTORY.md#harvest-ice-a-2026-09-24)): admin

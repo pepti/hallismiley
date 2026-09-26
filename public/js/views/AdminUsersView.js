@@ -12,11 +12,21 @@ import { pagerHtml, bindPager } from '../components/adminPager.js';
 import { readListState, syncListState, readPageSize, writePageSize } from '../utils/listState.js';
 import { debounce } from '../utils/debounce.js';
 import { expiryBadgeHtml, expiryFieldHtml, wireExpiryField, readExpiryField } from '../components/ExpiryPicker.js';
+import { moduleEnabled } from '../utils/modules.js';
 
 // Was a fixed 20 — a size the picker does not offer. The list remembers the
 // admin's own choice now, defaulting to the nearest offered value.
 const DEFAULT_SIZE = 25;
 const VIEW_ID = 'users';
+
+// A cancelled confirm() SAYS so. A bare `return` is indistinguishable from a
+// dead button — and confirm() returns false with no dialog at all once the
+// browser has been told to block further dialogs for the page. Ported from
+// icelandicstore #199, where an approval that silently did nothing on PROD
+// read as a broken save.
+function cancelled() {
+  showToast(t('admin.actionCancelled'), 'info');
+}
 
 function formatDate(str) {
   if (!str) return '—';
@@ -143,6 +153,12 @@ export class AdminUsersView {
       return;
     }
 
+    // The Party column belongs to the party module (moduleCatalog: party). An
+    // instance without it has no party guests, so the toggle would offer a
+    // switch that leads nowhere: header and cells are left out. Server-side
+    // the route still answers (party_access is a plain user column).
+    const partyOn = moduleEnabled('party');
+
     wrap.innerHTML = `
       <table class="admin-table admin-users-table">
         <thead>
@@ -153,7 +169,7 @@ export class AdminUsersView {
             ${sortableTh(t('adminUsers.verified'), 'verified', this._sort)}
             ${sortableTh(t('adminUsers.status'), 'status', this._sort)}
             <th>${t('adminUsers.validUntil')}</th>
-            ${sortableTh(t('adminUsers.party'), 'party', this._sort)}
+            ${partyOn ? sortableTh(t('adminUsers.party'), 'party', this._sort) : ''}
             ${sortableTh(t('orders.date'), 'created_at', this._sort)}
             <th class="admin-table__actions-col">${t('adminUsers.actions')}</th>
           </tr>
@@ -204,14 +220,14 @@ export class AdminUsersView {
                           title="${escHtml(t('adminUsers.expiryEdit', { name: u.username }))}">${t('admin.edit')}</button>` : ''}
                 </div>
               </td>
-              <td>
+              ${partyOn ? `<td>
                 <label class="toggle-label" title="${u.party_access ? t('adminUsers.revokePartyAccess') : t('adminUsers.grantPartyAccess')}">
                   <input type="checkbox" class="toggle-input" data-action="toggle-party"
                          data-user-id="${escHtml(String(u.id))}" ${u.party_access ? 'checked' : ''}/>
                   <span class="toggle-track"></span>
                   <span class="toggle-text">${u.party_access ? '🎂 On' : 'Off'}</span>
                 </label>
-              </td>
+              </td>` : ''}
               <td class="user-joined">${formatDate(u.created_at)}</td>
               <td class="admin-table__actions">
                 <span class="user-id-badge">#${escHtml(String(u.id))}</span>
@@ -347,7 +363,7 @@ export class AdminUsersView {
   async _onDeleteUser(btn) {
     const userId   = btn.dataset.userId;
     const username = btn.dataset.username;
-    if (!confirm(`${t('admin.confirmDelete')} "${escHtml(username)}"?`)) return;
+    if (!confirm(`${t('admin.confirmDelete')} "${escHtml(username)}"?`)) return cancelled();
     try {
       await adminDeleteUser(userId);
       showToast(t('form.success'), 'success');
@@ -364,7 +380,7 @@ export class AdminUsersView {
   async _onResetTotp(btn) {
     const userId   = btn.dataset.userId;
     const username = btn.dataset.username;
-    if (!confirm(t('adminUsers.twoStepResetConfirm', { name: username }))) return;
+    if (!confirm(t('adminUsers.twoStepResetConfirm', { name: username }))) return cancelled();
     btn.disabled = true;
     try {
       try {
@@ -388,7 +404,7 @@ export class AdminUsersView {
   // ONCE (ice #382/#397). The old one stops working and its sessions end.
   async _onNewPassword(btn) {
     const username = btn.dataset.username;
-    if (!confirm(t('adminUsers.newPasswordConfirm', { name: username }))) return;
+    if (!confirm(t('adminUsers.newPasswordConfirm', { name: username }))) return cancelled();
     btn.disabled = true;
     try {
       const res = await adminNewPassword(btn.dataset.userId);

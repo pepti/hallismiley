@@ -154,6 +154,14 @@ const adminController = {
           }
         }
 
+        // The role set BEFORE the swap, for the staff audit trail: the
+        // dropdown is a grant AND a revoke, and until 2026-09-26 it wrote
+        // neither (the Members tab's addMember/removeMember always did).
+        const { rows: heldRows } = await client.query(
+          'SELECT role_name FROM user_roles WHERE user_id = $1', [id]
+        );
+        const heldBefore = heldRows.map(r => r.role_name);
+
         const { rows } = await client.query(
           `UPDATE users SET role = $1 WHERE id = $2
            RETURNING id, username, email, role`,
@@ -166,7 +174,26 @@ const adminController = {
 
         // Trigger added the new role membership; drop the others so the dropdown
         // stays single-role (the Members tab manages multi-role).
-        await client.query('DELETE FROM user_roles WHERE user_id = $1 AND role_name <> $2', [id, role]);
+        const { rows: dropped } = await client.query(
+          'DELETE FROM user_roles WHERE user_id = $1 AND role_name <> $2 RETURNING role_name', [id, role]
+        );
+        // One audit row per role actually granted or revoked — the same
+        // actions the Members tab writes, `via` tells them apart. Written on
+        // THIS client, inside the transaction (staffAudit's rule for a
+        // transactional change): the trail commits or rolls back with the
+        // role swap, never one without the other.
+        if (!heldBefore.includes(role)) {
+          await staffAudit.record(client, {
+            ...staffAudit.actorOf(req), action: 'role.granted', entityType: 'user', entityId: id,
+            summary: { role, via: 'users_page' },
+          });
+        }
+        for (const { role_name: revoked } of dropped) {
+          await staffAudit.record(client, {
+            ...staffAudit.actorOf(req), action: 'role.revoked', entityType: 'user', entityId: id,
+            summary: { role: revoked, via: 'users_page' },
+          });
+        }
         // Promoted into admin powers: a time-limited login must not become a
         // time-limited ADMIN (a delayed lockout) — clear its expiry, audited,
         // in this transaction (login-expiry review follow-up).
@@ -492,7 +519,7 @@ const adminController = {
       await lucia.invalidateUserSessions(id);
 
       const { rows } = await dbQuery(
-        'DELETE FROM users WHERE id = $1 RETURNING id',
+        'DELETE FROM users WHERE id = $1 RETURNING id, username, role',
         [id]
       );
 
@@ -503,6 +530,15 @@ const adminController = {
       // The row (and its user_roles via ON DELETE CASCADE) is gone — drop the
       // cached role set so a recreated id can't read a stale entry.
       UserRole.invalidateUser(id);
+
+      // A hard delete is the least reversible staff action there is; the
+      // trail keeps who and which account (the username, never contact
+      // details — staffAudit's rule). entity_id is not a foreign key, so the
+      // row outlives the user it names.
+      await staffAudit.recordSafe({
+        ...staffAudit.actorOf(req), action: 'user.deleted', entityType: 'user', entityId: id,
+        summary: { username: rows[0].username, role: rows[0].role },
+      });
 
       return res.status(204).send();
     } catch (err) { next(err); }
