@@ -1,11 +1,20 @@
 # History — Orange Smiley company site
 
+> **FROZEN 2026-09-26 — do not append here.** This file is the archive of every
+> write-up up to 2026-09-26. New entries are one file per branch in
+> [`history.d/`](history.d/README.md): every chunk appended to the tail of this
+> file and its index, so parallel sessions kept conflicting on every merge
+> ([harvest2-lane0](history.d/2026-09-26-harvest2-lane0-history.md#harvest2-lane0-2026-09-26),
+> ported from icelandicstore #355). The index below covers this archive only;
+> its anchors stay valid link targets, and no fragment may reuse one.
+> "How this file was used" below describes the practice up to the freeze.
+
 The dated write-up of every programme that has landed on this repo, moved out
 of `CLAUDE.md` on 2026-09-17 **unchanged in wording** (only a date prefix and an
 anchor were added to each heading). This is where the *why* lives: the
 reasoning behind the rules that `docs/ARCHITECTURE.md` lists per domain.
 
-**How to use this file.** Append-only. When a chunk lands: its write-up goes
+**How this file was used (until 2026-09-26).** Append-only. When a chunk landed: its write-up goes
 here (a new `## YYYY-MM-DD — title` section with an `<a id>` anchor, plus a row
 in the index below); the rules it establishes go into the domain's "Rules that
 must hold" block in `docs/ARCHITECTURE.md`, each linking back here; its open
