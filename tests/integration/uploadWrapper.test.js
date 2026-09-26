@@ -97,6 +97,57 @@ describe('POST /admin/shop/products/:id/images — requireProduct runs before mu
   });
 });
 
+describe('a malformed multipart body is the client\'s fault: 400, never a 500', () => {
+  const url = () => `/api/v1/admin/shop/products/${product.id}/images`;
+
+  test('a multipart content type with no boundary (busboy cannot start)', async () => {
+    const res = await request(app).post(url()).set('Cookie', adminCookie).set('X-Locale', 'en')
+      .set('Content-Type', 'multipart/form-data').send('garbage');
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: t('en', 'errors.upload.failed'), code: 400 });
+  });
+
+  test('a body cut off before its closing boundary (Unexpected end of form)', async () => {
+    const body = '--XBOUNDARY\r\nContent-Disposition: form-data; name="file"; filename="x.png"\r\n'
+      + 'Content-Type: image/png\r\n\r\n' + PNG_1PX.toString('binary');
+    const res = await request(app).post(url()).set('Cookie', adminCookie).set('X-Locale', 'is')
+      .set('Content-Type', 'multipart/form-data; boundary=XBOUNDARY').send(Buffer.from(body, 'binary'));
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: t('is', 'errors.upload.failed'), code: 400 });
+  });
+
+  test('a malformed part header', async () => {
+    const body = '--XBOUNDARY\r\nthis is not a header\r\n\r\nx\r\n--XBOUNDARY--\r\n';
+    const res = await request(app).post(url()).set('Cookie', adminCookie).set('X-Locale', 'en')
+      .set('Content-Type', 'multipart/form-data; boundary=XBOUNDARY').send(body);
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: t('en', 'errors.upload.failed'), code: 400 });
+  });
+});
+
+describe('uploadImage — a product deleted between requireProduct and the row insert', () => {
+  test('the FK violation (23503) is a 404 and the written file is removed', async () => {
+    const adminShop = require('../../server/controllers/adminShopController');
+    // A product that passed requireProduct and was deleted before addImage:
+    // the row is gone, so the image insert trips the product FK.
+    const gone = await Product.create({ slug: `upload-wrapper-gone-${Date.now()}`, name: 'gone', price_isk: 1000, price_eur: 700 });
+    await db.query('DELETE FROM products WHERE id = $1', [gone.id]);
+    const tmp = path.join(require('os').tmpdir(), `upload-wrapper-${crypto.randomBytes(4).toString('hex')}.png`);
+    fs.writeFileSync(tmp, PNG_1PX);
+    const res = { statusCode: 200, body: null, status(c) { this.statusCode = c; return this; }, json(b) { this.body = b; return this; } };
+    const next = jest.fn();
+    await adminShop.uploadImage({
+      product: gone, locale: 'en', body: {},
+      file: { path: tmp, filename: path.basename(tmp), mimetype: 'image/png' },
+    }, res, next);
+    expect(next).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(404);
+    expect(res.body).toEqual({ error: t('en', 'errors.admin.productNotFound'), code: 404 });
+    await new Promise((r) => setTimeout(r, 100)); // the unlink is fire-and-forget
+    expect(fs.existsSync(tmp)).toBe(false);
+  });
+});
+
 describe('POST /users/me/avatar — the customer-facing upload', () => {
   const postAvatar = (buf, contentType, locale) => request(app)
     .post('/api/v1/users/me/avatar').set('Cookie', adminCookie).set('X-Locale', locale)

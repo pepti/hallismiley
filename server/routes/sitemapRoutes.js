@@ -255,6 +255,11 @@ const router = express.Router();
 
 router.get('/llms.txt', (req, res, next) => {
   try {
+    // Same gate as the sitemap: it enumerates every advertised page, so a
+    // non-indexable instance (utils/indexability.js) does not hand it out
+    // (harvest 2 lane 1a review). 404 in the standard envelope.
+    res.set('Vary', 'Host');
+    if (!isIndexableRequest(req)) return res.status(404).json({ error: 'Not found', code: 404 });
     res.set('Content-Type', 'text/plain; charset=utf-8');
     res.set('Cache-Control', 'public, max-age=600, stale-while-revalidate=300');
     res.status(200).send(buildLlmsTxt());

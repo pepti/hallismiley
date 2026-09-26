@@ -20,6 +20,14 @@ const ALLOWED_MIME_TYPES  = [...ALLOWED_IMAGE_TYPES, ...ALLOWED_VIDEO_TYPES];
 // What multer 2 reports when the client's socket goes away mid-body.
 const CLIENT_GONE_MESSAGES = new Set(['Request aborted', 'Request closed']);
 
+// A body the client sent broken: busboy's parse errors ('Malformed part
+// header', 'Unexpected end of form' / 'of file') and the ones thrown when it
+// cannot even start ('Multipart: Boundary not found', 'Malformed content
+// type', …; multer passes those straight to its callback). Plain Errors, not
+// MulterErrors, so without this they reached the central handler as a 500 —
+// a client fault counted against the SLO (harvest 2 review, lane 1a).
+const MALFORMED_BODY = /^(Multipart: Boundary not found|Malformed (part header|content type)|Unexpected end of (form|file)|Unsupported content type|Missing Content-Type)\b/;
+
 // Derive the stored file extension from the server-validated MIME type rather
 // than from the client-supplied original filename.  This prevents an attacker
 // from sending Content-Type: image/jpeg with filename="evil.svg" and having
@@ -200,10 +208,13 @@ function createProductImportUpload() {
 }
 
 /**
- * Route middleware wrapping `createUpload(req).single('file')` — the ONE
- * wrapper every upload route uses (icelandicstore #141 + #142 + #314, harvest
- * 2, 2026-09-26; it replaced a hand-rolled copy per route that echoed raw
- * English multer text on an Icelandic-default site).
+ * Route middleware wrapping `createUpload(req).single('file')` — the one
+ * upload wrapper (icelandicstore #141 + #142 + #314, harvest 2, 2026-09-26;
+ * it replaced hand-rolled copies that echoed raw English multer text on an
+ * Icelandic-default site). Used by product images, the product import, the
+ * avatar and background media; a new upload route uses it too. News,
+ * projects, party photos, site-content images, books documents and goods
+ * receiving still hand-roll theirs (docs/ARCHITECTURE.md §18).
  *
  * `createUpload` — a builder returning a multer instance, called per request
  * with `req` (for uploads whose destination depends on the route, e.g. the
@@ -218,7 +229,7 @@ function createProductImportUpload() {
  * 400; the products import keeps its documented 413).
  *
  * Only client-caused rejections (multer's own errors, the fileFilter's
- * INVALID_TYPE) become 4xx. Anything else — EACCES/ENOSPC from the uploads
+ * INVALID_TYPE, a malformed multipart body → `errors.upload.failed`) become 4xx. Anything else — EACCES/ENOSPC from the uploads
  * mount (ensureDestination hands those to multer), programmer errors — is a
  * server fault and goes to the central error middleware: logged with the
  * request id, answered 500.
@@ -238,6 +249,9 @@ function uploadSingle(createUpload, errorKeys, { tooLargeStatus = 400 } = {}) {
         res.statusCode = 499;
         if (!res.headersSent && !res.destroyed) res.end();
         return undefined;
+      }
+      if (!isMulter && MALFORMED_BODY.test(String(err.message))) {
+        return res.status(400).json({ error: t(req.locale, 'errors.upload.failed'), code: 400 });
       }
       if (!isMulter && err.code !== 'INVALID_TYPE') return next(err);
       // typeof guard: an unmapped code that collides with an Object.prototype

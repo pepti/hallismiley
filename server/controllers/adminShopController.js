@@ -654,6 +654,10 @@ const adminShopController = {
       // The bytes are already on disk; without this an FK failure (the product
       // deleted mid-upload) leaves an orphan on the uploads share.
       if (req.file && req.file.path) fs.unlink(req.file.path, () => {});
+      // …and that FK failure is the product being gone, not a server fault.
+      if (err && err.code === '23503') {
+        return res.status(404).json({ error: t(req.locale, 'errors.admin.productNotFound'), code: 404 });
+      }
       return next(err);
     }
   },

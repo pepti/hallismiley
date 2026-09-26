@@ -105,10 +105,12 @@ function stripStockInternals(product) {
 // carries staff tags, the Stripe session and payment-intent ids and the
 // stock-settlement stamp. An ALLOW-list, so a column added to COLUMNS later
 // stays staff-only until someone decides otherwise here. OrderHistoryView
-// reads order_number, created_at, status, total and currency.
+// reads order_number, created_at, status, total and currency. `vat_total` is
+// not here yet: Order.COLUMNS does not select it (harvest 2 lane 5 adds the
+// column) — name it here in the same change that selects it.
 const CUSTOMER_ORDER_FIELDS = [
   'id', 'order_number', 'user_id', 'guest_email', 'guest_name', 'currency',
-  'subtotal', 'shipping', 'total', 'vat_total', 'status', 'payment_status', 'fulfillment_status',
+  'subtotal', 'shipping', 'total', 'status', 'payment_status', 'fulfillment_status',
   'shipping_method', 'shipping_address', 'paid_at', 'fulfilled_at', 'created_at', 'updated_at',
 ];
 function customerOrderView(order) {

@@ -93,6 +93,18 @@ describe('uploadSingle', () => {
     expect(res.body.error).toBe(t('en', 'errors.upload.failed'));
   });
 
+  test.each([
+    'Multipart: Boundary not found', 'Malformed part header', 'Malformed content type',
+    'Unexpected end of form', 'Unexpected end of file', 'Unsupported content type: text/plain',
+  ])('a malformed body (%s) is a translated 400 errors.upload.failed', (message) => {
+    const res = fakeRes();
+    const next = jest.fn();
+    uploadSingle(failingWith(new Error(message)), { INVALID_TYPE: 'errors.upload.avatar.invalidType' })(req, res, next);
+    expect(next).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({ error: t('en', 'errors.upload.failed'), code: 400 });
+  });
+
   test('an infrastructure fault (EACCES) goes to the central error middleware', () => {
     const next = jest.fn();
     const err = Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' });

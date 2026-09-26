@@ -363,24 +363,27 @@ Root-level discovery routes, all public and cached 10 minutes:
 `robotsRoutes.js`, `manifestRoutes.js`; [ARCHITECTURE §3](ARCHITECTURE.md#3-public-site--home-thjonusta-um-okkur-hafa-samband-ssr-meta-sitemap-seo).
 On a non-indexable instance (`APP_ENV` other than `production`, or reached on
 `*.azurewebsites.net`, localhost or a bare IP — `server/utils/indexability.js`)
-`/robots.txt` is `User-agent: *` / `Disallow: /` and `/sitemap.xml` is an empty
-`<urlset>`; both send `Vary: Host` ([harvest2-lane1a](history.d/2026-09-26-harvest2-lane1a-security.md#harvest2-lane1a-2026-09-26)).
+`/robots.txt` is `User-agent: *` / `Disallow: /`, `/sitemap.xml` is an empty
+`<urlset>` and `/llms.txt` answers `404` (`{ error, code }`); all three send `Vary: Host` ([harvest2-lane1a](history.d/2026-09-26-harvest2-lane1a-security.md#harvest2-lane1a-2026-09-26)).
 
 Shop API shapes ([harvest2-lane1a](history.d/2026-09-26-harvest2-lane1a-security.md#harvest2-lane1a-2026-09-26)): the public catalogue (`GET /api/v1/shop/products`,
 `/products/:slug`) never carries `bin`, `sku`, `barcode` or the raw stock
 figures on a product or a variant — `available` is the one inventory number.
 `GET /api/v1/shop/orders/mine` returns each order as the customer allow-list:
 `id, order_number, user_id, guest_email, guest_name, currency, subtotal,
-shipping, total, vat_total, status, payment_status, fulfillment_status,
+shipping, total, status, payment_status, fulfillment_status,
 shipping_method, shipping_address, paid_at, fulfilled_at, created_at,
 updated_at` (no Stripe ids, `stock_deducted_at` or `tags`).
 
-Upload errors ([harvest2-lane1a](history.d/2026-09-26-harvest2-lane1a-security.md#harvest2-lane1a-2026-09-26)): every multipart upload answers a rejected file with
-the standard envelope and a translated `errors.upload.*` message — 400 for a
-wrong type or (except the product import) an oversized file; the product import
+Upload errors ([harvest2-lane1a](history.d/2026-09-26-harvest2-lane1a-security.md#harvest2-lane1a-2026-09-26)): the product-image, product-import, avatar
+(`POST /api/v1/users/me/avatar`) and background-media uploads answer a rejected
+file with the standard envelope and a translated `errors.upload.*` message — 400
+for a wrong type, a malformed multipart body or (except the product import) an
+oversized file; the other upload routes still answer multer's own text. The product import
 (`POST /api/v1/admin/shop/products/import/parse-file`) keeps `413` for an
 oversized file. `POST /api/v1/admin/shop/products/:id/images` answers `404`
-for an unknown id BEFORE anything is written. A client that hangs up mid-upload
+for an unknown id BEFORE anything is written (and for a product deleted
+mid-upload, the file removed). A client that hangs up mid-upload
 is recorded as `499` (nobody receives it).
 
 ---

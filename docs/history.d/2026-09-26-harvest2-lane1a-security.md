@@ -58,4 +58,13 @@ On every route it asserts 403 for a signed-in plain `user`, and 401 or 403 for a
 **Tests.**
 - New unit suites: `targetGuard.test.js`, `indexability.test.js`, `loggerRedact.test.js` and `uploadSingle.test.js`.
 - New integration suites: `seedBooksDemo.test.js`, `indexability.test.js`, `uploadWrapper.test.js`, `shopPublicPrivacy.test.js` and `adminRouteMatrix.test.js`.
-- Four existing suites now send the public Host: `ssrMeta`, `sitemap`, `moduleFlags` and `identityDownstream`.
+- Six existing suites now send the public Host: `ssrMeta`, `sitemap`, `moduleFlags`, `identityDownstream`, `llms` and (after the second master merge) `demoInstance`'s non-demo robots check.
+
+**Review pass (before merge).** The branch was reviewed against the stack invariants (`invariant-reviewer`, on `git diff master...HEAD`). What changed as a result:
+- **Must-fix, fixed: a malformed multipart body was a 500.** Busboy's parse errors (`Malformed part header`, `Unexpected end of form` / `of file`) and the errors thrown when the parser cannot start (`Multipart: Boundary not found`, `Malformed content type`, …) are plain Errors, not MulterErrors, so `uploadSingle` sent them to the central handler as a server fault. They now answer the translated 400 `errors.upload.failed`. Covered in `uploadSingle.test.js` (unit) and `uploadWrapper.test.js` (a boundary-less body, a cut-off body and a malformed part header over HTTP).
+- **Nit, corrected in the wording: "every upload route uses `uploadSingle`" was not true.** News, projects, party photos, site-content images, books documents and goods receiving (lane 6a) still hand-roll their wrapper, and still answer multer's raw text. They are hidden or admin-only surfaces, and their disk builders already use `ensureDestination`. ARCHITECTURE §18, the feature file, `upload.js` and API.md now name the four routes that use it. Moving the rest is deliberately left for when each is next touched.
+- **Nit, fixed: `vat_total` was in `CUSTOMER_ORDER_FIELDS`**, but `Order.COLUMNS` does not select it. It is dropped from the list and from API.md until harvest 2 lane 5 adds the column.
+- **Nit, fixed: `/llms.txt` was not gated.** It enumerates every advertised page, like the sitemap. A non-indexable instance now answers it with a 404 envelope (`Vary: Host`).
+- **Nit, fixed: a product deleted between `requireProduct` and the image insert was a 500.** The FK violation (23503) is now the same 404 `errors.admin.productNotFound`, and the written file is still unlinked.
+
+**Merged master twice** (lane 0, lane 1b, login-expiry, then lanes 3, 4a, 4b, 6a and 6b). robots.txt now shuts crawlers out on a demo instance (master) or a non-indexable request (this lane). The target guard runs beside master's test-server seam and database sweep. The route matrix covers the new admin routes, including login-expiry's `PATCH /api/v1/admin/users/:id/expiry` and the lane 3/6 routes, and still finds no leak.

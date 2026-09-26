@@ -496,8 +496,9 @@ company/                  gitignored: plans, decisions, logs, market-research st
   false when `APP_ENV` is set to anything but `production`, or the request Host is an
   infrastructure host (`*.azurewebsites.net`, localhost / `*.localhost`, a bare IPv4 or
   IPv6 literal). Then `/robots.txt` is `User-agent: *` + `Disallow: /`, every page's
-  robots meta is `noindex, nofollow`, and `/sitemap.xml` is a valid EMPTY urlset — the
-  three read the one helper and send `Vary: Host`. Keyed on the Host, never on
+  robots meta is `noindex, nofollow`, `/sitemap.xml` is a valid EMPTY urlset and
+  `/llms.txt` is a 404 envelope — the four read the one helper and send `Vary: Host`
+  (a demo instance's robots.txt is `Disallow: /` too). Keyed on the Host, never on
   `APP_URL`, so it is right before and after a custom domain is bound. A suite that
   asserts indexability sends the public Host (`new URL(process.env.APP_URL).host`);
   supertest's default `127.0.0.1` is an infrastructure host.
@@ -1655,17 +1656,23 @@ company/                  gitignored: plans, decisions, logs, market-research st
   `middleware/upload.js` — multer calls `destination()` inside busboy's handler, so
   a bare `fs.mkdirSync` that throws (ENOSPC/EACCES on the uploads mount) is an
   UNCAUGHT exception that exits the process; `ensureDestination` hands it to
-  multer's callback. Every upload route wraps multer in
+  multer's callback. The product-image, product-import, avatar and
+  background-media routes wrap multer in
   `uploadSingle(builder, errorKeys, { tooLargeStatus })`: multer's own errors and
   the fileFilter's `INVALID_TYPE` are translated `errors.upload.*` 4xx (by
-  `err.code`, falling back to `default`, then `errors.upload.failed`) in the
-  standard envelope; any other error goes to the central error middleware (500);
-  a client hang-up (`Request aborted` / `Request closed`) ends **499**, logged at
-  info — never a 5xx that burns the SLO. The product-image route runs
+  `err.code`, falling back to `default`, then `errors.upload.failed`), and a
+  malformed multipart body (busboy's `Boundary not found`, `Malformed part
+  header`, `Unexpected end of form`, …) is a 400 `errors.upload.failed` — all in
+  the standard envelope; any other error goes to the central error middleware
+  (500); a client hang-up (`Request aborted` / `Request closed`) ends **499**,
+  logged at info — never a 5xx that burns the SLO. The product-image route runs
   `requireProduct` BEFORE multer (404 for an unknown, path-shaped or NUL-bearing
-  id, nothing written) and the controller unlinks the file if the row insert fails.
-  The news and project routes still hand-roll a wrapper (hidden surfaces; their
-  builders already use `ensureDestination`).
+  id, nothing written); the controller unlinks the file if the row insert fails,
+  and a product deleted mid-upload (FK 23503) is that 404 too. NOT yet on the
+  wrapper (a new upload route uses it; these move when next touched): news,
+  projects, party photos, site-content images, books documents and goods
+  receiving — they still answer multer's raw text, though their disk builders
+  already use `ensureDestination`.
 - **Product images are normalised on upload** ([harvest-ice-d-2026-09-24](HISTORY.md#harvest-ice-d-2026-09-24)): EXIF auto-orient, long
   edge ≤ 2000 px, metadata stripped, same format; bytes sharp cannot decode are
   a localised 400 with nothing kept. Rewrite from a BUFFER, never a temp file
