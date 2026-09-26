@@ -20,8 +20,8 @@ The **public instance** of Orange Smiley ehf.: marketing site + seed of the cust
 
 **This repo, run as a private ops instance, is where the business runs, not rekstrarkerfi.is.** The public orangesmiley.is only shows each seller or customer their own read-only part. The full decision is D-020 in `company/DECISIONS.md`; §4 of the company plan is amended to match.
 
-- **rekstrarkerfi.is** (the product repo) is the shop window. Only Halli logs in, as staff. Its public signup is being closed. It captures website enquiries, which are copied one way into the private ops DB.
-- **`demo.rekstrarkerfi.is`** (to build) is the demo sellers use, with Kaffibrennslan Glóð sample data, reset nightly. The handbook should point sellers there, not at this site.
+- **rekstrarkerfi.is** (the product repo) is the shop window. Only Halli logs in, as staff: public signup is closed (live since 2026-09-25), and the nav keeps "Innskrá" because he signs in there to edit the site (D-023, 2026-09-26). It captures website enquiries, which are copied one way into the private ops DB.
+- **`demo.rekstrarkerfi.is`** (to build) is ONE demo with every module (`modules.preset: all`) and Kaffibrennslan Glóð sample data, reset nightly. Sellers demo there (one login each), and every tier card's "Fáðu demo" on rekstrarkerfi.is/verdskra sends visitors there self-serve, on a throwaway session, never a real account (D-023, 2026-09-26). The handbook should point sellers there, not at this site. Two further kinds of demo for a prospect (A: our look with mock data modelled on their kind of business; B: their look via site-factory) are in D-023.
 - **Private ops** holds the books, invoices to customers, contracts, commission and the sales pipeline: one ledger, one invoice-number series. That is this repo's instance, run privately:
   - **now:** the local instance from D-017;
   - **after the 5.10 VSK filing:** `ops.orangesmiley.is`, on the stable release channel, behind Entra Easy Auth.
