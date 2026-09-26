@@ -281,11 +281,11 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Routes | `server/routes/adminNavRoutes.js` → `/api/v1/admin/nav-config` · `server/routes/userRoutes.js` → `PUT /api/v1/users/me/{page-width, page-width-motion, aside-width}` (the layout preferences) |
 | Models | `server/models/AdminNavConfig.js` |
 | Views | `public/js/views/AdminView.js` (the company overview at `/admin`), `AdminProjectsView.js` (unlisted `/admin/projects` board) |
-| Components | `public/js/components/AdminSidebar.js` (`ADMIN_NAV`), `adminNavLayout.js`, `adminSurface.js` (`HIDDEN_ADMIN_VIEWS`), `adminTable.js`, `adminPager.js`, `FilterBar.js`, `Toast.js`, `ToastLog.js`, `ErrorDialog.js` (every error toast), `Lightbox.js`, `ChangesList.js`, `PageWidthControl.js`, `AsideWidthControl.js`, `widthMenu.js` |
-| Client | `public/js/services/adminNav.js`, `toastLog.js`, `buildInfo.js`, `pageWidth.js`; `public/js/utils/stickyHScroll.js`, `listState.js`, `localPref.js`, `debounce.js`, `format.js`, `pageTitle.js`, `downloadCsv.js`, `csv.js`, `escHtml.js`, `api.js` |
+| Components | `public/js/components/AdminSidebar.js` (`ADMIN_NAV`), `adminNavLayout.js`, `adminSurface.js` (`HIDDEN_ADMIN_VIEWS`), `adminTable.js`, `adminPager.js`, `FilterBar.js`, `Toast.js`, `ToastLog.js`, `ErrorDialog.js` (every error toast), `Combobox.js` (searchable free-text input), `Lightbox.js`, `ChangesList.js`, `PageWidthControl.js`, `AsideWidthControl.js`, `widthMenu.js` |
+| Client | `public/js/services/adminNav.js`, `toastLog.js`, `buildInfo.js`, `pageWidth.js`; `public/js/utils/stickyHScroll.js`, `dragFiles.js`, `listState.js`, `localPref.js`, `debounce.js`, `format.js`, `pageTitle.js`, `downloadCsv.js`, `csv.js`, `escHtml.js`, `api.js` |
 | CSS | `public/css/admin-shell.css`, `admin-dashboard.css`, `admin-kit.css`, `layout.css`, `components.css`, `variables.css`, `reset.css` |
-| Jest | `tests/integration/adminNavConfig.test.js`, `admin.test.js`; `tests/unit/admin-surface-parity.test.js`, `admin-views-parity.test.js`, `adminTableKit.test.js`, `kitFormatters.test.js`, `pageTitle.test.js`, `debounce.test.js`, `csvClientParity.test.js`, `pageWidth.client.test.js`; `tests/integration/pageWidth.test.js` |
-| e2e | `e2e/admin.spec.js`, `admin-surface.spec.js`, `admin-list-kit.spec.js`, `admin-sidebar-scroll.spec.js`, `admin-nav-colors.spec.js`, `admin-page-width.spec.js` |
+| Jest | `tests/integration/adminNavConfig.test.js`, `admin.test.js`; `tests/unit/admin-surface-parity.test.js`, `admin-views-parity.test.js`, `adminTableKit.test.js`, `kitFormatters.test.js`, `pageTitle.test.js`, `debounce.test.js`, `csvClientParity.test.js`, `pageWidth.client.test.js`, `combobox.client.test.js`, `stickyHScroll.client.test.js`, `dragFiles.client.test.js`, `adminPageTitle.client.test.js`; `tests/integration/pageWidth.test.js` |
+| e2e | `e2e/admin.spec.js`, `admin-surface.spec.js`, `admin-list-kit.spec.js`, `admin-combobox.spec.js`, `admin-sidebar-scroll.spec.js`, `admin-nav-colors.spec.js`, `admin-page-width.spec.js` |
 | Migrations | 053 (nav config), 111 (per-account page width, Mjúk hreyfing, side-column width, cookie choice) |
 | Features | [admin-shell](../features/admin-shell.md), [admin-ui-kit](../features/admin-ui-kit.md) |
 | Feature doc | — (this section) |
@@ -338,8 +338,41 @@ company/                  gitignored: plans, decisions, logs, market-research st
   above near the bottom ([harvest-2](HISTORY.md#harvest-2)).
 - Neutral status chips use `--text-secondary`; `--overlay` is a per-theme token
   ([review-099](HISTORY.md#review-099)).
+- **A free-text field with known values is the kit `Combobox`**, never a
+  native `<datalist>` (no affordance, and it filters itself empty once the field
+  holds a value). Object entries show `label`, hand `value` to `onPick`, may
+  carry display-only `meta` and hidden match `keywords`. A server-backed source
+  is async with `debounceMs`/`minQuery`, and a server that matches on fields
+  other than the label passes them as `keywords`. Every attach is detached in
+  the view's `destroy()`, and inputs that re-render attach lazily on focus
+  ([harvest2-lane4a](history.d/2026-09-26-harvest2-lane4a-uikit.md#harvest2-lane4a-2026-09-26)).
+- **A file download from a Blob goes through `downloadBlob`**, which revokes
+  the object URL after 30 s, never synchronously. Safari cancels a download
+  whose URL is revoked straight after `click()`
+  ([harvest2-lane4a](history.d/2026-09-26-harvest2-lane4a-uikit.md#harvest2-lane4a-2026-09-26)).
+- **A region that scrolls sideways is keyboard-focusable while it overflows**
+  (WCAG 2.1.1). `stickyHScroll` gives the wrap `tabindex="0"`, `role="region"`
+  and an aria-label only then, and re-measures on a ResizeObserver, on resize
+  and on `visibilitychange`
+  ([harvest2-lane4a](history.d/2026-09-26-harvest2-lane4a-uikit.md#harvest2-lane4a-2026-09-26)).
+- **A drop zone answers during the drag**. It checks by MIME with
+  `utils/dragFiles.js`, lets an untyped item through, still calls
+  `preventDefault`, and the drop handler re-checks and stays the authority
+  ([harvest2-lane4a](history.d/2026-09-26-harvest2-lane4a-uikit.md#harvest2-lane4a-2026-09-26)).
+- **An admin detail view names its subject in the tab**:
+  `view.documentTitle = adminPageTitle(label, getLocale())`. A view whose
+  `render()` does not await its load also sets `document.title` once it knows
+  it is still live
+  ([harvest2-lane4a](history.d/2026-09-26-harvest2-lane4a-uikit.md#harvest2-lane4a-2026-09-26)).
+- **Dates go through `formatDate`/`formatDateTime`** (`utils/format.js`, app
+  locale, Icelandic built by hand). A raw `toLocale*()` call anywhere else under
+  `public/js` fails `tests/unit/adminPageTitle.client.test.js`
+  ([harvest2-lane4a](history.d/2026-09-26-harvest2-lane4a-uikit.md#harvest2-lane4a-2026-09-26)).
+- `.form-input[readonly]` looks read-only (`--bg-hover`, `--text-secondary`),
+  and its text stays selectable
+  ([harvest2-lane4a](history.d/2026-09-26-harvest2-lane4a-uikit.md#harvest2-lane4a-2026-09-26)).
 
-**History**: [r1](HISTORY.md#r1) · [admin-reshape](HISTORY.md#admin-reshape) · [ui-kit](HISTORY.md#ui-kit) · [harvest-ice-b-2026-09-24](HISTORY.md#harvest-ice-b-2026-09-24)
+**History**: [r1](HISTORY.md#r1) · [admin-reshape](HISTORY.md#admin-reshape) · [ui-kit](HISTORY.md#ui-kit) · [harvest-ice-b-2026-09-24](HISTORY.md#harvest-ice-b-2026-09-24) · [harvest2-lane4a-2026-09-26](history.d/2026-09-26-harvest2-lane4a-uikit.md#harvest2-lane4a-2026-09-26)
 
 ## 3. Public site — home, /thjonusta, /um-okkur, /hafa-samband, SSR meta, sitemap, SEO
 
@@ -521,7 +554,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Client | `public/js/theme-boot.js`, `public/js/services/themePrefs.js`, `ambiencePrefs.js`; `public/js/utils/chartTheme.js`, `motion.js` |
 | CSS | `public/css/themes.css`, `theme-switcher.css`, `iceland-scene.css`, `test-env.css` |
 | Scripts | `scripts/build-iceland-scenes.js`, `scripts/audit-text-contrast.js`, `scripts/self-host-fonts.js`, `scripts/recompress-images.js` |
-| Jest | `tests/integration/ambience.test.js`; `tests/unit/themePrefsAccount.client.test.js`, `themePrefsEnv.client.test.js`, `themeTokenDefined.test.js` (every `var(--x)` names a defined token) |
+| Jest | `tests/integration/ambience.test.js`; `tests/unit/themePrefsAccount.client.test.js`, `themePrefsEnv.client.test.js`, `themeTokenDefined.test.js` (every `var(--x)` names a defined token), `themeTokenContrast.test.js` (WCAG pairs on every theme; reader in `tests/themeTokens.js`) |
 | e2e | `e2e/iceland-scene.spec.js` |
 | Migrations | 083, 084 (user theme), 086, 089 (landing background scene/video), 094 (three-theme set), 106 (theme CHECK dropped so a product may add ids) |
 | Features | [ambience](../features/ambience.md), [scene-engine](../features/scene-engine.md), [themes](../features/themes.md) |
@@ -570,8 +603,23 @@ company/                  gitignored: plans, decisions, logs, market-research st
 - The three themes grade the same photos via `--scene-*` tokens (Miðnætti is
   the hardest cut, for contrast) [scene-engine](HISTORY.md#scene-engine).
 - `landing_background` mode `video` is the hero default (089 reverted 086).
+- **Token contrast is measured on every picker theme**
+  (`tests/unit/themeTokenContrast.test.js`, reader `tests/themeTokens.js`,
+  with the theme set taken from `identity.theme`). The ≥ 4.5:1 pairs are:
+  - text-primary, text-secondary and text-muted on base, surface, elevated
+    and hover;
+  - `--accent-ink` on the same four surfaces;
+  - `.btn--primary`'s `--on-accent` label on `--gold`, on every
+    `--accent-gradient` stop and on its hover fill, `--accent-hover`.
 
-**History**: [scene-engine](HISTORY.md#scene-engine) · [base-sync](HISTORY.md#base-sync) (6C theme) · [iceland-v2](HISTORY.md#iceland-v2) · [harvest-ice-b-2026-09-24](HISTORY.md#harvest-ice-b-2026-09-24)
+  The ≥ 3:1 pairs are focus rings and state borders. A failing pair is fixed
+  by re-hueing the token VALUE in the theme where it fails, or, where
+  CLAUDE.md pins the value, by pointing the rule at the contract token that
+  exists for it. A threshold is never lowered. A filled control's hover is
+  `--accent-hover`, never `--gold-light`
+  ([harvest2-lane4a](history.d/2026-09-26-harvest2-lane4a-uikit.md#harvest2-lane4a-2026-09-26)).
+
+**History**: [scene-engine](HISTORY.md#scene-engine) · [base-sync](HISTORY.md#base-sync) (6C theme) · [iceland-v2](HISTORY.md#iceland-v2) · [harvest-ice-b-2026-09-24](HISTORY.md#harvest-ice-b-2026-09-24) · [harvest2-lane4a-2026-09-26](history.d/2026-09-26-harvest2-lane4a-uikit.md#harvest2-lane4a-2026-09-26)
 
 ## 5. i18n
 
@@ -1358,16 +1406,28 @@ company/                  gitignored: plans, decisions, logs, market-research st
 |---|---|
 | Release delivery | `server/middleware/versionedStatic.js` (`/js/_<tag>/`, `/css/_<tag>/`, immutable a year, 404 `no-store` under another tag), `server/utils/staticCacheControl.js` (unstamped JS/CSS/JSON `no-cache`); client `public/js/services/buildGuard.js`, `public/js/utils/buildCheck.js`, `public/js/utils/assetBase.js`, `public/js/components/UpdateBanner.js`; `tests/integration/versionedShell.test.js`, `tests/unit/versionedStatic.test.js`, `staticCacheControl.test.js`, `buildCheck.client.test.js`, `noAbsoluteJsUrls.test.js` · e2e `e2e/build-reload.spec.js` |
 | App | `server/app.js`, `server/server.js`, `server/config/database.js`, `server/middleware/errorHandler.js`, `server/middleware/forwardedFor.js`; `server/utils/safeEqual.js` (constant-time compare for header credentials — the `/metrics` bearer) |
+| Demo instance (R2b) | `server/config/demoInstance.js` (`DEMO_INSTANCE`, the reset hour, the `<html>` hand-off), `server/services/demoReset.js` (the rebuild, the nightly timer, first-boot seed), `server/demo/seed.js` (PRODUCT-OWNED seed; the engine stub seeds nothing), `server/routes/adminDemoRoutes.js` → `/api/v1/admin/demo` (status + reset), `public/js/components/DemoBanner.js`; the guards in `emailService.js`, `server/config/stripe.js`, the three MCP gates, `robotsRoutes.js`, `app.js`; `tests/integration/demoInstance.test.js`, `tests/integration/demoReset.test.js` (+ `tests/fixtures/demoResetRun.js`) |
 | Module switches (R4) | `server/config/moduleCatalog.js` (what each switchable module owns: routes, API + upload prefixes, admin views, registry features, tiers), `server/config/modules.js` (the resolved state: the pre-auth `moduleGate`, `isDisabledRoute`, the `<script id="modules">` hand-off), `public/js/utils/modules.js` (its client half); `server/routes/adminModulesRoutes.js` → `/api/v1/admin/modules` (the admin's switches, R5b); `tests/unit/moduleCatalog.test.js`, `tests/integration/moduleFlags.test.js` · e2e `e2e/admin-modules.spec.js` |
 | Migrations tooling | `server/config/schema.js`, `server/scripts/migrate.js`, `bootstrap.js`, `setup-admin.js`, `seed.js`, `cleanup-duplicates.js`, `capture-site-screenshots.js` |
 | Tests infra | `tests/workerDb.js`, `tests/lib/featureGate.js` (the feature gate core), `tests/lib/locale.js` (the visitor-default helper), `tests/lib/historyAnchors.js` (archive + fragment anchors, one namespace), `e2e/global-setup.js`, `e2e/helpers.js`, `e2e/lib/dbUrl.js`, `e2e/lib/featureGate.js`, `e2e/lib/identity.js`, `e2e/lib/locale.js`; `scripts/drop-test-dbs.js` |
 | Jest | `tests/unit/schema-integrity.test.js`, `database.test.js`, `workerDb.test.js`, `featureGate.test.js`, `errorHandlerDeadlock.test.js`, `errorHandlerAiBusy.test.js`, `migrationIdempotent.test.js`, `ciSkippedShim.test.js`, `workflowsParse.test.js`, `historyFragments.test.js`; `tests/integration/migrateRunner.test.js` |
 | CI / deploy | `.github/workflows/ci.yml` (lint · 3 Jest shards · the aggregator), `ci-skipped.yml` (docs-only PR shim), `deploy.yml` (dispatch-only, by digest, production only), `promote.yml`; `scripts/merge-coverage.js`; `Dockerfile` |
 | Migrations | 001, 043 (housekeeping) |
-| Features | [client-config](../features/client-config.md), [platform-core](../features/platform-core.md), [rate-limits-security](../features/rate-limits-security.md), [testing-infra](../features/testing-infra.md) |
+| Features | [client-config](../features/client-config.md), [demo-instance](../features/demo-instance.md), [platform-core](../features/platform-core.md), [rate-limits-security](../features/rate-limits-security.md), [testing-infra](../features/testing-infra.md) |
 | Feature doc | `RUNBOOK.md`, `SECURE_SDLC.md`, `docs/TESTING.md`, `docs/DEPLOYMENT.md`, `docs/history.d/README.md` |
 
 **Rules that must hold**
+- **A demo instance throws its data away, never a real database** ([demo-instance-2026-09-26](history.d/2026-09-26-feat-demo-mode.md#demo-instance-2026-09-26)):
+  `DEMO_INSTANCE=true` is accepted only with `APP_ENV=demo` and `DEMO_DATABASE_NAME`
+  equal to the connected database (whose name carries "demo"); `server.js` exits at
+  boot otherwise. While on, email, payments (`isConfigured` AND `getStripe`), MCP and
+  IndexNow are off and crawlers are shut out. The reset snapshots the kept accounts
+  (`DEMO_KEEP_ROLES`, unexpired) as JSON in `demo_keep` BEFORE dropping `public`,
+  never as a renamed copy of the tables (unqualified `information_schema` checks in
+  migrations would see it); restores one statement per table in one transaction;
+  drops the snapshot only after the seed; recovers an interrupted reset at boot. A
+  `*_test` database only with `allowTestDatabase` (the reset test's own). The seed
+  file `server/demo/seed.js` is product-owned.
 - **A chunk's write-up is a new file, never an append** ([harvest2-lane0](history.d/2026-09-26-harvest2-lane0-history.md#harvest2-lane0-2026-09-26)):
   `docs/history.d/YYYY-MM-DD-<branch, / as ->.md`, first line its `<a id>`
   anchor, next non-empty line `## YYYY-MM-DD — <title>`; `docs/HISTORY.md` is

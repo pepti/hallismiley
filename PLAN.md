@@ -198,6 +198,22 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
   each is a migration or a contract change; (c) no engine route raises the
   429 yet (the translator queues) — ice's shutdown handshake comes with the
   first request-path AI call that can outlive the 10 s grace.
+- 2026-09-26: Harvest 2 lane 4a, the admin UI kit, is on branch
+  `harvest2/lane4a-uikit` (not merged):
+  [harvest2-lane4a-2026-09-26](docs/history.d/2026-09-26-harvest2-lane4a-uikit.md#harvest2-lane4a-2026-09-26).
+  It adds the Combobox, `downloadBlob`, read-only inputs, keyboard-reachable
+  wide tables, drag-time file checks, detail-view tab titles, the date sweep and
+  the theme contrast test. Open:
+  - (a) Two new strings are **DRAFT** (Halli): `adminKit.scrollRegion` and
+    `adminOrders.documentTitle`.
+  - (b) **The resting input border (`--border-dim`) is under WCAG 1.4.11's
+    3:1** on all three themes. It is a design decision for Halli, and it is a
+    `test.todo` in `themeTokenContrast.test.js`.
+  - (c) The `--gold-light` hover fills under a `--bg-nav` label in
+    `contact.css` and `shop.css` need moving to `--accent-hover` and
+    `--on-accent` by lane 4b or a follow-up.
+  - (d) Settled in the master merge: `AdminUsersView.js`'s raw date call is
+    on `formatDate`, and the date guard has no pending exceptions left.
 - Upward harvest from icelandicstore `4694289`, lane 1 (chunks A then B, branch
   `harvest/ice-2026-09-24-ab`, not merged). Chunk A landed on the branch
   ([harvest-ice-a-2026-09-24](docs/HISTORY.md#harvest-ice-a-2026-09-24)): admin
@@ -401,6 +417,7 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
   (`connect.*`) was approved by Halli 2026-09-25; `mcp.oauth*` too (the same day); (e) no CORS on the OAuth endpoints —
   claude.ai calls them server-side; a browser-based client (MCP Inspector)
   would need it.
+- Demo instance landed 2026-09-26 ([demo-instance-2026-09-26](docs/history.d/2026-09-26-feat-demo-mode.md#demo-instance-2026-09-26)): the engine half of R2b step 3. Open: rekstrarkerfid's Glóð seed as its `server/demo/seed.js` (+ the `kynning` prospect role), its `client.demo.json` (`CLIENT_CONFIG_FILE`) so the demo shows the shop, orders and till, `deploy.yml` with a `demo` environment (the lookup gate becomes "not test"), Ský's provisioning plan with `APP_ENV=demo`, `DEMO_INSTANCE=true`, `DEMO_DATABASE_NAME`, `DEMO_KEEP_ROLES=admin,kynning`, one instance, health check `/health`; verify on TEST that the reset's exit-and-restart is not counted as a crash loop; the `demo.*` / `errors.demo.*` copy is DRAFT.
 - Signup switch landed 2026-09-24 ([signup-switch-2026-09-24](docs/HISTORY.md#signup-switch-2026-09-24)):
   the engine half of rekstrarkerfid's R2b step 1. Open: rekstrarkerfid's next
   engine sync, then its own PR (config: signup off + `navSignIn` false; the

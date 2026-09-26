@@ -23,6 +23,7 @@
 import { t, href, SUPPORTED_LOCALES } from '../i18n/i18n.js';
 import { isAdmin, canSeeView, hasAllViews } from '../services/auth.js';
 import { getBuildInfo } from '../services/buildInfo.js';
+import { formatDateTime } from '../utils/format.js';
 import { showToast } from './Toast.js';
 import { HIDDEN_ADMIN_VIEWS } from './adminSurface.js';
 import { renderMfaReminder } from './mfaReminder.js';
@@ -939,7 +940,7 @@ export function renderAdminShell({ activePath, content, wide = false, widthKey }
     stamp.textContent = b.version === 'dev'
       ? t('admin.build.dev')
       : `${t('admin.build.label')} ${b.version} · ${String(b.gitSha || '').slice(0, 12)}`;
-    const built = b.builtAt ? new Date(b.builtAt).toLocaleString() : null;
+    const built = b.builtAt ? formatDateTime(b.builtAt) : null; // app locale (ice #324)
     stamp.title = [b.channel, built].filter(Boolean).join(' · ');
     stamp.hidden = false;
   });

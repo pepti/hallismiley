@@ -75,6 +75,12 @@ function sendFailed(channel, detail) {
 // The single choke point every sender goes through: allowlist rewrite,
 // bounded wait, loud failure. Returns Resend's { data, error } shape.
 async function deliver(payload, channel = 'generic') {
+  // A demo instance (config/demoInstance.js) sends nothing, whatever the env
+  // holds: its recipients are sample data. `id: null` reads as "not sent".
+  if (require('../config/demoInstance').isDemoInstance()) {
+    logger.info({ channel }, 'email skipped: demo instance');
+    return { data: { id: null }, error: null };
+  }
   // Nobody left to send to (only placeholder addresses): not sent at all.
   // `id: null` reads as "not sent" to every caller that returns the id.
   if (deliverable(payload.to).length === 0) {
@@ -97,6 +103,7 @@ async function deliver(payload, channel = 'generic') {
 }
 
 function isConfigured() {
+  if (require('../config/demoInstance').isDemoInstance()) return false;
   return !!process.env.RESEND_API_KEY;
 }
 

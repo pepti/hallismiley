@@ -106,3 +106,9 @@
 .prod-import__create { display: flex; align-items: center; gap: var(--sp-2); margin: var(--sp-3) 0 0; font-size: 0.9rem; color: var(--text-secondary); }
 .prod-import__errors { margin: var(--sp-2) 0; padding-left: var(--sp-4); font-size: 0.85rem; color: var(--text-secondary); }
 .prod-import__errors li { margin: 2px 0; }
+
+/* The product-image drop zone refuses a file type while it is still being
+   dragged (AdminProductsView, ported from icelandicstore #193): the dashed
+   outline shop.css draws for .is-dragover turns --error, and the cursor shows
+   no-drop (dropEffect 'none'). Loaded after shop.css, same specificity. */
+.admin-shop__dropzone.is-dragreject { outline-color: var(--error); background: var(--error-dim); }

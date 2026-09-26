@@ -496,5 +496,10 @@
   "meta.privacy.title": "Persónuverndarstefna",
   "meta.terms.title": "Notkunarskilmálar",
   "meta.party.title": "40 ára afmæli Halla",
-  "meta.party.description": "Þér er boðið í 40 ára afmæli Halla - 25 Julí, Mýrakot og Spa. Smelltu hér til að sjá dagskrá og skrá mætingu."
+  "meta.party.description": "Þér er boðið í 40 ára afmæli Halla - 25 Julí, Mýrakot og Spa. Smelltu hér til að sjá dagskrá og skrá mætingu.",
+  "errors.demo.resetting": "Verið er að endurstilla sýnigögnin. Reyndu aftur eftir um eina mínútu.",
+  "errors.demo.busy": "Endurstilling er þegar í gangi.",
+  "errors.demo.cooldown": "Sýnigögnin voru endurstillt fyrir minna en 15 mínútum. Reyndu aftur síðar.",
+  "errors.demo.interrupted": "Síðasta endurstilling kláraðist ekki. Endurræstu vefinn til að ljúka henni.",
+  "errors.demo.refused": "Ekki er hægt að endurstilla þetta kerfi."
 }
