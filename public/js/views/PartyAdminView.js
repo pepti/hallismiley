@@ -3553,6 +3553,7 @@ export class PartyAdminView {
     const tmp = document.createElement('div');
     tmp.innerHTML = this._renderPlanSection();
     old.replaceWith(tmp.firstElementChild);
+    this._pruneAssigneeCombos();
     this._bindPlan();
   }
 
@@ -3993,17 +3994,23 @@ export class PartyAdminView {
     section.addEventListener('focusin', (e) => {
       const input = e.target.closest?.('.party-admin__assignee-input');
       if (!input || input.dataset.combobox === 'on') return;
-      this._assigneeCombos = this._assigneeCombos.filter((c) => {
-        if (c.input.isConnected) return true;
-        c.detach();
-        return false;
-      });
+      this._pruneAssigneeCombos();
       const detach = attachCombobox(input, () => this._peopleNames || []);
       this._assigneeCombos.push({ input, detach });
       // Wrapping the input moves it in the DOM, which can drop focus. Put it
       // back; the combobox's own focus handler then opens the full list.
       if (document.activeElement === input) input.dispatchEvent(new FocusEvent('focus'));
       else input.focus();
+    });
+  }
+
+  // Detach every assignee combobox whose input a re-render has removed (called
+  // on attach and after each _rerenderPlan / _rerenderTodos).
+  _pruneAssigneeCombos() {
+    this._assigneeCombos = this._assigneeCombos.filter((c) => {
+      if (c.input.isConnected) return true;
+      c.detach();
+      return false;
     });
   }
 
@@ -4144,6 +4151,7 @@ export class PartyAdminView {
       if (openIds.has(d.dataset.todoMore)) d.open = true;
     });
     old.replaceWith(next);
+    this._pruneAssigneeCombos();
     this._bindTodos();
     this._rerenderCosts();
     // Plan tasks show their linked TODO's title and done state, so any change

@@ -1,8 +1,10 @@
 // Combobox — a text input with a searchable dropdown of known values.
 //
 // Ported from icelandicstore #194, #264, #269, #351, #398 (ice@941cf51d,
-// harvest 2 lane 4a, 2026-09-26) — the file as ice ships it; its CSS lives in
-// public/css/admin-kit.css (tokens only). Engine users: AdminExpensesView
+// harvest 2 lane 4a, 2026-09-26) — the file as ice ships it, plus the engine
+// deltas marked below (per-instance option ids + aria-controls, rows cleared on
+// hide, detach restores the input); its CSS lives in public/css/admin-kit.css
+// (tokens only). Engine users: AdminExpensesView
 // (supplier), PartyAdminView (task assignee), AdminRolesView (member search,
 // async source).
 //
@@ -92,13 +94,19 @@ export function highlight(value, query) {
  * at opposite ends; a plain row keeps the bare text it always had (wrapping it
  * would turn the label and its <mark> into separate flex items).
  */
-export function optionHtml(v, i, query) {
+export function optionHtml(v, i, query, idPrefix = 'cb-opt') {
   const label = highlight(labelOf(v), query);
   const meta = metaOf(v);
-  if (!meta) return `<li class="combobox__opt" role="option" id="cb-opt-${i}" data-i="${i}">${label}</li>`;
-  return `<li class="combobox__opt combobox__opt--meta" role="option" id="cb-opt-${i}" data-i="${i}">`
+  if (!meta) return `<li class="combobox__opt" role="option" id="${idPrefix}-${i}" data-i="${i}">${label}</li>`;
+  return `<li class="combobox__opt combobox__opt--meta" role="option" id="${idPrefix}-${i}" data-i="${i}">`
     + `<span class="combobox__label">${label}</span><span class="combobox__meta">${_esc(meta)}</span></li>`;
 }
+
+// Engine delta (harvest 2 lane 4a review, not yet in ice): option ids are
+// unique PER INSTANCE. ice rendered `cb-opt-<i>` in every combobox, so a page
+// with several (the party assignee inputs) carried duplicate ids and
+// aria-activedescendant could resolve to a row of another, hidden list.
+let _instances = 0;
 
 export function attachCombobox(input, getValues, { max = 100, onPick = null, debounceMs = 0, minQuery = 0 } = {}) {
   if (!input || input.dataset.combobox === 'on') return () => {};
@@ -113,11 +121,16 @@ export function attachCombobox(input, getValues, { max = 100, onPick = null, deb
   list.className = 'combobox__list';
   list.setAttribute('role', 'listbox');
   list.hidden = true;
+  const uid = `cb${(_instances += 1)}`;
+  list.id = `${uid}-list`;
   wrap.appendChild(list);
 
+  // Attributes this attach adds, so detach() can take back exactly these.
+  const hadAutocomplete = input.getAttribute('autocomplete');
   input.setAttribute('role', 'combobox');
   input.setAttribute('aria-autocomplete', 'list');
   input.setAttribute('aria-expanded', 'false');
+  input.setAttribute('aria-controls', list.id);
   input.setAttribute('autocomplete', 'off');
 
   let items = [];
@@ -134,7 +147,11 @@ export function attachCombobox(input, getValues, { max = 100, onPick = null, deb
   // the bump. items is emptied so a stale data-i can never index a live array.
   const hide = () => {
     list.hidden = true;
+    // Engine delta: the rows go too, so no stale option id outlives the list
+    // and aria-activedescendant cannot point into it.
+    list.innerHTML = '';
     input.setAttribute('aria-expanded', 'false');
+    input.removeAttribute('aria-activedescendant');
     active = -1;
     items = [];
   };
@@ -147,7 +164,7 @@ export function attachCombobox(input, getValues, { max = 100, onPick = null, deb
   const render = (all, query) => {
     items = rank(all || [], query).slice(0, max);
     if (!items.length) { hide(); return; }
-    list.innerHTML = items.map((v, i) => optionHtml(v, i, query)).join('');
+    list.innerHTML = items.map((v, i) => optionHtml(v, i, query, `${uid}-opt`)).join('');
     list.hidden = false;
     input.setAttribute('aria-expanded', 'true');
     active = -1;
@@ -257,5 +274,13 @@ export function attachCombobox(input, getValues, { max = 100, onPick = null, deb
     document.removeEventListener('mousedown', onDocDown);
     delete input.dataset.combobox;
     list.remove();
+    // Engine delta: hand the input back as it was found — out of the wrapper
+    // and without the combobox attributes — so a later attach does not nest.
+    wrap.replaceWith(input);
+    for (const a of ['role', 'aria-autocomplete', 'aria-expanded', 'aria-controls', 'aria-activedescendant']) {
+      input.removeAttribute(a);
+    }
+    if (hadAutocomplete === null) input.removeAttribute('autocomplete');
+    else input.setAttribute('autocomplete', hadAutocomplete);
   };
 }

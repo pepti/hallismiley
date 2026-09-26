@@ -189,7 +189,17 @@ export class AdminExpensesView {
         meta: s.supplier_kennitala || '',
         keywords: s.supplier_kennitala || '',
       }));
-      this._detachSupplier = attachCombobox(supplierInput, () => entries);
+      // Picking a known supplier fills its kennitala when that field is still
+      // empty, so two suppliers of one name are told apart in the entry too.
+      this._detachSupplier = attachCombobox(supplierInput, () => entries, {
+        onPick: (entry) => {
+          const kt = this._el.querySelector('input[name="supplier_kennitala"]');
+          if (kt && !kt.value.trim() && entry.meta) {
+            kt.value = entry.meta;
+            kt.dispatchEvent(new Event('input', { bubbles: true }));
+          }
+        },
+      });
     }
     this._wireForm();
     this._refreshVerdict();

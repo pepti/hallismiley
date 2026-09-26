@@ -134,6 +134,12 @@ describe('keywords — hidden match text of an object entry', () => {
     expect(rank([byEmail, byName], 'anna').map((e) => e.value)).toEqual(['u2', 'u1']);
   });
 
+  test('option ids take a per-instance prefix (engine delta: no duplicate ids across comboboxes)', () => {
+    expect(optionHtml('Jón', 3, '', 'cb7-opt')).toContain('id="cb7-opt-3"');
+    // The default keeps ice's shape, so the ported assertions above still hold.
+    expect(optionHtml('Jón', 3, '')).toContain('id="cb-opt-3"');
+  });
+
   test('keywords are never shown — the row renders the label only', () => {
     const html = optionHtml({ value: 'u1', label: 'Jón', keywords: 'secret@x.is' }, 0, 'secret');
     expect(html).not.toContain('secret@x.is');

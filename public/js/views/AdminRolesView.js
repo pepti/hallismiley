@@ -338,6 +338,14 @@ export class AdminRolesView {
         onPick: (entry) => this._showPicked(entry.value),
       },
     );
+    // minQuery means an emptied field never reaches the source, so clear a
+    // stale "no results" / error note here (and outrun any search in flight).
+    root.querySelector('#member-search').addEventListener('input', (e) => {
+      if (String(e.target.value || '').trim()) return;
+      this._searchSeq += 1;
+      const box = this._el.querySelector('#member-search-results');
+      if (box && !box.querySelector('[data-user-id]')) box.innerHTML = '';
+    });
 
     // Client-side board filter (debounced) — narrows cards already shown.
     root.querySelector('#member-filter').addEventListener('input', (e) => {
@@ -426,7 +434,10 @@ export class AdminRolesView {
   }
 
   // The picked person as one draggable chip, the drag source for a role column.
+  // Bumping the sequence first makes any search still in flight (a newer query
+  // waiting on its debounce or its response) stale, so it cannot wipe the chip.
   _showPicked(userId) {
+    this._searchSeq += 1;
     const box = this._el.querySelector('#member-search-results');
     const user = this._searchResults.find(u => String(u.id) === String(userId));
     if (box && user) box.innerHTML = this._searchChip(user);

@@ -9,13 +9,16 @@
 const { test, expect } = require('@playwright/test');
 // Skipped as a whole on a product that hides, disables or forks the feature
 // this spec belongs to (features/local.json — see e2e/lib/featureGate.js).
-const { gateSpec } = require('./lib/featureGate');
+const { gateSpec, skipUnless } = require('./lib/featureGate');
 gateSpec(test, __filename);
 const { loginAsAdmin, TEST_ADMIN } = require('./helpers');
 
 test.use({ viewport: { width: 1280, height: 900 } });
 
 test.describe('Combobox — the member search on /admin/roles', () => {
+  // The page belongs to rbac-roles too; a product that hides it skips this half.
+  skipUnless(test, 'rbac-roles');
+
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page);
     await page.goto('/is/admin/roles');
@@ -27,6 +30,10 @@ test.describe('Combobox — the member search on /admin/roles', () => {
     const input = page.locator('#member-search');
     await expect(input).toHaveAttribute('role', 'combobox');
     await expect(input).toHaveAttribute('aria-expanded', 'false');
+    // aria-controls names this instance's own listbox (ids are per instance).
+    const listId = await input.getAttribute('aria-controls');
+    expect(listId).toMatch(/^cb\d+-list$/);
+    await expect(page.locator(`#${listId}`)).toHaveAttribute('role', 'listbox');
 
     // Focus alone shows nothing: minQuery 1 — a server search needs a term.
     await input.focus();
@@ -62,6 +69,8 @@ test.describe('Combobox — the member search on /admin/roles', () => {
 });
 
 test.describe('Combobox — the expense supplier field', () => {
+  skipUnless(test, 'bookkeeping-core');
+
   test('replaced the native <datalist>', async ({ page }) => {
     await loginAsAdmin(page);
     await page.goto('/is/admin/books/expenses');

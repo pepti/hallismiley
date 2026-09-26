@@ -8,7 +8,8 @@ engine's own kit (domain 2) and, for the contrast test, the theme engine (domain
 
 **What shipped.**
 1. **Combobox** (`public/js/components/Combobox.js`, ice #194, #264, #269, #351, #398): the file as
-   ice ships it. It is a free-text input with a searchable listbox, with arrow keys and
+   ice ships it, plus three engine deltas the review pass asked for (below). They should go back up
+   to ice by the next engine sync. It is a free-text input with a searchable listbox, with arrow keys and
    `aria-activedescendant`. Sources can be async, with `debounceMs`/`minQuery`; entries can carry a
    `meta` note and hidden `keywords`. Its unit test was ported too, plus keyword tests the engine
    depends on. The CSS went into `admin-kit.css` on tokens only: an elevated surface, `--border`,
@@ -103,8 +104,39 @@ engine's own kit (domain 2) and, for the contrast test, the theme engine (domain
 | `adminKit.scrollRegion` | Tafla, flettist til hliðar | Table, scrolls sideways |
 | `adminOrders.documentTitle` | Pöntun {number} | Order {number} |
 
-**Tests.** Unit suite: 117 suites, 2062 passed, 1 todo. New or extended unit tests:
-- new: `combobox.client.test.js` (21), `stickyHScroll.client.test.js` (8),
+**Review pass** (`invariant-reviewer` on `git diff master...HEAD`): no invariant violations. Its
+three real findings were fixed on the branch:
+- **R1**: a pick in the roles search could be wiped by a newer search still in flight.
+  `_showPicked` now bumps the search sequence first.
+- **R2**: Combobox option ids repeated across instances (`cb-opt-<i>` in every list), so on the
+  party page `aria-activedescendant` could resolve into another, hidden list.
+  - Ids are now per instance (`cb<N>-opt-<i>`, through an optional `optionHtml` prefix; ice's
+    default is unchanged).
+  - The input carries `aria-controls`.
+  - `hide()` clears the rows.
+- **R3**: the Combobox e2e spec was gated only on `admin-ui-kit`. Its two halves now also
+  `skipUnless` `rbac-roles` and `bookkeeping-core`.
+
+Nits fixed:
+- **N1**: `detach()` hands the input back out of the wrapper, without the combobox attributes.
+- **N2**: emptying the roles search clears a stale "no results" or error note.
+- **N4**: picking a known supplier fills an empty kennitala field.
+- **N5**: party comboboxes are pruned after every re-render, not only on the next focus.
+
+Deliberate won't-fixes:
+- **N3**: a new search with hits clears an earlier picked chip. It is one drag source per search,
+  as before.
+- **N6**: a date format with `weekday` (ArticleView, the updates schedule) still falls through to
+  the runtime in Icelandic. `format.js` builds no weekday shape; the sweep did not make this worse
+  than `en-GB`.
+- **N7**: the customers "spent" column now reads "ISK 8,400" in English. That is `formatMoney`, the
+  kit's one money format.
+- **N8**: `highlight` bolds the wrong run for a character whose lowercase changes length (İ). This
+  is ice's code, cosmetic and still escaped.
+- **N9, N10** are the DRAFT strings and the `test.todo` above.
+
+**Tests.** Unit suite: 117 suites, 2063 passed, 1 todo. New or extended unit tests:
+- new: `combobox.client.test.js` (22), `stickyHScroll.client.test.js` (8),
   `dragFiles.client.test.js` (8), `adminPageTitle.client.test.js` (6),
   `themeTokenContrast.test.js` (35 + 1 todo);
 - extended: `csvClientParity.test.js` (+3 for `downloadBlob`).
