@@ -300,6 +300,17 @@ const OS_004_EDITS = [
     to: 'Stórt verk (20 einingar) er stærra en mánaðarskammtur nokkurs þreps, svo viðskiptavinurinn velur: að dreifa því á einingar næstu mánaða án aukakostnaðar, eða að hefja það strax og greiða það sem umfram er á einingaverði — og hann sér upphæðina áður en hann samþykkir verkið.</p>' },
 ];
 
+// os_005 — the demo persona "Kaffibrennslan Glóð" is a real company (Halli,
+// 2026-09-26); the fictional one is Kaffibrennslan Hraunbaun (checked clean
+// against Skatturinn's fyrirtækjaskrá, ISNIC and Hugverkastofan). One passage
+// in "kerfid-i-stuttu-mali" names it. Same helper and guard as os_001–004 (rows
+// nobody saved; idempotent); the seed carries the result;
+// tests/integration/salesGuidesPersona.test.js checks seed-with-os_005-undone +
+// this edit == seed text. DRÖG; the guides stay unpublished.
+const OS_005_EDITS = [
+  { slug: 'kerfid-i-stuttu-mali', field: 'body', from: 'Kaffibrennsluna Glóð', to: 'Kaffibrennsluna Hraunbaun' },
+];
+
 module.exports = {
   product: 'os',
   legacy: [
@@ -440,6 +451,14 @@ module.exports = {
     name: 'os_004_sales_guides_queue_spread',
     edits: OS_004_EDITS,
     statements: OS_004_EDITS.map(guideEdit),
+  },
+  {
+    // The demo persona is renamed (see OS_005_EDITS above). Pure data, no
+    // schema, expand-only: text in rows nobody saved, `published` untouched.
+    // Reference copy: server/migrations/product/os_005_sales_guides_persona_hraunbaun.sql
+    name: 'os_005_sales_guides_persona_hraunbaun',
+    edits: OS_005_EDITS,
+    statements: OS_005_EDITS.map(guideEdit),
   },
   ],
   aliases: {},
