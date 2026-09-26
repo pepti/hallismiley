@@ -52,12 +52,14 @@ const MODULES = Object.freeze({
   shop: {
     tiers: ['verslun', 'rekstur'],
     routes: ['/shop', '/cart', '/checkout', '/orders',
-      '/admin/shop', '/admin/bins', '/admin/discounts', '/admin/sales', '/admin/customers'],
+      '/admin/shop', '/admin/bins', '/admin/discounts', '/admin/sales', '/admin/customers',
+      '/admin/inventory', '/admin/stock-count', '/admin/receiving'],
     api: ['/api/v1/shop', '/api/v1/admin/shop', '/api/v1/admin/bins', '/api/v1/admin/discounts',
-      '/api/v1/admin/customers', '/api/v1/admin/customer-notes'],
+      '/api/v1/admin/customers', '/api/v1/admin/customer-notes',
+      '/api/v1/admin/inventory', '/api/v1/admin/receiving'],
     assets: ['/assets/products'],
-    adminViews: ['products', 'orders', 'collections', 'bins', 'discounts', 'sales', 'customers'],
-    features: ['shop-catalog', 'cart-checkout', 'orders', 'discounts', 'customers-crm'],
+    adminViews: ['products', 'orders', 'collections', 'bins', 'discounts', 'sales', 'customers', 'inventory', 'receiving'],
+    features: ['shop-catalog', 'cart-checkout', 'orders', 'discounts', 'customers-crm', 'goods-receiving'],
   },
   // Sölukassi: the till. Its API and screen sit under the bookkeeping ones.
   pos: {

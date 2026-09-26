@@ -81,6 +81,23 @@ const UserRole = {
     return map;
   },
 
+  // How many people hold a role — as a membership (user_roles) or as their
+  // primary (users.role; normally mirrored into user_roles by trigger, counted
+  // from both so a drifted row is not missed). Disabled accounts count: the FK
+  // still blocks the delete for them. Powers the 409 roleInUse {count}
+  // (harvest 2 G7; ice #416 returns the count the same way).
+  async holderCount(roleName) {
+    const { rows } = await db.query(
+      `SELECT COUNT(*)::int AS n FROM (
+         SELECT user_id AS id FROM user_roles WHERE role_name = $1
+         UNION
+         SELECT id FROM users WHERE role = $1
+       ) h`,
+      [String(roleName)]
+    );
+    return rows[0].n;
+  },
+
   // Distinct non-disabled users who hold the 'admin' role — the last-admin guard
   // must consider membership, not just users.role.
   async adminCount() {

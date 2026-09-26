@@ -7,6 +7,7 @@ import { navigateReplace } from '../navigate.js';
 import { mountSceneHeader } from '../scenes/sceneHeader.js';
 import { bindAllPasswordToggles } from '../utils/passwordToggle.js';
 import { realEmail } from '../utils/placeholderEmail.js';
+import { roleLabel } from '../utils/roleLabel.js';
 import { THEMES, swatchFor, DARK_THEMES, getTheme, setTheme, saveThemeToAccount } from '../services/themePrefs.js';
 
 const TOTAL_AVATARS = 40;
@@ -232,9 +233,14 @@ export class ProfileView {
 
   _buildHTML(profile, sessions) {
     const avatarName = profile.avatar || 'avatar-01.svg';
-    const roleBadge  = profile.role === 'admin'
-      ? `<span class="badge badge--admin">${t('adminUsers.setRole')} — admin</span>`
-      : `<span class="badge badge--user">${t('adminUsers.setRole')} — user</span>`;
+    // The roles this session holds, by their display names (harvest 2 G3; ice
+    // #421 did the same for staff badges) — was "Set role — admin/user",
+    // which named neither a custom role nor a seller. `user` is the floor every
+    // account holds, so it is only named when it is the only role.
+    const held  = Array.isArray(profile.roles) && profile.roles.length ? profile.roles : [{ name: profile.role }];
+    const shown = held.length > 1 ? held.filter(r => r.name !== 'user') : held;
+    const roleBadge = `<span class="profile-roles" role="group" aria-label="${escHtml(t('profile.roles'))}">${shown.map(r =>
+      `<span class="badge ${r.name === 'admin' ? 'badge--admin' : 'badge--user'}">${escHtml(roleLabel(r))}</span>`).join(' ')}</span>`;
     // A name-only login (no email, ice #397) has nothing to verify: no badge.
     const verified = !realEmail(profile.email) ? ''
       : profile.emailVerified

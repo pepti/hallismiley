@@ -4,6 +4,7 @@
 // Adapted from the icelandicstore wholesale note: no SKU column (order_items
 // carry no SKU here) and no prices (a delivery note, not an invoice).
 const PDFDocument = require('pdfkit');
+const { identity } = require('../config/identity');
 
 const MARGIN = 50;
 const INK    = '#111111';
@@ -163,4 +164,133 @@ function streamBulkDeliveryNotes({ res, orders, store }) {
   doc.end();
 }
 
-module.exports = { streamDeliveryNote, streamBulkDeliveryNotes };
+// ── Goods receipt (harvest2-lane6a-2026-09-26; after ice #23's
+// receiptReportPdf.js, redrawn on this file's patterns) ─────────────────────
+// What arrived against what the supplier's file said: one row per line with
+// expected, received and the difference, then what was scanned but not on the
+// file. Bilingual labels like the delivery note; no prices (unit costs are a
+// supplier reference, not our stock value).
+function attrLabel(attributes) {
+  if (!attributes || typeof attributes !== 'object') return '';
+  return Object.values(attributes).filter(v => v != null && String(v).trim()).join(' / ');
+}
+
+const VARIANCE_LABEL = {
+  exact: 'OK', short: 'Short / Vantar', over: 'Over / Umfram',
+  not_received: 'Not received / Kom ekki', pending: '—',
+};
+
+function drawGoodsReceipt(doc, { receipt, lines, extras, store }) {
+  const pageW  = doc.page.width;
+  const innerW = pageW - MARGIN * 2;
+
+  doc.fillColor(INK).font('Helvetica-Bold').fontSize(20)
+    .text(store.store_name || identity.brand.name, MARGIN, MARGIN, { width: innerW * 0.6 });
+  doc.font('Helvetica-Bold').fontSize(16).fillColor(INK)
+    .text('GOODS RECEIPT', MARGIN + innerW * 0.6, MARGIN, { width: innerW * 0.4, align: 'right' });
+  doc.font('Helvetica').fontSize(10).fillColor(MUTED)
+    .text('Vörumóttaka', { width: innerW * 0.4, align: 'right' })
+    .moveDown(0.6);
+  doc.fillColor(INK).fontSize(10)
+    .text(fmtDate(receipt.finalized_at || receipt.created_at), { width: innerW * 0.4, align: 'right' });
+
+  let y = Math.max(doc.y, MARGIN + 70) + 16;
+  doc.font('Helvetica-Bold').fontSize(10).fillColor(MUTED).text('SUPPLIER / BIRGIR', MARGIN, y);
+  doc.font('Helvetica').fontSize(10).fillColor(INK).text(String(receipt.supplier_name || ''), { width: innerW * 0.6 });
+  if (receipt.reference) doc.fillColor(MUTED).text(`Ref: ${receipt.reference}`, { width: innerW * 0.6 });
+  const statusLine = receipt.status === 'finalized'
+    ? `Finalised / Frágengið ${fmtDate(receipt.finalized_at)}${receipt.finalized_by_name ? ' · ' + receipt.finalized_by_name : ''}`
+    : `Status / Staða: ${receipt.status}`;
+  doc.fillColor(MUTED).text(statusLine, { width: innerW * 0.6 });
+
+  y = doc.y + 20;
+  const col = {
+    sku:  { x: MARGIN,               w: 80 },
+    name: { x: MARGIN + 84,          w: innerW - 84 - 190 },
+    exp:  { x: pageW - MARGIN - 186, w: 44 },
+    rec:  { x: pageW - MARGIN - 138, w: 44 },
+    var:  { x: pageW - MARGIN - 90,  w: 90 },
+  };
+  const tableHeader = () => {
+    doc.font('Helvetica-Bold').fontSize(8).fillColor(MUTED);
+    doc.text('SKU', col.sku.x, y, { width: col.sku.w });
+    doc.text('ITEM / VARA', col.name.x, y, { width: col.name.w });
+    doc.text('EXP.', col.exp.x, y, { width: col.exp.w, align: 'right' });
+    doc.text('REC.', col.rec.x, y, { width: col.rec.w, align: 'right' });
+    doc.text('', col.var.x, y, { width: col.var.w });
+    y += 13;
+    doc.moveTo(MARGIN, y).lineTo(pageW - MARGIN, y).strokeColor(RULE).lineWidth(0.5).stroke();
+    y += 6;
+  };
+  const row = (sku, name, exp, rec, variance) => {
+    const rowH = Math.max(doc.heightOfString(name, { width: col.name.w }), 11) + 6;
+    if (y + rowH > doc.page.height - 90) {
+      doc.addPage(); y = MARGIN; tableHeader();
+    }
+    doc.font('Helvetica').fontSize(9).fillColor(INK);
+    doc.text(sku, col.sku.x, y, { width: col.sku.w });
+    doc.text(name, col.name.x, y, { width: col.name.w });
+    doc.text(exp, col.exp.x, y, { width: col.exp.w, align: 'right' });
+    doc.text(rec, col.rec.x, y, { width: col.rec.w, align: 'right' });
+    doc.text(variance, col.var.x, y, { width: col.var.w, align: 'right' });
+    y += rowH;
+    doc.moveTo(MARGIN, y - 3).lineTo(pageW - MARGIN, y - 3).strokeColor('#e5e5e5').lineWidth(0.5).stroke();
+  };
+  tableHeader();
+
+  let expected = 0; let received = 0;
+  for (const l of lines || []) {
+    const skipped = l.match_status === 'skipped' || l.match_status === 'new_product';
+    const name = [l.product_name || l.supplier_description || '', attrLabel(l.attributes)].filter(Boolean).join(' — ')
+      + (skipped ? ' (skipped / sleppt)' : '');
+    if (!skipped) { expected += Number(l.expected_qty) || 0; received += Number(l.received_qty) || 0; }
+    row(String(l.sku || l.file_sku || l.barcode || ''), name, String(l.expected_qty || 0),
+      String(l.received_qty || 0), skipped ? '' : (VARIANCE_LABEL[l.variance] || ''));
+  }
+
+  if ((extras || []).length) {
+    y += 10;
+    if (y > doc.page.height - 120) { doc.addPage(); y = MARGIN; }
+    doc.font('Helvetica-Bold').fontSize(10).fillColor(MUTED)
+      .text('NOT ON THE INVOICE / EKKI Á REIKNINGI', MARGIN, y);
+    y = doc.y + 6;
+    for (const x of extras) {
+      received += Number(x.qty) || 0;
+      row(String(x.sku || ''), [x.product_name || '', attrLabel(x.attributes)].filter(Boolean).join(' — '),
+        '0', String(x.qty || 0), VARIANCE_LABEL.over);
+    }
+  }
+
+  y += 8;
+  doc.font('Helvetica-Bold').fontSize(10).fillColor(INK)
+    .text(`${expected} expected · ${received} received`, MARGIN, y, { width: innerW, align: 'right' });
+
+  const footY = Math.max(doc.y + 50, doc.page.height - 100);
+  doc.font('Helvetica').fontSize(9).fillColor(MUTED);
+  const half = innerW / 2 - 20;
+  doc.moveTo(MARGIN, footY).lineTo(MARGIN + half, footY).strokeColor(RULE).lineWidth(0.7).stroke();
+  doc.text('Received by / Móttekið af', MARGIN, footY + 4, { width: half });
+  doc.moveTo(pageW - MARGIN - half, footY).lineTo(pageW - MARGIN, footY).strokeColor(RULE).lineWidth(0.7).stroke();
+  doc.text('Date / Dagsetning', pageW - MARGIN - half, footY + 4, { width: half });
+}
+
+/**
+ * Stream a goods receipt as an A4 PDF into an HTTP response.
+ * @param {object} opts
+ * @param {import('http').ServerResponse} opts.res
+ * @param {object} opts.receipt  GoodsReceipt.findById row
+ * @param {Array}  opts.lines    GoodsReceipt.lines(id)
+ * @param {Array}  opts.extras   GoodsReceipt.extras(id)
+ * @param {object} opts.store    Setting.getGeneralSettings()
+ */
+function streamGoodsReceipt({ res, receipt, lines, extras, store }) {
+  const doc = new PDFDocument({ size: 'A4', margin: MARGIN, bufferPages: true });
+  res.setHeader('Content-Type', 'application/pdf');
+  const ref = String(receipt.reference || receipt.id).replace(/[^\w.-]/g, '_').slice(0, 60);
+  res.setHeader('Content-Disposition', `inline; filename="goods-receipt-${ref}.pdf"`);
+  doc.pipe(res);
+  drawGoodsReceipt(doc, { receipt, lines, extras, store });
+  doc.end();
+}
+
+module.exports = { streamDeliveryNote, streamBulkDeliveryNotes, streamGoodsReceipt };

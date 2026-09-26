@@ -938,6 +938,50 @@ function validateAccountPatch(req, res, next) {
   next();
 }
 
+// ── Admin: edit one customer (PATCH /api/v1/admin/customers/:id) ─────────────
+// Ported from icelandicstore #336 (validateCustomerContact), on the engine's
+// isEmail and utils/contactFormat (isValidPhone, isValidZip — the checkout's
+// rules, ice #399). Each field is checked only when its key is present; a
+// blank string is allowed everywhere but the email (it clears the field — the
+// controller stores null). The email is the login, so it stays required. The
+// Icelandic three-digit postnúmer rule needs the country, so it is applied when
+// both `zip` and `country` are sent (the edit dialog always sends the pair).
+const CUSTOMER_TEXT_MAX = { display_name: 200, address1: 200, address2: 200, city: 100, zip: 20 };
+const COUNTRY_RE = /^[A-Za-z]{2}$/;
+const _present = (v) => v !== undefined && v !== null && v !== '';
+
+function validateCustomerContact(req, res, next) {
+  const b = req.body || {};
+  const errors = [];
+
+  if ('email' in b) {
+    if (typeof b.email !== 'string' || !isEmail(b.email.trim())) {
+      errors.push({ key: 'validation.email.invalid' });
+    }
+  }
+  if (_present(b.display_name) && (typeof b.display_name !== 'string' || b.display_name.trim().length > CUSTOMER_TEXT_MAX.display_name)) {
+    errors.push({ key: 'validation.displayName.maxLength', params: { n: CUSTOMER_TEXT_MAX.display_name } });
+  }
+  if (_present(b.phone) && (typeof b.phone !== 'string' || !isValidPhone(b.phone.trim()))) {
+    errors.push({ key: 'validation.phone.invalid' });
+  }
+  for (const k of ['address1', 'address2', 'city', 'zip']) {
+    if (_present(b[k]) && (typeof b[k] !== 'string' || b[k].trim().length > CUSTOMER_TEXT_MAX[k])) {
+      errors.push({ key: 'validation.address.maxLength', params: { n: CUSTOMER_TEXT_MAX[k] } });
+      break;
+    }
+  }
+  if (_present(b.country) && (typeof b.country !== 'string' || !COUNTRY_RE.test(b.country.trim()))) {
+    errors.push({ key: 'validation.country.invalid' });
+  } else if (typeof b.zip === 'string' && b.zip.trim() && 'country' in b
+             && !isValidZip(b.zip, typeof b.country === 'string' ? b.country : '')) {
+    errors.push({ key: 'validation.checkout.postcodeInvalid' });
+  }
+
+  if (errors.length) return _fail(req, res, errors);
+  next();
+}
+
 // POST /api/v1/shop/checkout — the SHAPE of the shipping address's postcode and
 // phone (ported from icelandicstore #399, utils/contactFormat.js). Everything
 // else about the body (items, currency, required fields, lengths) stays with
@@ -965,6 +1009,7 @@ function validateCheckoutContact(req, res, next) {
 module.exports = {
   validateCheckoutContact,
   _isEmail: isEmail,
+  validateCustomerContact,
   validateProject,
   validateQuery,
   validateLeadUpdate,

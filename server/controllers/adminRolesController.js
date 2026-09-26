@@ -22,8 +22,37 @@ const staffAudit = require('../services/staffAudit');
 // Gaining admin powers clears a time-limited login's expiry (migration 114).
 const { clearExpiryOnPromotion } = require('../auth/accountExpiry');
 
-const NAME_RE  = /^[a-z0-9_-]{2,32}$/;
-const RESERVED = new Set(['admin', 'moderator', 'user']);
+// Create by display name (harvest 2 G1/G4; ported from icelandicstore #421):
+// the slug is derived from the typed label, reserved and back-office names are
+// refused after folding, and slugs are never renamed afterwards.
+const {
+  NAME_RE, cleanLabel, labelProblem, slugCandidates, slugReserved, labelKey,
+} = require('../utils/roleName');
+
+// Which unique constraint a 23505 came from: the slug (primary key) means
+// "try the next slug"; the label index means "that name is taken".
+const LABEL_INDEX = 'roles_label_lower_uniq';
+
+// Is this name already another role's name, once case, accents and punctuation
+// are folded away? The unique index only covers case; this keeps "Bókari" and
+// "Bokari" from becoming two columns that read the same. A role nobody named
+// (label '') is compared by its slug, which is what the grid shows for it.
+async function labelTaken(label, exceptName = null) {
+  const key = labelKey(label);
+  const roles = await Role.findAll();
+  return roles.some(r => r.name !== exceptName && labelKey(r.label || r.name) === key);
+}
+
+// The `user` role is the floor every account holds (a trigger mirrors each
+// primary role into user_roles). A view granted to it would be granted to every
+// signed-up customer and would make each of them staff (requireStaff admits any
+// non-empty view set). Its set may only ever shrink — harvest 2 lane 3 (the
+// grid made this one click away). Returns true when `next` adds a view.
+function widensFloorRole(name, current, next) {
+  if (name !== 'user') return false;
+  const had = new Set(Array.isArray(current) ? current : []);
+  return next.some(v => !had.has(v));
+}
 
 // Returns null when valid, else an English error string.
 function validateViewAccess(v) {
@@ -43,33 +72,65 @@ const adminRolesController = {
     } catch (err) { next(err); }
   },
 
+  // POST { label, description?, view_access? } — the slug is derived from the
+  // label on the server ("Bókari" → bokari, bokari-2 on a collision).
+  // { name } (a ready slug, the pre-2026-09-26 shape) is still accepted when no
+  // label is sent. Ported from icelandicstore #421 (adminCompanyRolesController).
   async create(req, res, next) {
     try {
       const { name, description, view_access } = req.body || {};
-      if (typeof name !== 'string' || !NAME_RE.test(name)) {
-        return res.status(400).json({ error: t(req.locale, 'errors.admin.roleNameInvalid'), code: 400 });
-      }
-      if (RESERVED.has(name)) {
-        return res.status(409).json({ error: t(req.locale, 'errors.admin.roleNameReserved'), code: 409 });
+      const label = cleanLabel(req.body && req.body.label);
+      let candidates;
+      if (label) {
+        const problem = labelProblem(label);
+        if (problem) return res.status(problem.status).json({ error: t(req.locale, problem.key), code: problem.status });
+        if (await labelTaken(label)) {
+          return res.status(409).json({ error: t(req.locale, 'errors.admin.roleNameTaken'), code: 409 });
+        }
+        candidates = slugCandidates(label);
+      } else {
+        if (typeof name !== 'string' || !NAME_RE.test(name)) {
+          return res.status(400).json({ error: t(req.locale, 'errors.admin.roleNameInvalid'), code: 400 });
+        }
+        if (slugReserved(name)) {
+          return res.status(409).json({ error: t(req.locale, 'errors.admin.roleNameReserved'), code: 409 });
+        }
+        if (await labelTaken(name)) {
+          return res.status(409).json({ error: t(req.locale, 'errors.admin.roleNameTaken'), code: 409 });
+        }
+        candidates = [name];
       }
       const verr = validateViewAccess(view_access ?? []);
       if (verr) return res.status(400).json({ error: verr, code: 400 });
-      const role = await Role.create({
-        name,
-        description: typeof description === 'string' ? description.slice(0, 200) : '',
-        view_access: [...new Set(view_access || [])],
-      });
-      // A new role with views is a new way into the admin — as audit-worthy
-      // as widening one (role.updated below).
-      await staffAudit.recordSafe({
-        ...staffAudit.actorOf(req), action: 'role.created', entityType: 'role', entityId: role.name,
-        summary: { views: role.view_access },
-      });
-      return res.status(201).json({ role });
-    } catch (err) {
-      if (err.code === '23505') return res.status(409).json({ error: t(req.locale, 'errors.admin.roleNameTaken'), code: 409 });
-      next(err);
-    }
+
+      // Insert, and on a slug collision take the next candidate. Checking first
+      // and inserting after would race a second admin creating the same name.
+      for (const slug of candidates) {
+        let role;
+        try {
+          role = await Role.create({
+            name: slug,
+            label,
+            description: typeof description === 'string' ? description.slice(0, 200) : '',
+            view_access: [...new Set(view_access || [])],
+          });
+        } catch (err) {
+          if (err.code !== '23505') throw err;
+          if (err.constraint === LABEL_INDEX || candidates.length === 1) {
+            return res.status(409).json({ error: t(req.locale, 'errors.admin.roleNameTaken'), code: 409 });
+          }
+          continue;
+        }
+        // A new role with views is a new way into the admin — as audit-worthy
+        // as widening one (role.updated below).
+        await staffAudit.recordSafe({
+          ...staffAudit.actorOf(req), action: 'role.created', entityType: 'role', entityId: role.name,
+          summary: { label: role.label, views: role.view_access },
+        });
+        return res.status(201).json({ role });
+      }
+      return res.status(409).json({ error: t(req.locale, 'errors.admin.roleNameTaken'), code: 409 });
+    } catch (err) { next(err); }
   },
 
   async update(req, res, next) {
@@ -84,6 +145,24 @@ const adminRolesController = {
       if (req.body.view_access !== undefined) {
         const verr = validateViewAccess(req.body.view_access);
         if (verr) return res.status(400).json({ error: verr, code: 400 });
+        if (widensFloorRole(name, role.view_access, req.body.view_access)) {
+          return res.status(400).json({ error: t(req.locale, 'errors.admin.cannotGrantUserRole'), code: 400 });
+        }
+      }
+      // The display name (116_role_label). The slug never changes. The built-in
+      // roles are named by i18n in both languages, so a stored label would
+      // rename them in one language only — refused.
+      let label;
+      if (req.body.label !== undefined) {
+        if (role.is_system) {
+          return res.status(400).json({ error: t(req.locale, 'errors.admin.roleSystemLabel'), code: 400 });
+        }
+        label = cleanLabel(req.body.label);
+        const problem = labelProblem(label);
+        if (problem) return res.status(problem.status).json({ error: t(req.locale, problem.key), code: problem.status });
+        if (await labelTaken(label, name)) {
+          return res.status(409).json({ error: t(req.locale, 'errors.admin.roleNameTaken'), code: 409 });
+        }
       }
       const before = role.view_access;
       // One transaction with the promotion sweep: a role that now grants admin
@@ -95,6 +174,7 @@ const adminRolesController = {
       try {
         await client.query('BEGIN');
         updated = await Role.update(name, {
+          label,
           description: typeof req.body.description === 'string' ? req.body.description.slice(0, 200) : undefined,
           view_access: req.body.view_access !== undefined ? [...new Set(req.body.view_access)] : undefined,
         }, client);
@@ -104,17 +184,29 @@ const adminRolesController = {
         await client.query('COMMIT');
       } catch (err) {
         await client.query('ROLLBACK').catch(() => {});
+        // Another role took the same name between the check and the write.
+        if (err.code === '23505') {
+          return res.status(409).json({ error: t(req.locale, 'errors.admin.roleNameTaken'), code: 409 });
+        }
         throw err;
       } finally {
         client.release();
       }
       Role.invalidateCache();
+      // Deleted between the read and the write.
+      if (!updated) return res.status(404).json({ error: t(req.locale, 'errors.admin.roleNotFound'), code: 404 });
       // Widening a role's view_access is the most security-relevant role event
       // there is — more than a membership change — so it belongs in the trail.
-      if (req.body.view_access !== undefined) {
+      // A rename rides the same event: the grid and the Users dropdown show
+      // the label, so a renamed role is a different-looking grant.
+      const labelChanged = label !== undefined && label !== role.label;
+      if (req.body.view_access !== undefined || labelChanged) {
         await staffAudit.recordSafe({
           ...staffAudit.actorOf(req), action: 'role.updated', entityType: 'role', entityId: name,
-          summary: { views_before: before, views_after: updated.view_access },
+          summary: {
+            ...(req.body.view_access !== undefined ? { views_before: before, views_after: updated.view_access } : {}),
+            ...(labelChanged ? { label_before: role.label, label_after: updated.label } : {}),
+          },
         });
       }
       return res.json({ role: updated });
@@ -129,17 +221,21 @@ const adminRolesController = {
       if (role.is_system) {
         return res.status(400).json({ error: t(req.locale, 'errors.admin.cannotDeleteSystemRole'), code: 400 });
       }
+      // A role somebody holds cannot be deleted (the FKs are ON DELETE
+      // RESTRICT); say how many hold it so the admin knows what to move first
+      // (harvest 2 G7; icelandicstore #416 answers 409 + count the same way).
+      const inUse = () => UserRole.holderCount(name).then(count =>
+        res.status(409).json({ error: t(req.locale, 'errors.admin.roleInUse', { count }), code: 409, reason: 'role_in_use', count }));
+      if (await UserRole.holderCount(name) > 0) return inUse();
       try {
         await Role.remove(name);
       } catch (err) {
-        if (err.code === '23503') { // FK violation — role still assigned to users
-          return res.status(409).json({ error: t(req.locale, 'errors.admin.roleInUse'), code: 409 });
-        }
+        if (err.code === '23503') return inUse(); // granted between the count and the delete
         throw err;
       }
       await staffAudit.recordSafe({
         ...staffAudit.actorOf(req), action: 'role.deleted', entityType: 'role', entityId: name,
-        summary: { views: role.view_access },
+        summary: { label: role.label, views: role.view_access },
       });
       return res.status(204).send();
     } catch (err) { next(err); }
@@ -153,6 +249,7 @@ const adminRolesController = {
       const [roles, byRole] = await Promise.all([Role.findAll(), UserRole.membersByRole()]);
       const out = roles.map(r => ({
         name:        r.name,
+        label:       r.label,
         description: r.description,
         is_system:   r.is_system,
         view_access: r.view_access,

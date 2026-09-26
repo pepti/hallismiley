@@ -88,7 +88,7 @@ prints which base it chose, and `tests/globalTeardown.js` drops the set again
 (`KEEP_TEST_DB=1` keeps it). Set `TEST_DATABASE_URL` to override the derivation
 entirely — the name must end in `_test`. Orphans from killed runs:
 `npm run test:db:clean`. Playwright uses its own per-branch
-`orangesmiley_e2e_<branch>_test` (`e2e/lib/dbUrl.js`). Tiers, counts and what
+`<product>_e2e_<branch>_test` (`e2e/lib/dbUrl.js`). Tiers, counts and what
 CI runs: `docs/TESTING.md`.
 
 ---
