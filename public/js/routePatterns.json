@@ -23,6 +23,8 @@
     "/admin/users",
     "/admin/analytics",
     "/admin/general",
+    "/admin/checkout",
+    "/admin/announcement",
     "/admin/updates",
     "/admin/monitoring",
     "/admin/mcp",

@@ -109,7 +109,8 @@ const GoodsReceipt = {
               l.match_status, l.sort_order,
               p.name AS product_name, pv.attributes,
               COALESCE(pv.sku, p.sku) AS sku, COALESCE(pv.bin, p.bin) AS bin,
-              CASE WHEN l.variant_id IS NOT NULL THEN pv.stock ELSE p.stock END AS on_hand
+              CASE WHEN l.variant_id IS NOT NULL THEN pv.stock ELSE p.stock END AS on_hand,
+              (pv.archived_at IS NOT NULL) AS variant_archived
          FROM goods_receipt_lines l
          LEFT JOIN products p          ON p.id  = l.product_id
          LEFT JOIN product_variants pv ON pv.id = l.variant_id
@@ -206,9 +207,13 @@ const GoodsReceipt = {
     };
     if (skus.length || bars.length) {
       const { rows: vs } = await db.query(
+        // Live variants only (migration 119, harvest 2 lane 6c): an archived
+        // variant may share its SKU with the live one that replaced it, and a
+        // delivery is never received onto a deleted variant.
         `SELECT v.id AS variant_id, v.product_id, v.sku, v.barcode
            FROM product_variants v
-          WHERE v.sku = ANY($1::text[]) OR v.barcode = ANY($2::text[])`,
+          WHERE (v.sku = ANY($1::text[]) OR v.barcode = ANY($2::text[]))
+            AND v.archived_at IS NULL`,
         [skus, bars]
       );
       const { rows: ps } = await db.query(
@@ -418,13 +423,23 @@ const GoodsReceipt = {
       await client.query('BEGIN');
       const receipt = await GoodsReceipt._lockDraft(client, receiptId);
       const { rows: lines } = await client.query(
-        `SELECT id, product_id, variant_id, received_qty, match_status
-           FROM goods_receipt_lines WHERE receipt_id = $1`, [receipt.id]
+        `SELECT l.id, l.product_id, l.variant_id, l.received_qty, l.match_status,
+                (pv.archived_at IS NOT NULL) AS variant_archived
+           FROM goods_receipt_lines l
+           LEFT JOIN product_variants pv ON pv.id = l.variant_id
+          WHERE l.receipt_id = $1`, [receipt.id]
       );
       const live = lines.filter(l => !EXCLUDED_STATES.has(l.match_status));
       const unresolved = live.filter(l => !l.product_id);
       if (unresolved.length) {
         throw typed('Unmatched lines', 'INCOMPLETE', 409, { lineIds: unresolved.map(l => l.id) });
+      }
+      // A line matched to a variant that was deleted (archived, migration 119)
+      // after the match cannot be received (applyBatch refuses it): name the
+      // lines, so the admin re-matches or skips them (harvest 2 lane 6c).
+      const archived = live.filter(l => l.variant_archived);
+      if (archived.length) {
+        throw typed('Lines on an archived variant', 'VARIANT_ARCHIVED', 409, { lineIds: archived.map(l => l.id) });
       }
       // One movement per unit (two lines for one variant add up), from the
       // scan log: matched lines by line, extras by product/variant.

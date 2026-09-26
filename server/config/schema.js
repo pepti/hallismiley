@@ -5779,6 +5779,91 @@ END; $$ LANGUAGE plpgsql`,
     ],
   },
   {
+    // Variants that work, and a colour per product photo (harvest 2 lane 6c,
+    // 2026-09-26; ported from icelandicstore #194 = ice 099_variant_archive
+    // and #182/#265 = ice 096_product_image_color). Numbered into the harvest
+    // order at the merge: after 118_goods_receipts, before 120_product_merge.
+    //
+    // 1. product_images.color — which variant colour a photo shows. The
+    //    storefront resolves variant colours against it server-side
+    //    (server/utils/colorMatch.js → `color_images` on the product payload)
+    //    and the product page swaps the photo when a colour is picked. NULL =
+    //    "not colour-specific" (a lifestyle shot), which is how every existing
+    //    photo reads. Ice has no index on it and neither do we: it is only ever
+    //    read with the product's own images.
+    //
+    // 2. product_variants.archived_at — "deleted, but an order still names it".
+    //    The admin variant grid used to "delete" by setting active = false,
+    //    which left the row holding the GLOBAL unique `sku` and its
+    //    (product_id, attributes) slot for ever: re-adding that size then 409'd
+    //    with no way out. A real delete now removes a variant nothing
+    //    references; one that is on an order (order_items ON DELETE RESTRICT)
+    //    or carries stock history (inventory_adjustments, ON DELETE CASCADE —
+    //    a delete would take the audit trail with it) is ARCHIVED instead:
+    //    archived_at set, active false, out of every list. Order history is
+    //    unaffected — order_items keeps its own variant_attributes snapshot.
+    //
+    // 3. The two unique rules become PARTIAL (WHERE archived_at IS NULL) so an
+    //    archived row stops reserving its SKU and its attribute combination.
+    //    Each partial index is CREATED before the old rule is DROPPED, so
+    //    there is no moment without uniqueness on live rows. The column-level
+    //    UNIQUE from 024 is found in pg_constraint rather than dropped by a
+    //    guessed name (product_variants_sku_key): an IF EXISTS on the wrong
+    //    name would no-op silently and leave the global rule in place (ice's
+    //    review finding on #194). `ON CONFLICT (product_id, attributes)` must
+    //    now name the predicate too — seed-shop.js does.
+    //
+    // Expand/contract (invariant 14): the previous release neither reads nor
+    // writes either column, and every SELECT it runs names its columns. Old
+    // code during the swap still soft-deletes (active = false), which the new
+    // indexes permit; it would LIST an archived row as an inactive variant
+    // until the swap completes — cosmetic, and only for a row archived in
+    // that window. Loosening a unique rule is not a contract: no release
+    // relies on a conflict the partial index no longer raises (archived rows
+    // exist only once this release writes them). A ROLLBACK to the previous
+    // image after this release has archived variants and re-used their SKUs
+    // is degraded, not broken: the old Product.resolveByCode (… LIMIT 1, no
+    // archive filter) can resolve a scanned code to the archived twin, and
+    // the old seed-shop.js (ON CONFLICT without the predicate) fails with
+    // 42P10 — a manual script. No minCompatibleVersion is needed. Rollback of the schema:
+    // DROP COLUMN product_images.color / product_variants.archived_at once no
+    // release reads them; restoring the global SKU rule would first need the
+    // duplicate SKUs of archived rows renamed.
+    //
+    // On icelandicstore every statement is a no-op (its databases hold 096 and
+    // 099 under their own names, same DDL, IF NOT EXISTS; the pg_constraint
+    // loop finds nothing left to drop), so ice needs no `aliases` entry.
+    // Reference copy: server/migrations/119_product_image_color.sql
+    name: '119_product_image_color',
+    statements: [
+      `ALTER TABLE product_images ADD COLUMN IF NOT EXISTS color TEXT`,
+      `ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS uniq_product_variants_sku_live
+         ON product_variants (sku) WHERE archived_at IS NULL`,
+      `DO $$
+         DECLARE c text;
+         BEGIN
+           FOR c IN
+             SELECT con.conname
+               FROM pg_constraint con
+               JOIN pg_attribute att
+                 ON att.attrelid = con.conrelid AND att.attnum = ANY (con.conkey)
+              WHERE con.conrelid = 'product_variants'::regclass
+                AND con.contype = 'u'
+                AND array_length(con.conkey, 1) = 1
+                AND att.attname = 'sku'
+           LOOP
+             EXECUTE format('ALTER TABLE product_variants DROP CONSTRAINT %I', c);
+           END LOOP;
+         END $$`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS uniq_product_variants_attrs_live
+         ON product_variants (product_id, attributes) WHERE archived_at IS NULL`,
+      `DROP INDEX IF EXISTS uniq_product_variants_attrs`,
+      `CREATE INDEX IF NOT EXISTS idx_product_variants_live
+         ON product_variants (product_id) WHERE archived_at IS NULL`,
+    ],
+  },
+  {
     // Product merge (harvest 2 lane 6b, 2026-09-26; ported from icelandicstore
     // #309/#311/#312/#315 — ice's 112_product_merges). A merged product is NOT
     // deleted: it stays as an inactive row pointing at the product it was
@@ -5840,6 +5925,87 @@ END; $$ LANGUAGE plpgsql`,
       `CREATE INDEX IF NOT EXISTS idx_product_merges_master ON product_merges (master_id, merged_at DESC)`,
       `CREATE INDEX IF NOT EXISTS idx_product_merges_merged ON product_merges (merged_id)`,
       `CREATE INDEX IF NOT EXISTS idx_product_merges_sku ON product_merges (lower(merged_sku)) WHERE merged_sku IS NOT NULL`,
+    ],
+  },
+  {
+    // The order's VAT, snapshotted at checkout (harvest 2 lane 5, 2026-09-26;
+    // net sales on the sales report, ported in spirit from icelandicstore
+    // #414 — ice already stores orders.vat_total). Two nullable columns:
+    //   order_items.vat_rate — the rate the line was sold at (0 for exported
+    //     goods, a service keeps its rate), the SAME rule as the invoice;
+    //   orders.vat_total — the VAT inside orders.total, in the order's own
+    //     currency's minor units, so total − vat_total is net sales.
+    // Order.createWithItems fills both, in the checkout transaction, through
+    // the pure helper utils/orderVat.js that bookkeeping/invoiceService
+    // .buildLines also uses — so for an ISK order the snapshot IS what the
+    // invoice later books (tests/integration/orderVatSnapshot.test.js) —
+    // unless a product's rate changes between checkout and invoicing: the
+    // invoice still reads the CURRENT rate (owed, see the lane 5 fragment).
+    //
+    // Backfill (WHERE vat_total IS NULL): orders placed before this release
+    // get the VAT computed HERE, in SQL, from each product's CURRENT vat_rate
+    // (the only rate history there is), the discount spread over the lines and
+    // the shipping in proportion, shipping at 24 % unless the address is
+    // abroad. It is APPROXIMATE: a rate changed since the sale, and the
+    // króna-level largest-remainder allocation the invoice does, are not
+    // reproduced. Backfilled history is never booked from — the books read
+    // their own invoice lines.
+    //
+    // On icelandicstore (whose 087 already added orders.vat_total, filled by
+    // its own checkout) the backfill finds no NULL rows and is a no-op, and no
+    // `aliases` entry is needed: its migration did more than this one
+    // (docs/MIGRATIONS.md).
+    //
+    // Additive (invariant 14): the previous release neither reads nor writes
+    // either column. An order the OLD code writes during the swap keeps NULL,
+    // and the report falls back to the same approximation for a NULL
+    // (Order.salesReport). Rollback of the schema: DROP both columns once no
+    // release reads them.
+    // Reference copy: server/migrations/121_order_vat_snapshot.sql
+    name: '121_order_vat_snapshot',
+    statements: [
+      `ALTER TABLE order_items ADD COLUMN IF NOT EXISTS vat_rate SMALLINT
+         CHECK (vat_rate IS NULL OR vat_rate IN (0, 11, 24))`,
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS vat_total INTEGER`,
+      // 1. The line rates of the orders about to be backfilled.
+      `UPDATE order_items oi
+          SET vat_rate = CASE
+                WHEN UPPER(TRIM(COALESCE(NULLIF(o.shipping_address->>'country_code', ''),
+                                         NULLIF(o.shipping_address->>'country', ''), 'IS')))
+                     NOT IN ('IS', 'ISL', 'ICELAND', 'ÍSLAND')
+                 AND NOT COALESCE(p.is_bookable, FALSE) THEN 0
+                ELSE COALESCE(p.vat_rate, 24) END
+         FROM orders o, products p
+        WHERE o.id = oi.order_id AND p.id = oi.product_id
+          AND o.vat_total IS NULL AND oi.vat_rate IS NULL`,
+      // 2. The order's VAT: each line and the shipping after its proportional
+      //    share of the discount, VAT extracted per rate. Approximate (above).
+      `WITH base AS (
+         SELECT o.id, o.total::numeric AS total,
+                GREATEST(o.shipping - COALESCE(o.shipping_discount, 0), 0)::numeric AS ship,
+                UPPER(TRIM(COALESCE(NULLIF(o.shipping_address->>'country_code', ''),
+                                    NULLIF(o.shipping_address->>'country', ''), 'IS')))
+                  NOT IN ('IS', 'ISL', 'ICELAND', 'ÍSLAND') AS export,
+                COALESCE((SELECT SUM(oi.product_price_snapshot::numeric * oi.quantity)
+                            FROM order_items oi WHERE oi.order_id = o.id), 0) AS goods
+           FROM orders o
+          WHERE o.vat_total IS NULL
+       ), shares AS (
+         SELECT b.id, b.ship, b.export,
+                COALESCE(GREATEST(b.goods + b.ship - b.total, 0) / NULLIF(b.goods + b.ship, 0), 0) AS f
+           FROM base b
+       ), vat AS (
+         SELECT s.id,
+                COALESCE((SELECT SUM(ROUND(oi.product_price_snapshot::numeric * oi.quantity * (1 - s.f)
+                                           * oi.vat_rate / (100 + oi.vat_rate)))
+                            FROM order_items oi
+                           WHERE oi.order_id = s.id AND oi.vat_rate IS NOT NULL), 0)
+                + CASE WHEN s.export THEN 0 ELSE ROUND(s.ship * (1 - s.f) * 24 / 124) END AS vat
+           FROM shares s
+       )
+       UPDATE orders o SET vat_total = v.vat::int
+         FROM vat v
+        WHERE v.id = o.id AND o.vat_total IS NULL`,
     ],
   },
   {

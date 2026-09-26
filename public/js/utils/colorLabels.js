@@ -4,41 +4,18 @@
 //
 // Ported from icelandicstore #399/#400 (2026-09-21/22): the product page held
 // English literals ({ black: 'Black', white: 'White' }, 'Select Size') that
-// leaked onto the Icelandic page. Trimmed for the engine: ice imports its
-// colour normaliser from utils/variantAxis.js and utils/colorMatch.js, which the
-// engine does not carry; the two helpers below are the same rules, inlined.
-
+// leaked onto the Icelandic page. Lane 4b inlined ice's colour normaliser here
+// because the engine did not carry utils/variantAxis.js + utils/colorMatch.js;
+// lane 6c (2026-09-26) ported those, so this module imports them again as ice
+// does — one definition of "how a colour value folds to a key".
+//
 // Colour values arrive however the catalogue spelled them: "Sage Green (SAG)",
-// "BLACK", "french_navy". Lower-case, shed a trailing supplier code in
-// parentheses, and fold spaces/underscores to hyphens → "sage-green".
-export function colorKey(value) {
-  return String(value || '')
-    .replace(/\([^)]*\)/g, '')
-    .trim()
-    .toLowerCase()
-    .replace(/[\s_]+/g, '-');
-}
+// "BLACK", "french_navy" → colorKey → "sage-green". Re-exported for callers
+// (and tests) that import it from here.
+import { colorKey } from './variantAxis.js';
+import { matchKnownKey } from './colorMatch.js';
 
-// Spelling variants of ONE colour name (not a synonym table).
-const SPELLING_ALIASES = { gray: 'grey' };
-const aliased = (key) => SPELLING_ALIASES[key] || key;
-const tokensOf = (key) => key.split('-').filter(Boolean);
-const contained = (inner, outer) => inner.length > 0 && inner.every((t) => outer.includes(t));
-
-// The single entry of `known` naming the same colour as `value`, else null:
-// exact first, then one key's words wholly inside the other's ("navy" ⊆
-// "french-navy"). Two partial matches are ambiguous and return null.
-function matchKnownKey(value, known) {
-  const key = aliased(colorKey(value));
-  if (!key) return null;
-  if (known.includes(key)) return key;
-  const kt = tokensOf(key);
-  const near = known.filter((k) => {
-    const t = tokensOf(aliased(k));
-    return contained(t, kt) || contained(kt, t);
-  });
-  return near.length === 1 ? near[0] : null;
-}
+export { colorKey };
 
 // Keyed by colorKey(). The exact key wins before any partial match, so
 // "Blush Pink" finds blush-pink and never the plain pink.

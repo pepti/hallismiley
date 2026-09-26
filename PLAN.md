@@ -191,6 +191,18 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
   then `--yes`) on `:5432` clears the old `orangesmiley_*` leftovers; the
   branch whose test creates `demo_reset_${pid}_test` switches to
   `createExtraTestDb('demoreset')`.
+  - 2026-09-26 follow-ups landed on `chore/test-db-hygiene-followups`
+    ([test-db-followups-2026-09-26](docs/history.d/2026-09-26-chore-test-db-hygiene-followups.md#test-db-followups-2026-09-26)):
+    the demo-reset test owns its database (`createExtraTestDb('demo')` —
+    `demoreset` would fail the reset's "demo as a word" guard), the sweep
+    test cleans its own leftovers, `.wt/` is gitignored, and site-factory's
+    `engine-sync.js` gained `--cleanup <date>` plus the `TEST_PG_URL`
+    pass-through (a sync that would test on `:5432` is refused). Still owed:
+    the `--legacy --sweep` pass on `:5432` after each downstream syncs; in
+    site-factory, review findings B1–B3 from the fragment (`--cleanup` must
+    check the PR really merged before removing the worktree and branch;
+    `TEST_DATABASE_URL` vs the `:5432` gate; the no-server database step as a
+    dry run).
 
 - Harvest 2 started 2026-09-26 (Halli approved the scope that day): generic
   icelandicstore work up to `ice@941cf51d` ported into the engine in lanes 0–9,
@@ -323,6 +335,34 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
   depend on them merging; (d) the news and project upload routes still hand-roll
   their multer wrapper (hidden surfaces; the builders already use
   `ensureDestination`).
+- Harvest 2 lane 6c (2026-09-26, branch `harvest2/lane6c-variants`,
+- Harvest 2 lane 5 (2026-09-26, branch `harvest2/lane5-reports`,
+  [harvest2-lane6c-2026-09-26](docs/history.d/2026-09-26-harvest2-lane6c-variants.md#harvest2-lane6c-2026-09-26)):
+  the variant grid (add / delete / archive, colour → size order, header sort,
+  "+ Add a colour"), the bulk variants route + MCP `add_variants` /
+  `list_variants` (switch `mcp.write.variantCreate`, off), colour swatches that
+  swap the photo, the delivery note as a pick list, and the lane 4a
+  `--gold-light` leftover. Engine migration `119_product_image_color` (after
+  118, before 120). Open: (a) **the new
+  `adminProducts.*`, `variants.*`, `shop.sortByCol`, `errors.variantAdd.*`,
+  `validation.variant.*` strings are DRAFT** (Halli; listed in the fragment);
+  (b) settled 2026-09-26 after merging lane 6b: merged products refuse
+  variant writes (route guard + `variantAdd`) and merges keep archived
+  variants archived; (c) settled 2026-09-26: the other `--bg-nav`
+  labels on `--gold` fills clear AA on every theme and are now pinned by the
+  contrast test; lane 6a's stock code skips archived variants.
+  [harvest2-lane5-2026-09-26](docs/history.d/2026-09-26-harvest2-lane5-reports.md#harvest2-lane5-2026-09-26)):
+  the sales report's period presets + comparison + net sales, insights and
+  marketing sections, the "Í dag" attention cards with filtered links, an order
+  VAT snapshot at checkout (engine migration `121_order_vat_snapshot`,
+  number confirmed by the coordinator; 119 is reserved for lane 6c; approximate backfill), MCP
+  `sales_report` / `recent_orders`. Open: (a) **the new `adminSales.*`,
+  `adminHome.waiting.*` and list-filter strings are DRAFT** (Halli; listed in
+  the fragment); (b) the invoice still books each line at the product's
+  CURRENT rate — reading the new `order_items.vat_rate` snapshot there is a
+  books-path decision for Halli/Bókari; (c) the sold-out card counts the
+  Birgðavakt's `out` units (lane 6a, merged into this branch) and links to
+  `/admin/inventory?status=out`.
 - Upward harvest from icelandicstore `4694289`, lane 1 (chunks A then B, branch
   `harvest/ice-2026-09-24-ab`, not merged). Chunk A landed on the branch
   ([harvest-ice-a-2026-09-24](docs/HISTORY.md#harvest-ice-a-2026-09-24)): admin
@@ -602,6 +642,8 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
   65 view modules eagerly (ENHANCEMENTS #6).
 - Still a decision, not code: MCP arguments pass through `sanitizeBody` and the
   global IP limit (moving the mount would exempt MCP from two protections).
+
+- **Harvest 2 lane 7a (2026-09-26)** — checkout settings (Admin → Greiðsla, hidden with the shop) and the time-limited site announcement (Admin → Tilkynning): [harvest2-lane7a](docs/history.d/2026-09-26-harvest2-lane7a-checkout-settings.md#harvest2-lane7a-2026-09-26). **For Halli, per instance:** nothing changes until an admin saves — (a) turn the announcement on (heading, message, start/end) where a cutover needs one; (b) on a shop instance, set the alert list, the minimum, the delivery price and the field rules. Open: (a) the pause status — 503 per the brief, ice uses 403 for the SLO (`checkoutRules.ORDERING_PAUSED_STATUS`), Halli decides; (b) OWED: a migration storing company + kennitala on the order (`orders` has no column; they are validated and dropped today), then the admin order page and the owner alert show them; (c) the lane's strings are DRAFT (list in the fragment).
 
 **CI / deploy state**
 

@@ -25,9 +25,10 @@ const FxRate = require('../../models/FxRate');
 const ledger = require('./ledgerService');
 const audit = require('./auditLog');
 const {
-  splitVatInclusive, allocateProportional, summariseByRate, assertIntegerIsk, resolveVatRate,
+  allocateProportional, summariseByRate, assertIntegerIsk,
   STANDARD_VAT_RATE, REDUCED_VAT_RATE,
 } = require('../../utils/vat');
+const { computeOrderVat, lineVatRate, isExport, countryOf } = require('../../utils/orderVat');
 const { convertLinesToIsk, assertPlausibleRate } = require('../../utils/fx');
 const { toIsoDate, addDays, assertAccountingDate, todayIso } = require('../../utils/booksDate');
 const { clientConfig } = require('../../config/clientConfig');
@@ -140,7 +141,7 @@ function pickCustomer(order) {
     email,
     address: lines.join('\n'),
     // Country drives the VAT treatment: goods leaving Iceland are zero-rated.
-    country: (addr && addr.country_code) || (addr && addr.country) || 'IS',
+    country: countryOf(addr),
     street: part(street, 200),
     city: part(addr && addr.city, 120),
     postalZone: part(addr && addr.postal, 20),
@@ -181,13 +182,9 @@ function pickAccountCustomer(account) {
   };
 }
 
-// Iceland is not in the EU VAT area, so a sale shipped abroad is an export and
-// zero-rated — but only against proof of export. Anything shipped within Iceland,
-// and any service, stays at the standard rate.
-function isExport(customerCountry) {
-  const c = String(customerCountry || 'IS').trim().toUpperCase();
-  return !(c === 'IS' || c === 'ISL' || c === 'ICELAND' || c === 'ÍSLAND');
-}
+// isExport (a sale shipped abroad is zero-rated, against proof of export) lives
+// in utils/orderVat.js since harvest 2 lane 5, so the checkout's VAT snapshot
+// and the invoice apply the one rule; it is re-exported below unchanged.
 
 /**
  * Build the invoice lines for an order.
@@ -211,13 +208,12 @@ function buildLines({ order, items, rate, exportSale }) {
   // Otherwise the product's own rate applies. The 11% band is a closed statutory
   // list, and books and printed matter are on it — charging 24% on a catalogue is
   // the wrong tax, not a rounding preference.
-  const vatRateFor = (item) => {
-    if (exportSale && !item.is_service) return 0;
-    // resolveVatRate rather than a bare ?? default: a product row carrying a rate
-    // outside {0,11,24} should stop the invoice, not be quietly normalised.
-    return item.vat_rate === null || item.vat_rate === undefined
-      ? STANDARD_VAT_RATE : resolveVatRate(item.vat_rate);
-  };
+  //
+  // resolveVatRate rather than a bare ?? default: a product row carrying a rate
+  // outside {0,11,24} should stop the invoice, not be quietly normalised. The
+  // rule itself is utils/orderVat.js lineVatRate, which the checkout snapshot
+  // (migration 121) applies too.
+  const vatRateFor = item => lineVatRate(item, exportSale);
 
   // UNIT prices are what get translated, not line totals.
   //
@@ -253,28 +249,34 @@ function buildLines({ order, items, rate, exportSale }) {
   const orderTotalMinor = assertIntegerIsk(order.total, 'order.total');
   const iskInvoiceTotal = convertLinesToIsk([orderTotalMinor], orderCurrency, rate).lines[0];
 
-  // Whatever it takes to bring the translated lines down to the authoritative
-  // total — derived, never translated independently, so the two cannot disagree.
-  // Allocated by line size so each line keeps its effective rate and the per-rate
-  // VAT split stays honest. Shown separately on the line, so unit × qty still reads
-  // correctly with the discount stated beneath it.
-  const spread = grossBefore.reduce((a, b) => a + b, 0) - iskInvoiceTotal;
-  const discountAlloc = spread > 0
-    ? allocateProportional(spread, grossBefore)
-    : grossBefore.map(() => 0);
-  // A NEGATIVE spread means unit-price rounding left the lines a króna or two short
-  // of what was actually paid. That difference is real money and has to appear, so
-  // it becomes an explicit rounding line (sléttun) rather than being smeared into a
-  // unit price and breaking the arithmetic this function exists to protect.
-  const roundingIsk = spread < 0 ? -spread : 0;
+  // The VAT core — utils/orderVat.js, shared with the checkout's snapshot
+  // (migration 121; harvest 2 lane 5). It fits the translated lines to the
+  // authoritative total: whatever it takes to bring them down is DERIVED, never
+  // translated independently, and allocated by line size (shipping included) so
+  // each line keeps its effective rate and the per-rate VAT split stays honest —
+  // shown separately on the line, so unit × qty still reads correctly with the
+  // discount stated beneath it. A NEGATIVE spread means unit-price rounding left
+  // the lines a króna or two short of what was actually paid. That difference is
+  // real money and has to appear, so it becomes an explicit rounding line
+  // (sléttun) rather than being smeared into a unit price and breaking the
+  // arithmetic this function exists to protect. The per-line rate rule
+  // (vatRateFor above) is the core's lineVatRate. Pinned byte-for-byte against
+  // the pre-extraction output by tests/unit/orderVatParity.test.js.
+  const core = computeOrderVat({
+    lines: items.map((item, i) => ({
+      // quantity was asserted an integer where grossBefore was built above.
+      unit: unitIsk[i], quantity: Number(item.quantity),
+      vat_rate: item.vat_rate, is_service: item.is_service,
+    })),
+    shipping: shippingIsk,
+    total: iskInvoiceTotal,
+    exportSale,
+  });
 
   const built = [];
   items.forEach((item, i) => {
+    const l = core.lines[i];
     const vatRate = vatRateFor(item);
-    const before = grossBefore[i];
-    const discount = Math.min(discountAlloc[i], before);
-    const gross = before - discount;
-    const split = splitVatInclusive(gross, vatRate);
     built.push({
       product_id: item.product_id || null,
       sku: item.sku || null,
@@ -285,38 +287,32 @@ function buildLines({ order, items, rate, exportSale }) {
       // the customer was quoted.
       unit_price_gross: unitIsk[i],
       vat_rate: vatRate,
-      gross_before_discount: before,
-      discount_gross: discount,
-      line_net: split.net,
-      line_vat: split.vat,
-      line_gross: gross,
+      gross_before_discount: l.gross_before_discount,
+      discount_gross: l.discount_gross,
+      line_net: l.line_net,
+      line_vat: l.line_vat,
+      line_gross: l.line_gross,
       revenue_account: revenueAccountFor({ vatRate, isService: item.is_service }),
       is_shipping: false,
     });
   });
 
-  if (shippingIsk > 0) {
-    // Shipping is the last entry in grossBefore/discountAlloc — see where it was
-    // pushed above. Standard-rated at home, zero-rated on an export, because it
-    // follows the goods it carries.
-    const i = grossBefore.length - 1;
-    const vatRate = exportSale ? 0 : STANDARD_VAT_RATE;
-    const before = grossBefore[i];
-    const discount = Math.min(discountAlloc[i], before);
-    const gross = before - discount;
-    const split = splitVatInclusive(gross, vatRate);
+  if (core.shipping) {
+    // Standard-rated at home, zero-rated on an export, because it follows the
+    // goods it carries.
+    const s = core.shipping;
     built.push({
       product_id: null,
       sku: null,
       description: 'Sending',
       quantity: 1,
-      unit_price_gross: before,
-      vat_rate: vatRate,
-      gross_before_discount: before,
-      discount_gross: discount,
-      line_net: split.net,
-      line_vat: split.vat,
-      line_gross: gross,
+      unit_price_gross: s.gross_before_discount,
+      vat_rate: s.vat_rate,
+      gross_before_discount: s.gross_before_discount,
+      discount_gross: s.discount_gross,
+      line_net: s.line_net,
+      line_vat: s.line_vat,
+      line_gross: s.line_gross,
       revenue_account: exportSale ? '4300' : '4100',
       is_shipping: true,
     });
@@ -325,22 +321,21 @@ function buildLines({ order, items, rate, exportSale }) {
   // Sléttun. Only ever a couple of krónur, and only on a translated order, but it
   // is money the customer actually paid so it is stated rather than hidden. Taxed
   // at the rate of the largest line so it does not distort the per-rate split.
-  if (roundingIsk > 0) {
-    const dominant = built.reduce((best, l) => (l.line_gross > best.line_gross ? l : best), built[0]);
-    const vatRate = dominant ? dominant.vat_rate : STANDARD_VAT_RATE;
-    const split = splitVatInclusive(roundingIsk, vatRate);
+  if (core.rounding) {
+    const r = core.rounding;
+    const dominant = r.dominant >= 0 ? built[r.dominant] : null;
     built.push({
       product_id: null,
       sku: null,
       description: 'Sléttun',
       quantity: 1,
-      unit_price_gross: roundingIsk,
-      vat_rate: vatRate,
-      gross_before_discount: roundingIsk,
+      unit_price_gross: r.line_gross,
+      vat_rate: r.vat_rate,
+      gross_before_discount: r.line_gross,
       discount_gross: 0,
-      line_net: split.net,
-      line_vat: split.vat,
-      line_gross: roundingIsk,
+      line_net: r.line_net,
+      line_vat: r.line_vat,
+      line_gross: r.line_gross,
       revenue_account: dominant ? dominant.revenue_account : '4100',
       is_shipping: false,
       is_rounding: true,

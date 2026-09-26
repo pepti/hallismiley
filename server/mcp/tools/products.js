@@ -14,14 +14,25 @@
 //                     in inventory_adjustments with the token's owner as the
 //                     actor and the reason given (models/Inventory.js)
 //
+//   add_variants    → services/variantAdd.js, the writer behind the admin
+//                     "add many variants" route — the whole batch or nothing;
+//                     switch mcp.write.variantCreate, OFF by default. The new
+//                     variants start INACTIVE (the Draft rule again) at stock 0
+//   list_variants   → READ (scope read, writes nothing): the options, values
+//                     and SKUs a product already has — add_variants is
+//                     unusable without seeing them — so it is listed under
+//                     the same switch, and the default read surface stays the
+//                     v1 system tools. Both ported from icelandicstore #432
+//                     (harvest 2 lane 6c, 2026-09-26).
+//
 // Stock is deliberately NOT a field of update_product: it has one audited
-// writer and one tool that names it. Variants are out of scope (the admin
-// variant grid adds them), but a variant SKU can have its stock set because
-// set_stock resolves codes the way the scanner does. Each write is logged
-// with who and what (securityLogger), never a request's free text.
+// writer and one tool that names it. A variant SKU can have its stock set
+// because set_stock resolves codes the way the scanner does. Each write is
+// logged with who and what (securityLogger), never a request's free text.
 const Product = require('../../models/Product');
 const ProductVariant = require('../../models/ProductVariant');
 const Inventory = require('../../models/Inventory');
+const variantAdd = require('../../services/variantAdd');
 const { foldSlug } = require('../../utils/slug');
 const securityLogger = require('../../observability/securityLogger');
 const { env } = require('../envTag');
@@ -80,8 +91,11 @@ function view(p) {
   };
 }
 
-async function findProduct({ product_id, sku }) {
+// `slug` is a LOOKUP key for the variant tools only — update_product calls
+// this with product_id / sku alone.
+async function findProduct({ product_id, sku, slug }) {
   if (product_id) return Product.findById(String(product_id));
+  if (slug) return Product.findBySlug(String(slug), { activeOnly: false });
   if (sku) {
     const hit = await Product.resolveByCode(String(sku));
     return hit && !hit.variantId ? Product.findById(hit.productId) : null;
@@ -147,7 +161,7 @@ const tools = [
       required: [],
     },
     async handler(args, { token }) {
-      const product = await findProduct(args);
+      const product = await findProduct({ product_id: args.product_id, sku: args.sku });
       if (!product) fail('product not found — pass product_id, or the SKU of a product without variants');
       const body = bodyFrom({ ...args, sku: args.new_sku }, [...Object.keys(FIELD_PROPS), 'active']);
       if (!Object.keys(body).length) fail('nothing to update — pass at least one field');
@@ -210,6 +224,104 @@ const tools = [
       return {
         environment: env(), updated: true, name: label, productId, variantId,
         previous: before ? Number(before.stock) : null, stock: Number(after.stock),
+      };
+    },
+  },
+  {
+    // A READ tool (scope read, writes nothing), but listed only where
+    // add_variants is switched on: it exists to serve that tool, and the
+    // default read surface stays the v1 system tools (ENHANCEMENTS #13).
+    name: 'list_variants',
+    scope: 'read',
+    writeFlag: 'variantCreate',
+    module: 'shop',
+    description: 'The variants of one shop product, found by product_id, slug or product-level sku: its option names (variant_axes, e.g. ["color","size"]) and every variant with its option values, SKU, barcode, shelf (bin), price overrides (ISK and EUR cents, VAT inclusive; null = the product price), on-hand stock and whether it is active. Read this before add_variants to see which values and SKU pattern a product already uses.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        product_id: { type: 'string', description: 'product id' },
+        slug:       { type: 'string', description: 'product URL slug' },
+        sku:        { type: 'string', description: 'product-level SKU or barcode, alternative to product_id' },
+      },
+      required: [],
+    },
+    async handler(args) {
+      const product = await findProduct(args);
+      if (!product) fail('product not found — pass product_id, slug or a product-level sku');
+      const variants = await ProductVariant.listForProduct(product.id, { activeOnly: false });
+      return {
+        environment: env(),
+        product: { id: product.id, slug: product.slug, name: product.name, active: product.active, variant_axes: product.variant_axes || [] },
+        count: variants.length,
+        variants: variants.map(v => ({
+          id: v.id, attributes: v.attributes, sku: v.sku, barcode: v.barcode, bin: v.bin,
+          price_isk: v.price_isk, price_eur: v.price_eur, stock: v.stock, active: v.active,
+        })),
+      };
+    },
+  },
+  {
+    name: 'add_variants',
+    scope: 'write',
+    writeFlag: 'variantCreate',
+    module: 'shop',
+    description: 'Add variants to a shop product that already has variant options — e.g. a new colour in every size, each with its own SKU and barcode. Find the product by product_id, slug or product-level sku, and read list_variants first. Every row gives a value for EACH product option, keyed by option name (e.g. {"color":"Light Heather","size":"S"}), plus its own sku; barcode, price_isk / price_eur (VAT inclusive; omit to use the product price) and bin are optional. All rows are created or none: a value combination the product already has, a SKU or barcode already used in the catalogue (as a SKU or as a barcode), a duplicate within the list, or a missing option refuses the whole call and lists every problem. The new variants start INACTIVE (an admin switches them on in the product\'s variant grid) and at stock 0 — load stock with set_stock. dry_run:true checks everything and writes nothing.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        product_id: { type: 'string', description: 'product id' },
+        slug:       { type: 'string', description: 'product URL slug' },
+        sku:        { type: 'string', description: 'product-level SKU, alternative to product_id' },
+        variants: {
+          type: 'array', minItems: 1, maxItems: variantAdd.MAX_ROWS,
+          description: `the variants to create (at most ${variantAdd.MAX_ROWS})`,
+          items: {
+            type: 'object',
+            properties: {
+              attributes: {
+                type: 'object', additionalProperties: { type: 'string' },
+                description: 'one value per product option, keyed by the option name, e.g. {"color":"Light Heather","size":"S"}',
+              },
+              sku:       { type: 'string',  description: 'the SKU of this variant (required, unique)' },
+              barcode:   { type: 'string',  description: 'EAN/GTIN or supplier barcode (optional, unique)' },
+              price_isk: { type: 'integer', description: 'price override in ISK, VAT inclusive; omit to use the product price' },
+              price_eur: { type: 'integer', description: 'price override in EUR cents, VAT inclusive; omit to use the product price' },
+              bin:       { type: 'string',  description: 'warehouse shelf, e.g. "A-4" (optional, at most 40 characters)' },
+            },
+            required: ['attributes', 'sku'],
+          },
+        },
+        dry_run: { type: 'boolean', description: 'true = check only, create nothing' },
+      },
+      required: ['variants'],
+    },
+    async handler(args, { token }) {
+      const product = await findProduct(args);
+      if (!product) fail('product not found — pass product_id, slug or a product-level sku');
+      // Owner rule (ice 2026-09-03, the create_product Draft rule): what Claude
+      // adds stays off the storefront until a person switches it on.
+      const result = await variantAdd.addVariants(product.id, args.variants, {
+        userId: token.user_id, source: 'mcp', active: false, dryRun: args.dry_run === true,
+      });
+      if (!result.ok) {
+        if (result.reason === 'conflict') fail('another change added one of these variants a moment ago — nothing was saved; read list_variants and try again');
+        if (result.reason === 'merged') fail(`product ${product.id} was merged into ${result.product.merged_into_id} — add the variants there`);
+        if (result.reason === 'not_found') fail('product not found');
+        const lines = variantAdd.describe(result.errors, 'en', product.variant_axes || []).map(e => e.message);
+        fail(`nothing was created — ${lines.length} problem(s):\n${lines.join('\n')}`);
+      }
+      if (!result.dryRun) {
+        securityLogger.adminAction(token.user_id, 'mcp_add_variants', String(product.id), { tokenId: token.id, count: result.variants.length });
+      }
+      return {
+        environment: env(), created: !result.dryRun, dry_run: result.dryRun,
+        product: { id: product.id, name: product.name, slug: product.slug },
+        count: result.variants.length, active: false,
+        note: 'Created INACTIVE: an admin switches them on in the product\'s variant grid. Stock is 0 — load it with set_stock.',
+        variants: result.variants.map(v => ({
+          id: v.id, attributes: v.attributes, sku: v.sku, barcode: v.barcode, bin: v.bin,
+          price_isk: v.price_isk, price_eur: v.price_eur, active: v.active,
+        })),
       };
     },
   },

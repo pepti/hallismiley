@@ -451,3 +451,61 @@ describe('the FK coverage guard', () => {
     }
   });
 });
+
+// Archived variants and photo colours in a merge (harvest 2 lane 6c, migration
+// 119): an archived variant is not a unit — it stays archived on its source,
+// never moved or switched back on — and does not block a moved variant from
+// taking its combination on the survivor (the unique index is live-only). A
+// photo's colour travels with the photo. A merged-away product is frozen for
+// the variant writers too, including services/variantAdd.js (MCP's path).
+describe('archived variants, photo colours and the merged-product refusal (lane 6c)', () => {
+  const variantAdd = require('../../server/services/variantAdd');
+  let m, s, mArchived, sLive, sArchived, img;
+  beforeAll(async () => {
+    m = await mkProduct('arc-m', { variant_axes: ['color', 'size'] });
+    await mkVariant(m, 'PM-ARC-M-BLK-M', { color: 'Black', size: 'M' });
+    mArchived = await mkVariant(m, 'PM-ARC-M-RED-M', { color: 'Red', size: 'M' }, { stock: 1 });
+    await ProductVariant.deleteOrArchive(mArchived.id, m.id);
+    s = await mkProduct('arc-s', { variant_axes: ['color', 'size'] });
+    sLive = await mkVariant(s, 'PM-ARC-S-RED-M', { color: 'Red', size: 'M' });
+    sArchived = await mkVariant(s, 'PM-ARC-S-BLU-S', { color: 'Blue', size: 'S' }, { stock: 2 });
+    await ProductVariant.deleteOrArchive(sArchived.id, s.id);
+    const added = await Product.addImage(s.id, { url: '/uploads/products/pm-arc-red.webp' });
+    img = await Product.updateImageColor(s.id, added.id, 'Red');
+  });
+
+  test('the live variant moves onto the archived combination; the archived one stays archived on the source; the colour travels', async () => {
+    const p = await preview({
+      master: m.id, ids: [s.id],
+      variant_map: [{ source: { productId: s.id, variantId: sLive.id }, target: { attributes: { color: 'Red', size: 'M' } } }],
+    });
+    expect(p.status).toBe(200);
+    expect((p.body.refusals || []).map(r => r.code)).not.toContain('attribute_collision_inactive');
+    const res = await merge({ ...p.body.request, expect: p.body.expect });
+    expect(res.status).toBe(200);
+
+    const moved = await ProductVariant.findById(sLive.id);
+    expect(moved).toMatchObject({ product_id: m.id, archived_at: null });
+    const kept = await ProductVariant.findById(sArchived.id);
+    expect(kept.product_id).toBe(s.id);
+    expect(kept.archived_at).not.toBeNull();
+    expect(kept.active).toBe(false);
+    expect((await ProductVariant.findById(mArchived.id)).archived_at).not.toBeNull();
+
+    const imgs = await Product.listImages(m.id);
+    expect(imgs.find(i => i.id === img.id)).toMatchObject({ color: 'red' });
+  });
+
+  test('a merged-away product refuses variant writes — the routes and variantAdd (MCP)', async () => {
+    const base = `/api/v1/admin/shop/products/${s.id}/variants`;
+    const one = await request(app).post(base).set('Cookie', adminCookie).send({ sku: 'PM-ARC-NEW', attributes: { color: 'Green', size: 'S' } });
+    expect(one.status).toBe(409);
+    expect(one.body).toMatchObject({ reason: 'product_merged', movedTo: { id: m.id } });
+    const bulk = await request(app).post(`${base}/bulk`).set('Cookie', adminCookie)
+      .send({ variants: [{ attributes: { color: 'Green', size: 'S' }, sku: 'PM-ARC-NEW' }] });
+    expect(bulk.status).toBe(409);
+    const direct = await variantAdd.addVariants(s.id, [{ attributes: { color: 'Green', size: 'S' }, sku: 'PM-ARC-NEW' }]);
+    expect(direct).toMatchObject({ ok: false, status: 409, reason: 'merged' });
+    expect(await ProductVariant.findBySku('PM-ARC-NEW')).toBeNull();
+  });
+});

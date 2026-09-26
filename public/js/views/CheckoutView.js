@@ -7,7 +7,9 @@ import { getCsrfHeaders } from '../utils/api.js';
 import { isValidPhone, isValidZip } from '../utils/contactFormat.js';
 import { vatBreakdown, isExport } from '../utils/vat.js';
 import { translateVariantLabel } from '../utils/colorLabels.js';
-import { t, href } from '../i18n/i18n.js';
+import { computeShippingPrice, ratesFromConfig } from '../utils/shipping.js';
+import { checkoutState } from '../utils/checkoutSettings.js';
+import { t, href, getLocale } from '../i18n/i18n.js';
 
 function _esc(s) {
   return String(s == null ? '' : s)
@@ -43,11 +45,15 @@ export class CheckoutView {
       return this._view;
     }
 
-    // Load shop config to get shipping rates
+    // Load shop config: the live delivery rates and the checkout settings
+    // (pause, minimum, field rules — harvest2-lane7a). Display only; the
+    // server enforces every rule on POST /shop/checkout.
+    this._shopCfg = null;
     try {
       const res = await fetch('/api/v1/shop/config');
       if (res.ok) {
         const cfg = await res.json();
+        this._shopCfg = cfg;
         if (cfg.shipping) this._shippingRates = cfg.shipping;
       }
     } catch { /* keep defaults */ }
@@ -89,6 +95,16 @@ export class CheckoutView {
     const items = cart.list();
     const cur   = cart.getCurrency();
     const subtotal = cart.total(cur);
+    // The checkout settings (utils/checkoutSettings.js) and the delivery price
+    // by the server's own rule (utils/shipping.js — free over the ISK
+    // threshold, measured on the basket before discounts).
+    const iskSubtotal = cart.total('ISK');
+    const rules = checkoutState(this._shopCfg, iskSubtotal, getLocale());
+    this._rules = rules;
+    const rates = ratesFromConfig(this._shippingRates);
+    const flatPrice = computeShippingPrice({ method: 'flat_rate', currency: cur, rates, iskSubtotal });
+    const f = rules.fields;
+    const isk = (n) => cart.formatMoney(n, 'ISK');
 
     const itemsHtml = items.map(it => {
       const price = cur === 'ISK' ? it.priceIsk : it.priceEur;
@@ -108,6 +124,8 @@ export class CheckoutView {
         <h1 class="shop-checkout__title">${t('checkout.title')}</h1>
         ${this._stockShort.length ? `<div class="shop-checkout__notice shop-checkout__notice--warn" role="alert" data-testid="checkout-stock-notice">${_esc(t('checkout.stockNotice'))} ${this._stockShort.map(it => _esc(it.variantLabel ? `${it.name} — ${translateVariantLabel(it.variantLabel, t)}` : it.name)).join(', ')}. <a href="${href('/cart')}">${_esc(t('checkout.backToCart'))}</a></div>` : ''}
         ${this._repriced.length ? `<div class="shop-checkout__notice shop-checkout__notice--info" role="status" data-testid="checkout-repriced">${_esc(t('cart.pricesUpdated', { names: this._repriced.map(it => it.variantLabel ? `${it.name} — ${translateVariantLabel(it.variantLabel, t)}` : it.name).join(', ') }))}</div>` : ''}
+        ${rules.paused ? `<div class="shop-checkout__notice shop-checkout__notice--warn" role="alert" data-testid="checkout-paused">${_esc(rules.pausedMessage || t('cart.orderingPausedDefault'))}</div>` : ''}
+        ${!rules.paused && rules.belowMin ? `<div class="shop-checkout__notice shop-checkout__notice--warn" role="status" data-testid="checkout-min-order">${_esc(t('cart.minOrderNotice', { min: isk(rules.minIsk), missing: isk(rules.missingIsk) }))} <a href="${href('/cart')}">${_esc(t('checkout.backToCart'))}</a></div>` : ''}
 
         <div class="shop-checkout__grid">
           <form class="shop-checkout__form" id="shop-checkout-form" novalidate>
@@ -133,8 +151,8 @@ export class CheckoutView {
                 <label>
                   <input type="radio" name="shipping_method" value="flat_rate" checked/>
                   <span>${t('checkout.shipping')}
-                    <em class="shop-checkout__rate">
-                      ${cart.formatMoney(cur === 'ISK' ? this._shippingRates.flat_rate.priceIsk : this._shippingRates.flat_rate.priceEur, cur)}
+                    <em class="shop-checkout__rate" data-testid="checkout-flat-rate">
+                      ${flatPrice === 0 ? t('checkout.free') : cart.formatMoney(flatPrice, cur)}
                     </em>
                   </span>
                 </label>
@@ -171,23 +189,35 @@ export class CheckoutView {
                   ${COUNTRIES.map(c => `<option value="${c.code}" ${c.code === 'IS' ? 'selected' : ''}>${_esc(t('checkout.countryName.' + c.code))}</option>`).join('')}
                 </select>
               </label>
-              <label>${t('checkout.phone')}
-                <input type="tel" name="phone" maxlength="30" autocomplete="shipping tel" value="${_esc(prefill.phone)}"/>
-              </label>
+              ${f.phone === 'hidden' ? '' : `<label>${t('checkout.phone')}
+                <input type="tel" name="phone" maxlength="30" autocomplete="shipping tel" value="${_esc(prefill.phone)}"${f.phone === 'required' ? ' required' : ''}/>
+              </label>`}
             </fieldset>
 
+            ${f.company === 'hidden' && f.kennitala === 'hidden' ? '' : `
+            <fieldset class="shop-checkout__fieldset" data-testid="checkout-buyer">
+              <legend>${t('checkout.buyer')}</legend>
+              ${f.company === 'hidden' ? '' : `<label>${f.company === 'required' ? t('checkout.company') : t('checkout.companyOptional')}
+                <input type="text" name="company" maxlength="200" autocomplete="organization"${f.company === 'required' ? ' required' : ''}/>
+              </label>`}
+              ${f.kennitala === 'hidden' ? '' : `<label>${f.kennitala === 'required' ? t('checkout.kennitala') : t('checkout.kennitalaOptional')}
+                <input type="text" name="kennitala" maxlength="11" inputmode="numeric" autocomplete="off" placeholder="000000-0000"${f.kennitala === 'required' ? ' required' : ''}/>
+              </label>`}
+            </fieldset>`}
+
+            ${f.note === 'hidden' ? '' : `
             <fieldset class="shop-checkout__fieldset">
               <legend>${t('checkout.noteLegend')}</legend>
-              <label>${t('checkout.noteLabel')}
-                <textarea name="note" rows="3" maxlength="1000" data-testid="checkout-note"></textarea>
+              <label>${f.note === 'required' ? t('checkout.noteLabelRequired') : t('checkout.noteLabel')}
+                <textarea name="note" rows="3" maxlength="1000" data-testid="checkout-note"${f.note === 'required' ? ' required' : ''}></textarea>
               </label>
-            </fieldset>
+            </fieldset>`}
 
             <p class="shop-checkout__error" id="shop-checkout-error" role="alert"></p>
 
             <button type="submit" class="shop-checkout__submit" id="shop-checkout-submit"
                     data-testid="checkout-submit">
-              ${t('checkout.pay')} ${cart.formatMoney(subtotal + (cur === 'ISK' ? this._shippingRates.flat_rate.priceIsk : this._shippingRates.flat_rate.priceEur), cur)}
+              ${t('checkout.pay')} ${cart.formatMoney(subtotal + flatPrice, cur)}
             </button>
           </form>
 
@@ -230,9 +260,7 @@ export class CheckoutView {
       for (const inp of addressRequired) {
         inp.required = requiresAddr;
       }
-      const shippingAmt = requiresAddr
-        ? (cur === 'ISK' ? this._shippingRates.flat_rate.priceIsk : this._shippingRates.flat_rate.priceEur)
-        : 0;
+      const shippingAmt = computeShippingPrice({ method, currency: cur, rates, iskSubtotal });
       this._view.querySelector('#shop-checkout-shipping-total').textContent = cart.formatMoney(shippingAmt, cur);
       this._view.querySelector('#shop-checkout-grand').textContent = cart.formatMoney(subtotal + shippingAmt, cur);
       submitBtn.textContent = `${t('checkout.pay')} ${cart.formatMoney(subtotal + shippingAmt, cur)}`;
@@ -250,9 +278,12 @@ export class CheckoutView {
         form.elements['postal']?.setCustomValidity('');
         form.elements['phone']?.setCustomValidity('');
       }
+      if (e.target.name === 'kennitala') e.target.setCustomValidity('');
     });
     syncShipping();
-    if (this._stockShort.length) submitBtn.disabled = true;
+    // The pause and the minimum block the button here; the server answers
+    // 503 / 400 for them anyway (services/checkoutRules.js).
+    if (this._stockShort.length || rules.blocked) submitBtn.disabled = true;
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -265,7 +296,7 @@ export class CheckoutView {
       // rejected submit leaves the form usable.
       this._checkContactShape(form);
       if (!form.reportValidity()) return;
-      if (this._stockShort.length) return;
+      if (this._stockShort.length || rules.blocked) return;
 
       submitBtn.disabled = true;
       submitBtn.textContent = t('checkout.redirecting');
@@ -285,6 +316,12 @@ export class CheckoutView {
       // admin order page; the server trims and caps it at 1000 characters.
       const note = String(fd.get('note') || '').trim();
       if (note) body.note = note;
+      // Buyer fields, only where the admin shows them (a hidden one is not
+      // rendered, and the server ignores it anyway).
+      const company = String(fd.get('company') || '').trim();
+      if (company) body.company = company;
+      const kennitala = String(fd.get('kennitala') || '').trim();
+      if (kennitala) body.kennitala = kennitala;
       if (!user) {
         body.guest_email = String(fd.get('guest_email') || '').trim();
         body.guest_name  = String(fd.get('guest_name') || '').trim();
@@ -357,6 +394,13 @@ export class CheckoutView {
     if (phone) {
       const v = phone.value.trim();
       phone.setCustomValidity(v && !isValidPhone(v) ? t('checkout.phoneInvalid') : '');
+    }
+    // A kennitala's shape (ten digits, the dash optional); the server checks
+    // the check digit too (services/checkoutRules.js).
+    const kt = form.elements['kennitala'];
+    if (kt) {
+      const v = kt.value.replace(/[\s-]/g, '');
+      kt.setCustomValidity(v && !/^\d{10}$/.test(v) ? t('checkout.kennitalaInvalid') : '');
     }
   }
 

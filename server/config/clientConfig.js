@@ -154,7 +154,7 @@ const SCHEMA = {
       // the resolved list, so a typo cannot silently hide nothing.
       hiddenAdminViews: {
         type: 'string[]',
-        default: ['products', 'collections', 'bins', 'inventory', 'receiving', 'orders', 'discounts', 'sales', 'pos', 'background', 'projects'],
+        default: ['products', 'collections', 'bins', 'inventory', 'receiving', 'checkout', 'orders', 'discounts', 'sales', 'pos', 'background', 'projects'],
         validate: validateViewIds,
       },
     },
@@ -281,12 +281,16 @@ const SCHEMA = {
     //   productUpdate → update_product (never stock — that is set_stock's)
     //   stock         → set_stock (audited in inventory_adjustments, actor =
     //                   the token's owner)
+    //   variantCreate → add_variants (harvest 2 lane 6c, ice #432): several
+    //                   variants of an existing product, all or none; they
+    //                   start INACTIVE and at stock 0
     // Read per call by server/mcp/registry.js, so flipping the env var bites
     // without a restart. Env: CLIENT_CONFIG_MCP_WRITE_PRODUCT_CREATE etc.
     write: {
       productCreate: { type: 'boolean', default: false },
       productUpdate: { type: 'boolean', default: false },
       stock:         { type: 'boolean', default: false },
+      variantCreate: { type: 'boolean', default: false },
     },
   },
   modules: {
