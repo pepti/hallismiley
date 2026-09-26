@@ -503,6 +503,36 @@
 }
 .users-no-email { color: var(--text-muted); font-style: italic; font-family: var(--font-sans); }
 
+/* Time-limited login (migration 114): "rennur út eftir N daga" reads as a
+   warning, "útrunninn" as an error. Status tokens only, so all three themes
+   re-hue them (invariant 15). */
+.users-expiry { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+.users-expiry__none { color: var(--text-muted); font-family: var(--font-mono); font-size: 0.8rem; }
+.users-expiry-badge {
+  display: inline-block;
+  padding: 1px 8px; border-radius: 999px;
+  font-size: 0.68rem; font-weight: 700; letter-spacing: 0.04em;
+  font-family: var(--font-sans); white-space: nowrap;
+  color: var(--warning); background: var(--warning-dim);
+}
+.users-expiry-badge--expired { color: var(--error); background: var(--error-dim); }
+.users-expiry-modal { max-width: 440px; display: flex; flex-direction: column; gap: var(--sp-3); }
+.users-expiry-modal__choices { display: flex; flex-direction: column; gap: var(--sp-2); border: 0; padding: 0; margin: 0; }
+.users-expiry-modal__choices legend { font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); margin-bottom: var(--sp-1); }
+.users-expiry-modal__choice { display: flex; align-items: center; gap: var(--sp-2); font-size: 0.9rem; color: var(--text-primary); }
+.users-expiry-modal__choice input[type="date"] { max-width: 180px; }
+.users-expiry-modal__error { color: var(--error); font-size: 0.85rem; min-height: 1.2em; }
+.users-expiry-modal__actions { display: flex; justify-content: flex-end; gap: var(--sp-2); margin-top: var(--sp-2); }
+/* The same picker inside the Customers "add" form, whose label/input rules
+   (shop.css .admin-shop__form) would stack the radios full-width. */
+.admin-shop__form .users-expiry-modal__choices { margin-bottom: 14px; }
+.admin-shop__form .users-expiry-modal__choice {
+  display: flex; margin-bottom: 0;
+  font-size: 0.9rem; letter-spacing: normal; text-transform: none; color: var(--text-primary);
+}
+.admin-shop__form .users-expiry-modal__choice input[type="radio"] { width: auto; display: inline-block; margin: 0; }
+.admin-shop__form .users-expiry-modal__choice input[type="date"] { margin: 0; }
+
 /* Shown-once credentials (components/OneTimeCredentials.js) — a login with no
    mailbox gets its generated password on screen exactly once. Same job as the
    2FA recovery-code panel, so it reads as a warning, not a form field. */

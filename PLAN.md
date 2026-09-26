@@ -1,6 +1,6 @@
 # Orange Smiley public site — build plan
 
-**Status:** Jobs 1–3 complete (2026-08-09). Every programme since is recorded in `docs/HISTORY.md` (dated, indexed); what is open now is the **Status** section at the end of this file; the rules each programme established are in `docs/ARCHITECTURE.md`. **Created:** 2026-08-09. Base: `C:\Users\Notandi\claude\Projects\hallismiley` @ `562c637`.
+**Status:** Jobs 1–3 complete (2026-08-09). Every programme since is recorded in `docs/HISTORY.md` (dated, indexed; frozen 2026-09-26) and, after that, one file per branch in `docs/history.d/`; what is open now is the **Status** section at the end of this file; the rules each programme established are in `docs/ARCHITECTURE.md`. **Created:** 2026-08-09. Base: `C:\Users\Notandi\claude\Projects\hallismiley` @ `562c637`.
 
 Not a customer migration — this is Orange Smiley ehf.'s own public instance (marketing + customer-portal seed). Brief: `company/CLAUDE-CODE-BUILD-INSTRUCTIONS.md`. Business plan: `company/ORANGE-SMILEY-PLAN.md` (same folder — gitignored, inside this repo).
 
@@ -110,7 +110,8 @@ Two things worth carrying forward:
 Moved here from CLAUDE.md's "Where things stand" on 2026-09-17; the dated
 narratives it summarised are in `docs/HISTORY.md` (linked per bullet), the
 rules they established in `docs/ARCHITECTURE.md`. Update this section when a
-chunk lands; add a HISTORY entry for the story.
+chunk lands; the story goes in a new `docs/history.d/` fragment (since
+2026-09-26 — `docs/HISTORY.md` is the frozen archive; see `docs/history.d/README.md`).
 
 **Awaiting Halli**
 
@@ -148,7 +149,7 @@ chunk lands; add a HISTORY entry for the story.
   channel first, rekstrarkerfid's next (the hallismiley arming packet of
   2026-09-13 is parked).
 - "Í dag", the admin home (D-020 step 4, branch `feat/admin-home-idag`, not
-  merged — [admin-home-idag-2026-09-26](docs/HISTORY.md#admin-home-idag-2026-09-26)).
+  merged — [admin-home-idag-2026-09-26](docs/history.d/2026-09-26-feat-admin-home-idag.md#admin-home-idag-2026-09-26)).
   Open for Halli: (a) every `adminHome.*` string and `admin.nav.projects`
   are DRÖG, including the ones written in the build (listed in the entry);
   (b) the sidebar label — keep "Stjórnborð" or rename `admin.nav.dashboard`
@@ -162,6 +163,14 @@ chunk lands; add a HISTORY entry for the story.
 
 **Open technical items**
 
+- Harvest 2 started 2026-09-26 (Halli approved the scope that day): generic
+  icelandicstore work up to `ice@941cf51d` ported into the engine in lanes 0–9,
+  each on its own branch. Lane 0 landed on `harvest2/lane0-history`
+  ([harvest2-lane0-2026-09-26](docs/history.d/2026-09-26-harvest2-lane0-history.md#harvest2-lane0-2026-09-26)):
+  write-ups are now one `docs/history.d/` fragment per branch and
+  `docs/HISTORY.md` is the frozen archive; every chunk gets a review pass
+  before it merges; `docs/TESTING.md` gained the deployed-environment
+  walkthrough. This settles chunk F's open item (d) below.
 - Upward harvest from icelandicstore `4694289`, lane 1 (chunks A then B, branch
   `harvest/ice-2026-09-24-ab`, not merged). Chunk A landed on the branch
   ([harvest-ice-a-2026-09-24](docs/HISTORY.md#harvest-ice-a-2026-09-24)): admin
@@ -371,6 +380,14 @@ chunk lands; add a HISTORY entry for the story.
   footer line) — merged 2026-09-24 (orange-smiley/rekstrarkerfid#53); the
   deploy is Halli's go; `auth.errors.signupClosed` copy was approved by Halli
   2026-09-25.
+- Time-limited logins landed 2026-09-26 on `feat/login-expiry`, not merged
+  ([login-expiry-2026-09-26](docs/history.d/2026-09-26-feat-login-expiry.md#login-expiry-2026-09-26)):
+  engine migration `114_user_expires_at`; every sign-in path and session
+  reader refuse an expired login; "Gildir til" in Admin → Users and the
+  Customers "add" form. Open: Halli approves the DRÖG copy (the refusal and the
+  admin strings); rekstrarkerfid's next engine sync brings it to the demo
+  instance; nothing sweeps expired rows yet (they stay, refused — a cleanup
+  job or "delete after N days expired" is a later decision).
 - Books: a button to issue a statutory invoice from an order
   (`issueInvoiceForOrder` has no caller — hard blocker for 2026-P5, due 7.12);
   Peppol inbound; the 6-month commission tail (contract 4.3) has no code —

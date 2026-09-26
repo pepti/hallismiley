@@ -12,12 +12,15 @@ const db = require('../config/database');
 const UserRole = require('../models/UserRole');
 const { applyMfaPolicy } = require('../auth/mfaPolicy');
 const { hasRole } = require('../auth/roles');
+const { isExpired } = require('../auth/accountExpiry');
 const logger = require('../logger');
 
 async function ownerMayUseMcp(userId) {
   const { rows } = await db.query('SELECT * FROM users WHERE id = $1', [String(userId)]);
   const user = rows[0];
-  if (!user || user.disabled) return false;
+  // A time-limited login that ran out (migration 114) loses its connector
+  // with its sessions: the token outlives the login otherwise.
+  if (!user || user.disabled || isExpired(user)) return false;
   let roles;
   try {
     roles = await UserRole.listForUser(user.id);

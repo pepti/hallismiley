@@ -14,6 +14,9 @@ const { trackFailedLogin } = require('../observability/alerts');
 const mfaService          = require('../services/mfaService');
 const { userIsAdminAnywhere, userHoldsView } = require('../utils/adminRole');
 const { isPublishedSeller } = require('../auth/publishedSeller');
+// Time-limited logins (migration 114): every sign-in path here refuses an
+// expired account, and /auth/session reads an expired one as signed out.
+const accountExpiry = require('../auth/accountExpiry');
 
 /**
  * May this account enrol in 2FA? Exactly the set the login path challenges
@@ -117,7 +120,7 @@ const authController = {
       const { rows } = await dbQuery(
         `SELECT id, username, email, role, password_hash,
                 failed_login_attempts, locked_until,
-                disabled, disabled_reason,
+                disabled, disabled_reason, expires_at,
                 avatar, display_name, phone, totp_enabled, theme,
                 page_widths, page_width_motion, aside_widths, cookie_consent,
                 email_verified, party_access, approval_status
@@ -172,6 +175,14 @@ const authController = {
       // Block disabled accounts after credentials are confirmed valid
       if (user.disabled) {
         return res.status(403).json({ error: t(req.locale, 'errors.auth.accountDisabled'), code: 403 });
+      }
+
+      // …and time-limited logins whose day has passed (migration 114). After
+      // the password check, like `disabled`: the refusal must not tell a
+      // guesser that the username exists. No counter reset, no session.
+      if (accountExpiry.isExpired(user)) {
+        securityLogger.loginFailed(req.ip, `${user.username} (login expired)`);
+        throw new accountExpiry.AccountExpiredError();
       }
 
       // Block party guests who haven't been approved yet. approval_status
@@ -284,7 +295,7 @@ const authController = {
       }
 
       const { rows } = await dbQuery(
-        `SELECT id, username, email, role, avatar, display_name, phone, disabled, theme,
+        `SELECT id, username, email, role, avatar, display_name, phone, disabled, expires_at, theme,
                 page_widths, page_width_motion, aside_widths, cookie_consent,
                 email_verified, party_access, approval_status, totp_enabled
            FROM users
@@ -299,6 +310,8 @@ const authController = {
       if (!user || user.disabled) {
         return res.status(403).json({ error: t(req.locale, 'errors.auth.accountDisabled'), code: 403 });
       }
+      // …or its time-limited login could have run out (migration 114).
+      accountExpiry.assertNotExpired(user);
 
       const session = await lucia.createSession(user.id, {
         ip_address: req.ip ?? null,
@@ -460,7 +473,7 @@ const authController = {
 
       const { rows } = await dbQuery(
         `SELECT id, username, email, role, avatar, display_name, phone,
-                disabled, approval_status
+                disabled, expires_at, approval_status
          FROM users
          WHERE magic_login_token_hash = $1
          LIMIT 1`,
@@ -474,6 +487,9 @@ const authController = {
       if (user.disabled) {
         return res.status(403).json({ error: t(req.locale, 'errors.auth.accountDisabled'), code: 403 });
       }
+      // A magic link is a permanent bearer credential — the login's expiry
+      // (migration 114) is what bounds it for a time-limited account.
+      accountExpiry.assertNotExpired(user);
       if (user.approval_status === 'declined') {
         return res.status(403).json({ error: t(req.locale, 'errors.party.requestDeclined'), code: 403 });
       }
@@ -657,7 +673,8 @@ const authController = {
 
       const { rows } = await dbQuery(
         `SELECT id, preferred_locale FROM users
-          WHERE email = $1 AND disabled = FALSE AND ${realEmailSql('email')}`,
+          WHERE email = $1 AND disabled = FALSE AND ${realEmailSql('email')}
+            AND (expires_at IS NULL OR expires_at > NOW())`,
         [email.toLowerCase()]
       );
 
@@ -749,10 +766,12 @@ const authController = {
         return res.json({ authenticated: false });
       }
 
-      const { session, user } = await lucia.validateSession(sessionId);
+      // An expired time-limited login (migration 114) comes back as no
+      // session, its sessions deleted; `reason` lets the SPA say why.
+      const { session, user, expired } = await accountExpiry.validateSession(sessionId);
       if (!session) {
         res.setHeader('Set-Cookie', lucia.createBlankSessionCookie().serialize());
-        return res.json({ authenticated: false });
+        return res.json({ authenticated: false, ...(expired ? { reason: accountExpiry.ACCOUNT_EXPIRED } : {}) });
       }
 
       if (session.fresh) {
@@ -814,7 +833,8 @@ const authController = {
 
       const { rows } = await dbQuery(
         `SELECT id, email_verified, email_verify_token, email_verify_expires
-         FROM users WHERE email = $1 AND disabled = FALSE AND ${realEmailSql('email')}`,
+         FROM users WHERE email = $1 AND disabled = FALSE AND ${realEmailSql('email')}
+           AND (expires_at IS NULL OR expires_at > NOW())`,
         [email.toLowerCase()]
       );
 

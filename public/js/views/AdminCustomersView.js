@@ -17,6 +17,7 @@ import {
 import { parseCsvRecords } from '../utils/csv.js';
 import { CustomerNotes } from '../components/CustomerNotes.js';
 import { credentialsPanelHtml, wireCredentialsPanel } from '../components/OneTimeCredentials.js';
+import { expiryFieldHtml, wireExpiryField, readExpiryField } from '../components/ExpiryPicker.js';
 
 // Parse an Email/Name/Phone CSV → [{ email, display_name, phone }]. Tolerant of
 // either English or Icelandic header names; rows without an email are dropped.
@@ -581,6 +582,7 @@ export class AdminCustomersView {
           <label>${t('adminCustomers.phone')}
             <input type="text" name="phone" maxlength="40"/>
           </label>
+          ${expiryFieldHtml({ idPrefix: 'cust-add-expiry' })}
           <p class="admin-shop__hint">${t('adminCustomers.addHint')}</p>
           <p class="admin-shop__error" id="cust-add-error" role="alert"></p>
           <div class="admin-shop__form-actions">
@@ -607,16 +609,23 @@ export class AdminCustomersView {
       if (noEmailBox.checked) emailInput.value = '';
     });
 
+    // "Gildir til" (migration 114): a demo login for a prospect stops working
+    // after the chosen days or date; none = never.
+    wireExpiryField(form, 'cust-add-expiry');
+
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       errorEl.textContent = '';
       const fd = new FormData(e.target);
       const noEmail = noEmailBox.checked;
+      const expiry = readExpiryField(form, 'cust-add-expiry');
+      if (!expiry.ok) { errorEl.textContent = expiry.message; return; }
       try {
         const res = await adminCreateCustomer({
           ...(noEmail ? { no_email: true } : { email: String(fd.get('email') || '').trim() }),
           display_name: String(fd.get('display_name') || '').trim() || null,
           phone:        String(fd.get('phone') || '').trim() || null,
+          ...(expiry.value ? { expires_at: expiry.value } : {}),
         });
         await this._load();
         if (res.noEmail) {

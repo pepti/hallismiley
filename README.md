@@ -11,8 +11,9 @@ but left functional (`server/config/publicSurface.js`).
 
 `CLAUDE.md` holds the rules and a domain map; `docs/ARCHITECTURE.md` is the
 per-domain index a feature request starts from (files, the rules that must
-hold, history links); `docs/HISTORY.md` is every programme that has landed,
-dated and indexed. `PLAN.md` is the build plan and current status,
+hold, history links); `docs/history.d/` holds one dated write-up per branch
+since 2026-09-26, and `docs/HISTORY.md` is the frozen, indexed archive of every
+programme before that. `PLAN.md` is the build plan and current status,
 `ENHANCEMENTS.md` the proposal queue, `LESSONS.md` the lessons log,
 `CHANGELOG.md` the release notes the promote workflow reads.
 

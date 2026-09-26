@@ -21,6 +21,8 @@ router.post('/users/:id/new-password',  requireRole('admin'), csrfProtect, admin
 // through /auth/totp/disable, which asks for the password again.
 router.post('/users/:id/totp/reset',   requireRole('admin'), csrfProtect, adminController.resetTotp);
 router.patch('/users/:id/disable',      requireRole('admin'), csrfProtect, adminController.disableUser);
+// Time-limited login (migration 114): { expires_at } — ISO, YYYY-MM-DD or null.
+router.patch('/users/:id/expiry',       requireRole('admin'), csrfProtect, adminController.setExpiry);
 router.patch('/users/:id/party-access', requireRole('admin'), csrfProtect, adminController.setPartyAccess);
 router.patch('/users/:id/approve',      requireRole('admin'), csrfProtect, adminController.approveUser);
 router.patch('/users/:id/decline',      requireRole('admin'), csrfProtect, adminController.declineUser);
