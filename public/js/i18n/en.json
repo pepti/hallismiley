@@ -1069,6 +1069,7 @@
   "adminKit.perPage": "Per page",
   "adminKit.prevPage": "Previous page",
   "adminKit.nextPage": "Next page",
+  "adminKit.scrollRegion": "Table, scrolls sideways",
   "admin.dashboard": "Admin Dashboard",
   "admin.menu": "Menu",
   "admin.sidebarLabel": "Admin navigation",

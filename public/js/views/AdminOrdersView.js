@@ -122,7 +122,7 @@ export class AdminOrdersView {
     // the window (utils/stickyHScroll.js, ice #325). The wrap is rebuilt on
     // every paint, so the mirror is too.
     this._hscroll?.detach();
-    this._hscroll = attachStickyHScroll(body.querySelector('#orders-table-wrap'));
+    this._hscroll = attachStickyHScroll(body.querySelector('#orders-table-wrap'), { label: t('adminOrders.title') });
     body.querySelectorAll('.admin-orders__row-check').forEach(cb => {
       cb.addEventListener('change', () => {
         if (cb.checked) this._selected.add(cb.dataset.id); else this._selected.delete(cb.dataset.id);

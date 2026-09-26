@@ -1069,6 +1069,7 @@
   "adminKit.perPage": "Á síðu",
   "adminKit.prevPage": "Fyrri síða",
   "adminKit.nextPage": "Næsta síða",
+  "adminKit.scrollRegion": "Tafla, flettist til hliðar",
   "admin.dashboard": "Stjórnborð",
   "admin.menu": "Valmynd",
   "admin.sidebarLabel": "Stjórnborðsvalmynd",
