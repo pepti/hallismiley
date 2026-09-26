@@ -913,21 +913,21 @@ company/                  gitignored: plans, decisions, logs, market-research st
   D-022; `salesGuidesD001.test.js` and `salesGuidesD022.test.js` check seed
   and migrations agree step by step, the first seed → os_001 → os_003 → today's
   seed ([handbook-d001-2026-09-22](HISTORY.md#handbook-d001-2026-09-22),
-  [handbook-d022-2026-09-26](HISTORY.md#handbook-d022-2026-09-26)).
+  [handbook-d022-2026-09-26](history.d/2026-09-26-feat-handbook-d022.md#handbook-d022-2026-09-26)).
 - Guide prices follow D-022 (amends D-001): build fee 390/580/690 þ.kr. +
   service contract 29/59/89 þ.kr./mán with 2/3/5 verkeiningar, einingaverð
   6.000 kr., hosting and in-system AI beyond the included amount at cost +
   15 %; all carry DRÖG. No D-001 contract figure (19/29/39, 5/10/20) may
   reappear in a guide. Demos go to `demo.rekstrarkerfi.is`, never this site
   ([handbook-d001-2026-09-22](HISTORY.md#handbook-d001-2026-09-22),
-  [handbook-d022-2026-09-26](HISTORY.md#handbook-d022-2026-09-26)).
+  [handbook-d022-2026-09-26](history.d/2026-09-26-feat-handbook-d022.md#handbook-d022-2026-09-26)).
 - Samstarf, the fourth tier, has no listed price anywhere in the handbook:
   the guides tell a seller to offer the free assessment instead of quoting a
   tier, and the Samstarf copy carries no figure. It is DRAFT until Halli
-  approves it ([handbook-d022-2026-09-26](HISTORY.md#handbook-d022-2026-09-26)).
+  approves it ([handbook-d022-2026-09-26](history.d/2026-09-26-feat-handbook-d022.md#handbook-d022-2026-09-26)).
 - Onboarding a hire is no code: `/admin/customers` → `solufolk` in `/admin/roles`.
 
-**History**: [sales-staff](HISTORY.md#sales-staff) · [services-page](HISTORY.md#services-page) · [handbook-d001-2026-09-22](HISTORY.md#handbook-d001-2026-09-22) · [handbook-d022-2026-09-26](HISTORY.md#handbook-d022-2026-09-26)
+**History**: [sales-staff](HISTORY.md#sales-staff) · [services-page](HISTORY.md#services-page) · [handbook-d001-2026-09-22](HISTORY.md#handbook-d001-2026-09-22) · [handbook-d022-2026-09-26](history.d/2026-09-26-feat-handbook-d022.md#handbook-d022-2026-09-26)
 
 ## 11. Shop — cart, checkout, orders, products, collections, bins, discounts (hidden surface)
 

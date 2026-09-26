@@ -140,7 +140,7 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
   handbook moved to D-022 (29/59/89 þ.kr./mán with 2/3/5 verkeiningar,
   einingaverð 6.000 kr. — which closes that open item) and gained the fourth
   tier Samstarf, the free assessment and when a seller offers it, all DRÖG
-  (migration os_003; [handbook-d022-2026-09-26](docs/HISTORY.md#handbook-d022-2026-09-26)).
+  (migration os_003; [handbook-d022-2026-09-26](docs/history.d/2026-09-26-feat-handbook-d022.md#handbook-d022-2026-09-26)).
   Still open in the guides: whether unused verkeiningar carry over, the cost of
   moving up a tier, how a Samstarf contract is shaped (left to the offer).
   Owed elsewhere by D-022: D-003's commission examples and D-012's margin
