@@ -353,6 +353,9 @@ const shopController = {
         items: resolvedItems,
         shipping: shippingAmount,
         appliedDiscount,
+        // The buyer's order note (ice #213, migration 115); Order.normaliseNote
+        // trims and caps it. Staff-only: never echoed in a public payload.
+        notes: req.body?.note,
       });
 
       // Consume one use of the discount (atomic, guarded by usage_limit).

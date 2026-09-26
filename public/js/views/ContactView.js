@@ -11,6 +11,7 @@
 
 import { isAdmin, hasRole, getCSRFToken } from '../services/auth.js';
 import { escHtml } from '../utils/escHtml.js';
+import { isValidPhone } from '../utils/contactFormat.js';
 import { SceneStage } from '../scenes/SceneStage.js';
 import { publicNav } from '../utils/identity.js';
 import { t, getLocale, href, adminLocaleBadgeHtml, checkUntranslated } from '../i18n/i18n.js';
@@ -549,6 +550,14 @@ export class ContactView {
       if (!name || !email || !message) {
         status.className = 'contact-form__status contact-form__status--error';
         status.textContent = t('form.requiredFields');
+        return;
+      }
+      // Same phone rule as the server (utils/contactFormat.js, ported from
+      // icelandicstore #399): point at the field instead of a round trip.
+      if (phone && !isValidPhone(phone)) {
+        status.className = 'contact-form__status contact-form__status--error';
+        status.textContent = t('contact.phoneInvalid');
+        form.querySelector('#contact-page-phone').focus();
         return;
       }
 

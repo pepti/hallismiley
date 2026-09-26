@@ -176,7 +176,7 @@ const ROUTES = [
   { pattern: '/admin/books',     factory: async ()  => (isAuthenticated() && canSeeView('books')) ? make('AdminBooksView') : new HomeView() },
   { pattern: '/admin/roles',     factory: async ()  => (isAuthenticated() && isAdmin()) ? make('AdminRolesView') : new HomeView() },
   // The portfolio projects board — unlisted, same gate the old dashboard had.
-  { pattern: '/admin/projects',  factory: async ()  => (isAuthenticated() && (canSeeView('dashboard') || canEdit())) ? make('AdminProjectsView') : new HomeView() },
+  { pattern: '/admin/projects',  factory: async ()  => (isAuthenticated() && (canSeeView('projects') || canEdit())) ? make('AdminProjectsView') : new HomeView() },
   { pattern: '/admin',           factory: async ()  => isAuthenticated() ? make('AdminView') : new HomeView() },
   // OAuth consent for the MCP connector (R5a): /oauth/authorize lands here.
   // The view handles signed-out and non-admin visitors itself; the server

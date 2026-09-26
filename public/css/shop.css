@@ -496,6 +496,20 @@
   margin: 0;
   font-weight: 600;
 }
+/* SKU under a name another product on the page also carries (ported from
+   icelandicstore #399, utils/duplicateNames.js). A quiet mono chip: neutral
+   ink on the hover wash, so it reads on all three themes. */
+.product-card__sku { margin: -2px 0 6px; }
+.product-card__sku-chip {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  background: var(--bg-hover);
+  overflow-wrap: anywhere;
+}
 
 /* ── Product detail ──────────────────────────────────────────────────────── */
 .shop-product__inner {
@@ -751,7 +765,16 @@
   display: flex; justify-content: space-between;
   padding: 8px 0; font-size: 16px; color: var(--text-primary);
 }
-.shop-cart__vat-note { color: var(--text-muted); font-size: 12px; margin: 8px 0 16px; }
+/* "Þar af VSK 24%: 1.935 kr." — one row per rate in the basket, the VAT
+   INSIDE the total (prices are VAT-inclusive; utils/vat.js, ice #51). A quiet
+   sub-line under the subtotal, not an addend. */
+.shop-cart__vat-row,
+.shop-checkout__vat-row {
+  display: flex; justify-content: space-between; gap: 12px;
+  padding: 2px 0; color: var(--text-secondary); font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.shop-cart__vat { margin: 0 0 12px; }
 .shop-cart__actions {
   display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;
 }
@@ -774,6 +797,7 @@
 .shop-cart__checkout:disabled, .shop-cart__checkout[disabled] { opacity: 0.6; cursor: not-allowed; filter: none; }
 .shop-checkout__notice { margin: 0 0 20px; padding: 10px 14px; border-left: 3px solid var(--error); background: var(--bg-surface); color: var(--text-primary); font-size: 14px; }
 .shop-checkout__notice--warn { border-left-color: var(--warning); }
+.shop-checkout__notice--info { border-left-color: var(--border); }
 
 /* ── Checkout ────────────────────────────────────────────────────────────── */
 .shop-checkout__inner {
@@ -870,6 +894,8 @@
 .shop-checkout__vat-note, .shop-checkout__logged-in {
   color: var(--text-muted); font-size: 12px; margin: 12px 0;
 }
+.shop-checkout__vat { margin-top: 8px; }
+.shop-checkout__vat .shop-checkout__vat-note { margin: 4px 0 0; }
 .shop-checkout__error { color: var(--error); font-size: 14px; min-height: 1.4em; }
 .shop-checkout__summary {
   background: var(--bg-surface);
@@ -988,8 +1014,10 @@
 }
 .shop-orders__status--paid,
 .admin-shop__status--paid { color: var(--success); border-color: var(--success); }
+/* Pending = awaiting payment: the --warning status ink, like every other
+   "needs action" pill (ported from icelandicstore #399). */
 .shop-orders__status--pending,
-.admin-shop__status--pending { color: var(--gold); border-color: var(--gold-dark); }
+.admin-shop__status--pending { color: var(--warning); border-color: var(--warning); }
 .shop-orders__status--failed,
 .admin-shop__status--failed,
 .shop-orders__status--cancelled,

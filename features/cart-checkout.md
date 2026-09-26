@@ -23,15 +23,22 @@ paths:
   - public/js/components/CurrencySelector.js
   - public/js/services/cart.js
   - public/js/utils/availability.js
+  - public/js/utils/colorLabels.js
+  - public/js/utils/duplicateNames.js
+  - public/js/utils/vat.js
   - public/css/shop.css
   - tests/integration/shop.test.js
   - tests/unit/shopFilters.test.js
   - tests/unit/availability.client.test.js
+  - tests/unit/colorLabels.client.test.js
+  - tests/unit/duplicateNames.client.test.js
+  - tests/unit/vatDisplay.client.test.js
+  - tests/unit/cartPriceSync.client.test.js
   - e2e/cart-sold-out.spec.js
 migrations: []
 since: 2026-08-09
 origin: null
-history: [ui-kit, harvest-2, harvest-ice-c-2026-09-24]
+history: [ui-kit, harvest-2, harvest-ice-c-2026-09-24, harvest2-lane4b-2026-09-26]
 ---
 
 The public storefront (`/shop`, product pages, filters), the client-side cart, currency selector and the Stripe Checkout hand-off with webhook-driven order creation. `/shop` is in `publicSurface.js` here; Stripe is inert without keys.
@@ -40,4 +47,6 @@ The public storefront (`/shop`, product pages, filters), the client-side cart, c
 - Stripe webhook signatures are verified (invariant 7); checkout `required` must be re-applied after `syncShipping()`.
 - The public catalogue sends `available` only (never on hand or committed). The cart and the checkout flag a line Available cannot cover and block checkout (`utils/availability.js`); the server answers 409 for it; the webhook re-checks under the row locks and refunds a payment that would oversell ([history](../docs/HISTORY.md#harvest-ice-c-2026-09-24), ENHANCEMENTS #25).
 - The search box toggles its buttons in place, never repaints under the typist (ice #350).
+- The cart, checkout and admin order page show the VAT per rate inside the total, split as the invoice books it (`utils/vat.js`, parity-tested against `server/utils/vat.js` and `invoiceService.buildLines`); an order shipped abroad is zero-rated on goods and shipping. The basket is re-priced from the catalogue on every cart/checkout load and says which lines moved (`cart.syncPrices`). An Icelandic shipping postcode is three digits; abroad it is free text ([history](../docs/history.d/2026-09-26-harvest2-lane4b-shop-i18n.md#harvest2-lane4b-2026-09-26)).
+- Product-page copy is built through `t()` at render (`defaultChrome()`), colour names are locale keys (`utils/colorLabels.js`), and a name two products share shows the SKU chip (`utils/duplicateNames.js`).
 - Full rules: [../docs/ARCHITECTURE.md#11-shop--cart-checkout-orders-products-collections-bins-discounts-hidden-surface](../docs/ARCHITECTURE.md#11-shop--cart-checkout-orders-products-collections-bins-discounts-hidden-surface).

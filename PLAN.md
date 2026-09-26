@@ -51,7 +51,7 @@ Acceptance (2026-08-09 counts): 2012 Jest + 109 Playwright green · lint clean �
 
 ## Open questions for Halli
 
-1. Confirm tier pricing (D-001: build fee 390/580/690 þ.kr. + service contract 19/29/39 þ.kr./mán with 5/10/20 verkeiningar — DRAFT; the old flat 39–79 þ.kr./mán is retired).
+1. Tier pricing: D-022 approved 2026-09-26 (build fee 390/580/690 þ.kr. + service contract 29/59/89 þ.kr./mán with 2/3/5 verkeiningar, einingaverð 6.000 kr.; fourth tier Samstarf, price after a free assessment) — prices carry DRÖG until D-008's rule fires; D-001's 19/29/39 with 5/10/20 and the old flat 39–79 þ.kr./mán are retired.
 2. Sign-off on all IS/EN copy (marked DRAFT in locale files).
 3. ENHANCEMENTS.md decisions after Job 3.
 
@@ -136,6 +136,15 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
   the guides as "DRÖG — Halli staðfestir": the einingaverð amount, whether unused
   verkeiningar carry over, the cost of moving up a tier, how sellers demo before
   the demo instance exists.
+- **Halli approves the Samstarf copy + publishes the guides** (2026-09-26): the
+  handbook moved to D-022 (29/59/89 þ.kr./mán with 2/3/5 verkeiningar,
+  einingaverð 6.000 kr. — which closes that open item) and gained the fourth
+  tier Samstarf, the free assessment and when a seller offers it, all DRÖG
+  (migration os_003; [handbook-d022-2026-09-26](docs/history.d/2026-09-26-feat-handbook-d022.md#handbook-d022-2026-09-26)).
+  Still open in the guides: whether unused verkeiningar carry over, the cost of
+  moving up a tier, how a Samstarf contract is shaped (left to the offer).
+  Owed elsewhere by D-022: D-003's commission examples and D-012's margin
+  column re-run against the new fees.
 - Demo decisions 2026-09-26 (D-023, [demo-decisions-os-2026-09-26](docs/history.d/2026-09-26-docs-demo-decisions-2026-09-26.md)):
   `demo.rekstrarkerfi.is` is one demo with every module, and "Fáðu demo" on each
   /verdskra tier card opens it self-serve (a throwaway session per visitor). Open:
@@ -158,6 +167,16 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
   PRs (both deploy on merge); arm `RELEASE_*` per product — orangesmiley's own
   channel first, rekstrarkerfid's next (the hallismiley arming packet of
   2026-09-13 is parked).
+- "Í dag", the admin home (D-020 step 4, branch `feat/admin-home-idag`, not
+  merged — [admin-home-idag-2026-09-26](docs/history.d/2026-09-26-feat-admin-home-idag.md#admin-home-idag-2026-09-26)).
+  Open for Halli: (a) every `adminHome.*` string and `admin.nav.projects`
+  are DRÖG, including the ones written in the build (listed in the entry);
+  (b) the sidebar label — keep "Stjórnborð" or rename `admin.nav.dashboard`
+  to "Í dag"; (c) the sales-channel rule (web / wholesale = an invoice not born
+  from an order / till) with Bókari; (d) "waiting on you" for change requests
+  needs a status that means the customer must act (an expand migration); (e)
+  whether an admin may hide Fyrstu skrefin early (then per user, like
+  `page_widths`); (f) "Verkefni" or "Verkefnasafn" for the board's line.
 - Next programme: R2, the product-site build in the sibling `rekstrarkerfid`
   repo per `company/REKSTRARKERFI-BUILD-INSTRUCTIONS.md`.
 
@@ -205,6 +224,16 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
     `--on-accent` by lane 4b or a follow-up.
   - (d) Settled in the master merge: `AdminUsersView.js`'s raw date call is
     on `formatDate`, and the date guard has no pending exceptions left.
+- Harvest 2 lane 4b (2026-09-26, branch `harvest2/lane4b-shop-i18n`,
+  [harvest2-lane4b-2026-09-26](docs/history.d/2026-09-26-harvest2-lane4b-shop-i18n.md#harvest2-lane4b-2026-09-26)):
+  shop VAT per rate, re-priced basket, postcode/phone rules, colour names, no
+  English on Icelandic shop pages. Open: (a) **the new shop/checkout/contact
+  strings are DRAFT** (Halli; listed in the fragment); (b) the checkout order
+  note (ice #213) landed with engine migration `115_order_notes` (expand-only;
+  a no-op on icelandicstore, which has the column); (c) `CheckoutSuccessView` still prints the fixed "24% VSK" note and the
+  product page's editable `vat_note` chrome still says 24 %; (d) the contact
+  form now refuses a malformed phone (ice's shared rule) — Halli may prefer it
+  looser there.
 - 2026-09-26: Harvest 2 lane 6a, stock, is on branch `harvest2/lane6a-stock`
   (not merged): [harvest2-lane6a-2026-09-26](docs/history.d/2026-09-26-harvest2-lane6a-stock.md#harvest2-lane6a-2026-09-26).
   Inventory Watch + "Fix stock" (ice #13/#15), the stock count as one audited

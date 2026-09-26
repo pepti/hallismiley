@@ -5582,6 +5582,34 @@ END; $$ LANGUAGE plpgsql`,
     ],
   },
   {
+    // The customer's order note — the checkout "athugasemd" field (harvest 2
+    // lane 4b, 2026-09-26; ported from icelandicstore #213). Free text the
+    // buyer types at checkout, written once by shopController
+    // .createCheckoutSession through Order.createWithItems (trimmed, capped at
+    // 1000 characters there — Order.normaliseNote), read only by staff on the
+    // admin order page. It is NOT in Order's COLUMNS list, so the public
+    // by-session and "my orders" payloads never carry it. NULL = no note, as
+    // for every order before this.
+    //
+    // Harvested from icelandicstore, whose databases already hold
+    // `orders.notes TEXT` (same DDL, from its 072_order_notes_attachments,
+    // which also creates order_attachments): IF NOT EXISTS makes this a no-op
+    // there, so ice needs no `aliases` entry for it (docs/MIGRATIONS.md — its
+    // migration did more than this one).
+    // No length CHECK: the cap is the writer's, and ice's column carries
+    // longer machine-written markers (its Invoice Merger) a CHECK would refuse.
+    //
+    // Additive (invariant 14): the previous release neither reads nor writes
+    // the column (its INSERT names its columns, its SELECTs use COLUMNS or
+    // o.* for staff only). Rollback of the schema: ALTER TABLE orders DROP
+    // COLUMN notes once no release reads it.
+    // Reference copy: server/migrations/115_order_notes.sql
+    name: '115_order_notes',
+    statements: [
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS notes TEXT`,
+    ],
+  },
+  {
     // Goods receiving + the batch handle on stock movements
     // (harvest2-lane6a-2026-09-26; ported from icelandicstore #23, ice's
     // 080_goods_receipts). A supplier delivery is a RECEIPT: the lines the

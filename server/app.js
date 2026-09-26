@@ -698,6 +698,7 @@ app.use('/api/v1/admin/accounts', require('./routes/adminAccountRoutes')); // mu
 app.use('/api/v1/admin/commission', require('./routes/adminCommissionRoutes')); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin/audit', require('./routes/adminAuditRoutes')); // must come before /api/v1/admin catch-all
 app.use('/api/v1/admin/modules', require('./routes/adminModulesRoutes')); // R5b: the admin's module switches; before the catch-all
+app.use('/api/v1/admin/home', require('./routes/adminHomeRoutes')); // "Í dag": the admin home, per-view blocks; before the catch-all
 app.use('/api/v1/admin/demo', require('./routes/adminDemoRoutes')); // R2b: the demo instance's reset (404 unless DEMO_INSTANCE); before the catch-all
 app.use('/api/v1/admin',      adminRoutes);
 app.use('/api/v1/content',    contentRoutes);
