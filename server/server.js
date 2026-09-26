@@ -137,6 +137,12 @@ async function start() {
       .catch((err) => logger.error({ err }, '[server] demo seed on first boot failed'));
   }
 
+  // A TEST stack's invented sample rows (server/demo/testStackData.js,
+  // product-owned; ice #183). AFTER migrate() on purpose: re-applied on every
+  // boot, which also restores them after a PROD→TEST clone. No-op unless
+  // APP_ENV=test on a non-production database; never throws.
+  await require('./services/testStackSeeder').applyTestStackData();
+
   // Did the update we triggered before the last restart actually land? This
   // runs AFTER migrations and BEFORE listen, on purpose: migrations are the
   // riskiest part of a release, and a verdict recorded before they ran would be
