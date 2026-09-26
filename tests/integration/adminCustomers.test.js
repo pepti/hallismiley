@@ -429,3 +429,170 @@ describe('bulk welcome invites', () => {
     await request(app).patch(templateUrl).set('Cookie', adminCookie).send({ en: { heading: '' } });
   });
 });
+
+// ── One customer: read, edit, invite (harvest 2 lane 3, ported from ice #336) ──
+
+describe('one customer: GET/PATCH /:id and POST /:id/invite', () => {
+  let custId;
+
+  // A plain, passwordless customer (what "Add customer" makes).
+  async function makeCustomer(email = 'solo@example.com') {
+    const res = await request(app).post('/api/v1/admin/customers').set('Cookie', adminCookie)
+      .send({ email, display_name: 'Solo Kúnni', send_invite: false });
+    expect(res.status).toBe(201);
+    return res.body.customer.id;
+  }
+
+  // A staff account holding one custom role with exactly these views.
+  async function staffWith(views, name) {
+    await db.query(`INSERT INTO roles (name, view_access) VALUES ($1, $2::jsonb) ON CONFLICT (name) DO UPDATE SET view_access = EXCLUDED.view_access`,
+      [name, JSON.stringify(views)]);
+    const { rows } = await db.query(
+      `INSERT INTO users (email, username, password_hash, role, approval_status, email_verified)
+       VALUES ($1, $2, 'x', $3, 'approved', TRUE) RETURNING id`, [`${name}@staff.is`, `${name}_staff`, name]);
+    return rows[0].id;
+  }
+
+  beforeEach(async () => { custId = await makeCustomer(); });
+  afterEach(async () => { await db.query(`DELETE FROM roles WHERE name IN ('crm-seller', 'lead-seller')`).catch(() => {}); });
+
+  test('create with send_invite:false mails nothing, returns no link, audits user.created', async () => {
+    const res = await request(app).post('/api/v1/admin/customers').set('Cookie', adminCookie)
+      .send({ email: 'later@example.com', send_invite: false });
+    expect(res.status).toBe(201);
+    expect(res.body.invited).toBe(false);
+    expect(res.body).not.toHaveProperty('resetUrl');
+    const { rows } = await db.query(
+      `SELECT action FROM staff_audit_log WHERE entity_id = $1`, [res.body.customer.id]);
+    expect(rows.map(r => r.action)).toEqual(['user.created']);
+  });
+
+  test('GET returns the editable fields; staff, party guests and unknown ids are 404', async () => {
+    const res = await request(app).get(`/api/v1/admin/customers/${custId}`).set('Cookie', adminCookie);
+    expect(res.status).toBe(200);
+    expect(res.body.customer).toMatchObject({ id: custId, email: 'solo@example.com', display_name: 'Solo Kúnni', has_password: false, address1: null });
+    const modId = await createTestModeratorUser();
+    const { rows: [a] } = await db.query(`SELECT id FROM users WHERE role = 'admin' LIMIT 1`);
+    const guest = await createTestPendingGuest({ email: 'pg9@party.is', username: 'pg9' });
+    for (const id of [modId, a.id, guest.id, 'no-such-id']) {
+      expect((await request(app).get(`/api/v1/admin/customers/${id}`).set('Cookie', adminCookie)).status).toBe(404);
+    }
+  });
+
+  test('PATCH edits contact + address: trims, lowercases the email, upper-cases the country, blank clears', async () => {
+    await db.query(`UPDATE users SET email_verified = TRUE WHERE id = $1`, [custId]);
+    const res = await request(app).patch(`/api/v1/admin/customers/${custId}`).set('Cookie', adminCookie)
+      .send({ email: '  New.Addr@Example.com ', display_name: ' Jón Jónsson ', phone: '+354 555 1234',
+        address1: 'Laugavegur 1', address2: '', city: 'Reykjavík', zip: '101', country: 'is' });
+    expect(res.status).toBe(200);
+    expect(res.body.customer).toMatchObject({
+      email: 'new.addr@example.com', display_name: 'Jón Jónsson', phone: '+354 555 1234',
+      address1: 'Laugavegur 1', address2: null, city: 'Reykjavík', zip: '101', country: 'IS',
+    });
+    // A new address is unverified and any link sent to the old one is dead.
+    const { rows: [u] } = await db.query(
+      'SELECT email_verified, password_reset_token FROM users WHERE id = $1', [custId]);
+    expect(u.email_verified).toBe(false);
+    expect(u.password_reset_token).toBeNull();
+    // Only the keys sent are touched.
+    const again = await request(app).patch(`/api/v1/admin/customers/${custId}`).set('Cookie', adminCookie)
+      .send({ phone: '' });
+    expect(again.body.customer).toMatchObject({ phone: null, city: 'Reykjavík', email: 'new.addr@example.com' });
+  });
+
+  test('user.updated names the fields changed, never their values', async () => {
+    await request(app).patch(`/api/v1/admin/customers/${custId}`).set('Cookie', adminCookie)
+      .send({ display_name: 'Solo Kúnni', city: 'Akureyri' }); // the name is unchanged
+    const { rows } = await db.query(
+      `SELECT summary FROM staff_audit_log WHERE action = 'user.updated' AND entity_id = $1`, [custId]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].summary).toEqual({ fields: ['city'] });
+    expect(JSON.stringify(rows[0].summary)).not.toContain('Akureyri');
+  });
+
+  test('PATCH validation: bad email, blank email, bad phone, bad country, long address → 400', async () => {
+    const bad = [
+      { email: 'not-an-email' }, { email: '' }, { email: 'x@noemail.invalid' }, { phone: 'abc' },
+      { country: 'Iceland' }, { address1: 'x'.repeat(201) }, { zip: 'x'.repeat(21) },
+    ];
+    for (const body of bad) {
+      const res = await request(app).patch(`/api/v1/admin/customers/${custId}`).set('Cookie', adminCookie).send(body);
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe(400);
+    }
+  });
+
+  test('PATCH to an email another login holds → 409, whatever the case', async () => {
+    const res = await request(app).patch(`/api/v1/admin/customers/${custId}`).set('Cookie', adminCookie)
+      .send({ email: 'USER@test.com' }); // createTestRegularUser's address
+    expect(res.status).toBe(409);
+    // Its own address (re-sent) is not a conflict.
+    expect((await request(app).patch(`/api/v1/admin/customers/${custId}`).set('Cookie', adminCookie)
+      .send({ email: 'Solo@Example.com' })).status).toBe(200);
+  });
+
+  test('PATCH never reaches a staff account or a multi-role holder (404)', async () => {
+    const modId = await createTestModeratorUser();
+    const sellerId = await staffWith(['leads'], 'lead-seller');
+    const { rows: [multi] } = await db.query(
+      `INSERT INTO users (email, username, password_hash, role) VALUES ('mr@example.com', 'mruser', NULL, 'user') RETURNING id`);
+    await db.query(`INSERT INTO user_roles (user_id, role_name) VALUES ($1, 'lead-seller')`, [multi.id]);
+    for (const id of [modId, sellerId, multi.id]) {
+      const res = await request(app).patch(`/api/v1/admin/customers/${id}`).set('Cookie', adminCookie)
+        .send({ email: 'takeover@example.com' });
+      expect(res.status).toBe(404);
+    }
+    const { rows } = await db.query(`SELECT 1 FROM users WHERE email = 'takeover@example.com'`);
+    expect(rows).toHaveLength(0);
+  });
+
+  test('IDOR / role gate: a plain user and a staff role without `customers` get 403; a `customers` role may edit', async () => {
+    const plain = await getTestSessionCookie(userId);
+    const leadSeller = await getTestSessionCookie(await staffWith(['leads'], 'lead-seller'));
+    for (const cookie of [plain, leadSeller]) {
+      expect((await request(app).get(`/api/v1/admin/customers/${custId}`).set('Cookie', cookie)).status).toBe(403);
+      expect((await request(app).patch(`/api/v1/admin/customers/${custId}`).set('Cookie', cookie)
+        .send({ display_name: 'Hijacked' })).status).toBe(403);
+      expect((await request(app).post(`/api/v1/admin/customers/${custId}/invite`).set('Cookie', cookie)).status).toBe(403);
+    }
+    expect((await request(app).patch(`/api/v1/admin/customers/${custId}`)
+      .send({ display_name: 'Anon' })).status).toBe(401);
+    const { rows: [still] } = await db.query('SELECT display_name FROM users WHERE id = $1', [custId]);
+    expect(still.display_name).toBe('Solo Kúnni');
+
+    const crm = await getTestSessionCookie(await staffWith(['customers'], 'crm-seller'));
+    const ok = await request(app).patch(`/api/v1/admin/customers/${custId}`).set('Cookie', crm)
+      .send({ display_name: 'Edited by CRM' });
+    expect(ok.status).toBe(200);
+    // …but the admin-only writes stay admin-only for that role.
+    expect((await request(app).post('/api/v1/admin/customers').set('Cookie', crm)
+      .send({ email: 'crm-made@example.com' })).status).toBe(403);
+  });
+
+  test('invite: mints a fresh token, reports honestly, NEVER returns the link; audited', async () => {
+    const { rows: [before] } = await db.query('SELECT password_reset_token FROM users WHERE id = $1', [custId]);
+    const res = await request(app).post(`/api/v1/admin/customers/${custId}/invite`).set('Cookie', adminCookie);
+    expect(res.status).toBe(200);
+    // No mail transport in the test env: nothing reached the customer, and
+    // still no set-password link comes back.
+    expect(res.body.invited).toBe(false);
+    expect(res.body).not.toHaveProperty('resetUrl');
+    expect(JSON.stringify(res.body)).not.toMatch(/reset-password|token=/);
+    const { rows: [after] } = await db.query(
+      'SELECT password_reset_token, invited_at FROM users WHERE id = $1', [custId]);
+    expect(after.password_reset_token).toBeTruthy();
+    expect(after.password_reset_token).not.toBe(before.password_reset_token);
+    expect(after.invited_at).toBeNull(); // stamped only on a confirmed send
+    const { rows } = await db.query(
+      `SELECT summary FROM staff_audit_log WHERE action = 'user.invited' AND entity_id = $1`, [custId]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].summary).toMatchObject({ via: 'customer_invite', sent: false });
+  });
+
+  test('invite: a customer with a password is 409; a staff account 404', async () => {
+    await db.query(`UPDATE users SET password_hash = 'x' WHERE id = $1`, [custId]);
+    expect((await request(app).post(`/api/v1/admin/customers/${custId}/invite`).set('Cookie', adminCookie)).status).toBe(409);
+    const modId = await createTestModeratorUser();
+    expect((await request(app).post(`/api/v1/admin/customers/${modId}/invite`).set('Cookie', adminCookie)).status).toBe(404);
+  });
+});

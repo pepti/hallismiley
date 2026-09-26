@@ -6,7 +6,10 @@
 const db = require('../config/database');
 const { ALL } = require('../auth/adminViews');
 
-const COLUMNS = 'name, description, view_access, is_system, created_at, updated_at';
+// label (migration 116_role_label): the display name people read; the slug in
+// `name` is derived from it on create and never renamed. '' on a role nobody
+// named (the UI falls back to the slug; the built-ins are named by i18n).
+const COLUMNS = 'name, label, description, view_access, is_system, created_at, updated_at';
 
 // In-process cache (per Node instance). Writes call invalidateCache(), but on a
 // multi-instance deploy each process keeps its own map, so a grant change on one
@@ -30,23 +33,28 @@ class Role {
     return rows[0] || null;
   }
 
-  static async create({ name, description = '', view_access = [] }) {
+  static async create({ name, label = '', description = '', view_access = [] }) {
     const { rows } = await db.query(
-      `INSERT INTO roles (name, description, view_access, is_system)
-       VALUES ($1, $2, $3::jsonb, FALSE)
+      `INSERT INTO roles (name, label, description, view_access, is_system)
+       VALUES ($1, $2, $3, $4::jsonb, FALSE)
        RETURNING ${COLUMNS}`,
-      [String(name), String(description || ''), JSON.stringify(view_access || [])]
+      [String(name), String(label || ''), String(description || ''), JSON.stringify(view_access || [])]
     );
     Role.invalidateCache();
     return rows[0];
   }
 
-  // Only description + view_access are mutable (name is the PK / FK target).
+  // label, description and view_access are mutable; name is the PK / FK target
+  // and is never renamed (the controller keeps label off the built-in roles).
   // `client` (optional): run inside the caller's transaction; the caller then
   // invalidates the cache again after COMMIT.
   static async update(name, data, client = db) {
     const sets = [];
     const params = [];
+    if (data.label !== undefined) {
+      params.push(String(data.label || ''));
+      sets.push(`label = $${params.length}`);
+    }
     if (data.description !== undefined) {
       params.push(String(data.description || ''));
       sets.push(`description = $${params.length}`);

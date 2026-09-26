@@ -5581,6 +5581,76 @@ END; $$ LANGUAGE plpgsql`,
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ`,
     ],
   },
+  {
+    // A display name for admin roles (harvest 2 lane 3, 2026-09-26; the pattern
+    // is icelandicstore #421's company_roles.label — ice 134_company_role_label
+    // is on company_roles, a different table, so it is NOT an alias of this).
+    // The slug in `name` stays the primary key and the FK target of users.role
+    // and user_roles.role_name, and is never renamed; `label` is what people
+    // read ("Bókari"), typed freely with Icelandic letters, from which the
+    // server derives the slug of a new role (server/utils/roleName.js).
+    //
+    // Unique ignoring case among the roles that have one, so the permissions
+    // grid can never show two columns with the same heading.
+    //
+    // Backfill (only WHERE label = ''): the text before " — " in the role's
+    // description when there is one of 2–30 characters (the seeded
+    // "Sölufólk — aðgangur að …" → "Sölufólk"), else the name title-cased
+    // ("admin" → "Admin"). Derived from each database's own rows, so no product
+    // copy is written here (invariant 4); a candidate another role already
+    // holds is skipped and that role keeps '' (the UI falls back to the slug).
+    // The built-in admin/moderator/user are named by i18n on screen anyway.
+    //
+    // Expand-only (invariant 14): the release still serving during a swap
+    // selects an explicit column list without `label` and inserts rows that
+    // take the '' default, which the partial index ignores. A constant default
+    // is metadata-only, no table rewrite. Rollback: DROP INDEX
+    // roles_label_lower_uniq; ALTER TABLE roles DROP COLUMN label — once no
+    // release reads it.
+    name: '116_role_label',
+    statements: [
+      `ALTER TABLE roles ADD COLUMN IF NOT EXISTS label TEXT NOT NULL DEFAULT ''`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS roles_label_lower_uniq
+         ON roles (lower(label)) WHERE label <> ''`,
+      `DO $$
+       DECLARE r RECORD; cand TEXT;
+       BEGIN
+         FOR r IN SELECT name, description FROM roles WHERE label = '' ORDER BY is_system DESC, name LOOP
+           cand := '';
+           IF position(' — ' IN r.description) > 0 THEN
+             cand := btrim(split_part(r.description, ' — ', 1));
+           END IF;
+           IF char_length(cand) < 2 OR char_length(cand) > 30 THEN
+             cand := left(initcap(btrim(regexp_replace(r.name, '[_-]+', ' ', 'g'))), 30);
+           END IF;
+           IF char_length(cand) >= 2
+              AND NOT EXISTS (SELECT 1 FROM roles WHERE lower(label) = lower(cand)) THEN
+             UPDATE roles SET label = cand WHERE name = r.name AND label = '';
+           END IF;
+         END LOOP;
+       END $$`,
+    ],
+  },
+  {
+    // A customer's own postal address (harvest 2 lane 3, 2026-09-26; ported
+    // from icelandicstore #336, where it is `114_user_address`). The admin
+    // Customers screen edits one customer's contact details in place
+    // (PATCH /api/v1/admin/customers/:id); until now there was nowhere to keep
+    // an address for a person. Column names and types are ice's EXACTLY, so an
+    // icelandicstore database that already applied its 114_user_address is
+    // aliased onto this entry (product-migrations/ice.js) instead of re-running.
+    // All nullable, IF NOT EXISTS; nothing on the previous release reads them.
+    // Expand-only (invariant 14). Rollback: DROP the five columns once no
+    // release reads them.
+    name: '117_user_address',
+    statements: [
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS address1 TEXT`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS address2 TEXT`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS city     TEXT`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS zip      TEXT`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS country  TEXT`,
+    ],
+  },
 ];
 
 module.exports = { migrations };
