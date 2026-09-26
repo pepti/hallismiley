@@ -19,6 +19,8 @@ const { t } = require('../i18n');
 // Role grants/revocations are staff actions (migration 098 staff_audit_log).
 // Best-effort here: these handlers are not one transaction with the grant.
 const staffAudit = require('../services/staffAudit');
+// Gaining admin powers clears a time-limited login's expiry (migration 114).
+const { clearExpiryOnPromotion } = require('../auth/accountExpiry');
 
 const NAME_RE  = /^[a-z0-9_-]{2,32}$/;
 const RESERVED = new Set(['admin', 'moderator', 'user']);
@@ -78,10 +80,29 @@ const adminRolesController = {
         if (verr) return res.status(400).json({ error: verr, code: 400 });
       }
       const before = role.view_access;
-      const updated = await Role.update(name, {
-        description: typeof req.body.description === 'string' ? req.body.description.slice(0, 200) : undefined,
-        view_access: req.body.view_access !== undefined ? [...new Set(req.body.view_access)] : undefined,
-      });
+      // One transaction with the promotion sweep: a role that now grants admin
+      // powers (`users`) must not leave a time-limited member as a
+      // time-limited admin — its members' expiries are cleared, audited
+      // (accountExpiry.clearExpiryOnPromotion; login-expiry review follow-up).
+      const client = await pool.connect();
+      let updated;
+      try {
+        await client.query('BEGIN');
+        updated = await Role.update(name, {
+          description: typeof req.body.description === 'string' ? req.body.description.slice(0, 200) : undefined,
+          view_access: req.body.view_access !== undefined ? [...new Set(req.body.view_access)] : undefined,
+        }, client);
+        if (req.body.view_access !== undefined) {
+          await clearExpiryOnPromotion(client, { roleName: name }, staffAudit.actorOf(req));
+        }
+        await client.query('COMMIT');
+      } catch (err) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw err;
+      } finally {
+        client.release();
+      }
+      Role.invalidateCache();
       // Widening a role's view_access is the most security-relevant role event
       // there is — more than a membership change — so it belongs in the trail.
       if (req.body.view_access !== undefined) {
@@ -145,7 +166,22 @@ const adminRolesController = {
       const { rows: u } = await dbQuery('SELECT id FROM users WHERE id = $1', [userId]);
       if (!u.length) return res.status(404).json({ error: t(req.locale, 'errors.admin.userNotFound'), code: 404 });
 
-      const added = await UserRole.add(userId, name, req.user.id);
+      // The grant and the promotion sweep in one transaction: a time-limited
+      // login granted a role with admin powers loses its expiry, audited.
+      const client = await pool.connect();
+      let added;
+      try {
+        await client.query('BEGIN');
+        added = await UserRole.add(userId, name, req.user.id, client);
+        if (added) await clearExpiryOnPromotion(client, { userIds: [userId] }, staffAudit.actorOf(req));
+        await client.query('COMMIT');
+      } catch (err) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw err;
+      } finally {
+        client.release();
+      }
+      UserRole.invalidateUser(userId);
       if (!added) {
         return res.status(409).json({ error: t(req.locale, 'errors.admin.alreadyMember'), code: 409 });
       }
