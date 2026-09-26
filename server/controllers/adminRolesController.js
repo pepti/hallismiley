@@ -57,6 +57,12 @@ const adminRolesController = {
         description: typeof description === 'string' ? description.slice(0, 200) : '',
         view_access: [...new Set(view_access || [])],
       });
+      // A new role with views is a new way into the admin — as audit-worthy
+      // as widening one (role.updated below).
+      await staffAudit.recordSafe({
+        ...staffAudit.actorOf(req), action: 'role.created', entityType: 'role', entityId: role.name,
+        summary: { views: role.view_access },
+      });
       return res.status(201).json({ role });
     } catch (err) {
       if (err.code === '23505') return res.status(409).json({ error: t(req.locale, 'errors.admin.roleNameTaken'), code: 409 });
@@ -110,6 +116,10 @@ const adminRolesController = {
         }
         throw err;
       }
+      await staffAudit.recordSafe({
+        ...staffAudit.actorOf(req), action: 'role.deleted', entityType: 'role', entityId: name,
+        summary: { views: role.view_access },
+      });
       return res.status(204).send();
     } catch (err) { next(err); }
   },

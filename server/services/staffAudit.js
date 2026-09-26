@@ -21,7 +21,14 @@ const ACTIONS = [
   'account.created', 'account.updated', 'account.status_changed', 'account.owner_changed',
   'provision.requested',
   'role.granted', 'role.revoked', 'role.updated',
-  'user.invited', 'user.disabled', 'user.enabled',
+  // Creating and deleting a role, and deleting an account (harvest2 lane 1b,
+  // the gaps found reviewing icelandicstore #416/#421).
+  'role.created', 'role.deleted',
+  'user.invited', 'user.disabled', 'user.enabled', 'user.deleted',
+  // Already written by adminController (2FA reset, a name-only login's new
+  // password) but missing here, so record() refused them and recordSafe
+  // swallowed the refusal: neither action ever reached the log until 2026-09-26.
+  'user.totp_reset', 'user.password_replaced',
   'commission.recorded',
   // Settlement (migration 102 / D-019): issuing a statement, recording that it
   // was paid, and any manual move of a balance. All three move real money.
