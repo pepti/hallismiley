@@ -24,7 +24,7 @@ installSessionGuard();
 installBuildGuard();
 
 // ── 1. Restore session before anything renders ────────────────────────────────
-await tryRestoreSession();
+const restored = await tryRestoreSession();
 // The cookie banner waits for this: a signed-in user whose account already
 // holds an answer is never shown it (services/cookieConsent.js, migration 111).
 initCookieConsent();
@@ -42,6 +42,10 @@ await loadLocale(initialLocale);
 for (const el of document.querySelectorAll('body > [data-i18n]')) {
   el.textContent = t(el.dataset.i18n);
 }
+
+// A time-limited login ran out since the last visit (migration 114): the
+// server has already signed it out — say why, now that messages are loaded.
+if (restored?.expired) showToast(t('auth.errors.accountExpired'), 'error', 8000);
 
 // ── 3. Render NavBar + mount Router ──────────────────────────────────────────
 const navBar = new NavBar();
@@ -137,6 +141,7 @@ document.body.appendChild(new ThemeSwitcher().render());
     invalid_state:            'auth.errors.invalidState',
     oauth_failed:             'auth.errors.oauthFailed',
     account_disabled:         'auth.errors.accountDisabled',
+    account_expired:          'auth.errors.accountExpired',
     google_profile_invalid:   'auth.errors.googleProfileInvalid',
     google_not_configured:    'auth.errors.googleNotConfigured',
     signup_closed:            'auth.errors.signupClosed',

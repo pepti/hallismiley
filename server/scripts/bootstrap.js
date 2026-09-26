@@ -56,7 +56,9 @@ async function bootstrap() {
           `INSERT INTO users (email, username, password_hash, role)
            VALUES ($1, $2, $3, 'admin')
            ON CONFLICT (username) DO UPDATE
-             SET email = EXCLUDED.email, password_hash = EXCLUDED.password_hash, role = 'admin'`,
+             SET email = EXCLUDED.email, password_hash = EXCLUDED.password_hash, role = 'admin',
+                 -- an admin's login is never time-limited (migration 114)
+                 expires_at = NULL`,
           [ADMIN_EMAIL, ADMIN_USERNAME, hash]
         );
         logger.info({ username: ADMIN_USERNAME }, '[bootstrap] Admin user upserted');

@@ -54,8 +54,13 @@ function errorHandler(err, req, res, next) { // eslint-disable-line no-unused-va
 
   // For known client errors, the message is safe to forward.
   // For 5xx, send a generic message so internals are never exposed.
+  // A TYPED client error (e.g. auth/accountExpiry.js AccountExpiredError)
+  // carries an i18n `messageKey`, translated here for the request's locale,
+  // and a stable string `reason` clients branch on — the same field the
+  // controllers' inline refusals use. Untyped errors keep the plain shape.
+  const typed = SAFE_STATUSES.has(status) && typeof err.messageKey === 'string';
   const clientMessage = SAFE_STATUSES.has(status)
-    ? (err.message || 'Request failed')
+    ? (typed ? t(req.locale, err.messageKey) : (err.message || 'Request failed'))
     : 'Internal Server Error';
 
   if (deadlock) {
@@ -63,7 +68,10 @@ function errorHandler(err, req, res, next) { // eslint-disable-line no-unused-va
       error: t(req.locale, 'errors.busyRetry'), code: 409, reason: 'BUSY', retryable: true,
     });
   }
-  res.status(status).json({ error: clientMessage, code: status });
+  res.status(status).json({
+    error: clientMessage, code: status,
+    ...(typed && typeof err.reason === 'string' ? { reason: err.reason } : {}),
+  });
 }
 
 module.exports = errorHandler;

@@ -51,9 +51,6 @@ async function main() {
   // afterwards so its tuple moves AFTER sellerB's (the order that broke a
   // row-by-row restore); a prospect in the custom role (with a session), an
   // expired prospect, a customer, a seller session, and some sample data.
-  // users.expires_at is engine migration 114 (login expiry); until that lands on
-  // this branch the fixture adds it itself — a no-op after.
-  await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ');
   await db.query(`INSERT INTO roles (name, description, view_access) VALUES ('demo_guest', 'Prospect', '["dashboard"]'::jsonb)`);
   const user = (id, role, approvedBy = null, expires = null) => db.query(
     `INSERT INTO users (id, email, username, password_hash, role, email_verified, approved_by, expires_at)

@@ -17,7 +17,7 @@ Downstream overrides go in `features/local.json`.
 | id | name (is / en) | domain | owner | status | flag | migrations | file |
 |---|---|---|---|---|---|---|---|
 | `admin-2fa` | Tvíþætt auðkenning / Admin 2FA (TOTP) | 1 | engine | live | `security.mfa.enrolment` | `082_admin_totp`, `107_totp_secret_enc`, `109_user_mfa_reminder` | [admin-2fa.md](admin-2fa.md) |
-| `auth-sessions` | Innskráning og lotur / Auth and sessions | 1 | engine | live | — | `002_auth_users`, `012_backfill_auth_columns`, `041_users_username_lower_unique` | [auth-sessions.md](auth-sessions.md) |
+| `auth-sessions` | Innskráning og lotur / Auth and sessions | 1 | engine | live | — | `002_auth_users`, `012_backfill_auth_columns`, `041_users_username_lower_unique`, `114_user_expires_at` | [auth-sessions.md](auth-sessions.md) |
 | `rbac-roles` | Hlutverk og aðgangsstýring / Roles and RBAC | 1 | engine | live | — | `056_dynamic_roles`, `061_user_roles` | [rbac-roles.md](rbac-roles.md) |
 | `signup` | Nýskráning / Public sign-up | 1 | engine | live | `modules.signup.enabled` | — | [signup.md](signup.md) |
 | `social-login` | Innskráning með Google/Facebook / Social login | 1 | engine | dormant | — | `020_oauth_google`, `021_oauth_facebook` | [social-login.md](social-login.md) |
@@ -75,4 +75,4 @@ Downstream overrides go in `features/local.json`.
 
 | id | name (is / en) | domain | owner | status | flag | migrations | file |
 |---|---|---|---|---|---|---|---|
-| `company-content` | Efni fyrirtækisins / Company content | 3 | os | live | — | `091_home_content_company`, `092_contact_content_company`, `104_sales_guides_services_page`, `os_001_sales_guides_d001_pricing` | [os/company-content.md](os/company-content.md) |
+| `company-content` | Efni fyrirtækisins / Company content | 3 | os | live | — | `091_home_content_company`, `092_contact_content_company`, `104_sales_guides_services_page`, `os_001_sales_guides_d001_pricing`, `os_002_contact_content_offering` | [os/company-content.md](os/company-content.md) |
