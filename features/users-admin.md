@@ -20,6 +20,7 @@ paths:
   - tests/integration/adminNameOnlyLogin.test.js
   - tests/unit/generatePassword.test.js
   - tests/unit/nameOnlyHelpers.test.js
+  - tests/unit/adminUsersView.client.test.js
 migrations: [003_user_system, 065_user_invited_at]
 since: 2026-08-09
 origin: null
@@ -32,6 +33,8 @@ The `/api/v1/users` self-service endpoints and the admin user list at `/admin/us
 
 **Rules**
 - The role-SET path carries the 2FA/OAuth gates via `utils/adminRole.js`; OAuth accounts are refused admin.
-- Role grant/revoke, invitation and disable/enable log to the staff audit best-effort.
+- Role grant/revoke, invitation and disable/enable log to the staff audit best-effort — the Users-page role dropdown too (`role.granted`/`role.revoked`, `via: 'users_page'`), and a hard delete (`user.deleted`) since harvest2 lane 1b (2026-09-26).
+- A cancelled `confirm()` on the Users page shows the `admin.actionCancelled` info toast, never a silent return (icelandicstore #199).
+- The Party column renders only while the party module is on (`moduleEnabled('party')`).
 - A placeholder address is never an address: ask `utils/placeholderEmail.js` before mailing, showing, searching or resetting `users.email`; `new-password` is keyed on the address, never the role, and refuses staff.
 - Full rules: [../docs/ARCHITECTURE.md#1-auth-users-rbac-2fa](../docs/ARCHITECTURE.md#1-auth-users-rbac-2fa).

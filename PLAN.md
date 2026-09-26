@@ -152,6 +152,21 @@ chunk lands; add a HISTORY entry for the story.
 
 **Open technical items**
 
+- Harvest 2 lane 1b (branch `harvest2/lane1b-defects`, not merged; from ice
+  `941cf51d`): one nav menu closer (#379), `auth_login_attempts_total` wired
+  (#55), signup no longer waits on email + cancelled confirms say so (#199),
+  translator JSON salvage + `stop_reason` (#216), `aiGate` concurrency cap
+  with the 429 contract (#218), and the staff-audit gaps (Users-page role
+  dropdown, role create/delete, user delete; `user.totp_reset` /
+  `user.password_replaced` were refused by the vocabulary). Open: (a) **Halli**
+  approves the new DRAFT strings `admin.actionCancelled` and `errors.ai.busy`
+  (EN + IS); (b) **deleting a user who ever acted in `staff_audit_log` fails
+  500** — the FK's `ON DELETE SET NULL` is an UPDATE the immutability trigger
+  refuses (pre-existing; needs a migration: drop the FK, or let the trigger
+  allow the actor_id-only null-out) — Halli picks; (c) no engine route raises
+  the 429 yet (the translator queues) — ice's shutdown handshake comes with the
+  first request-path AI call that can outlive the 10 s grace.
+
 - Upward harvest from icelandicstore `4694289`, lane 1 (chunks A then B, branch
   `harvest/ice-2026-09-24-ab`, not merged). Chunk A landed on the branch
   ([harvest-ice-a-2026-09-24](docs/HISTORY.md#harvest-ice-a-2026-09-24)): admin

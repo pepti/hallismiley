@@ -292,6 +292,41 @@
         ".card.webp and delivery-note print thumbnail; CSP img-src blob: (no pre-upload preview in the engine form)",
         "stickyHScroll (lane 1, chunk B)"
       ]
+    },
+    {
+      "rev": null,
+      "date": "2026-09-26",
+      "upstreamCommits": 0,
+      "conflicts": 0,
+      "note": "harvest",
+      "harvestedFrom": "ice@941cf51d",
+      "chunk": "harvest2 lane 1b (defects, audit)",
+      "commits": [
+        "3be7b57 (#379 one document menu closer — the generic closer only)",
+        "3cd1cf1 (#55 auth_login_attempts_total wired; #199 signup email detached)",
+        "d36b024 (#199 cancelled confirm toast; Party column follows the party module)",
+        "1a95798 (#218 aiGate from visionGate; #216 prose-wrapped JSON salvage + stop_reason)",
+        "abb3f2a (engine audit gaps found reviewing #416/#421)"
+      ],
+      "branch": "harvest2/lane1b-defects",
+      "features": [
+        "public-site",
+        "monitoring",
+        "signup",
+        "users-admin",
+        "platform-core",
+        "i18n",
+        "staff-audit",
+        "rbac-roles"
+      ],
+      "migrations": {},
+      "trimmed": [
+        "#379 /workshop kiosk header, data-kiosk route flag, navChrome account-menu extraction (ice-only)",
+        "#55 App Insights dependency, SLO.md, azure-monitoring runbook, DB breaker change (engine already has them)",
+        "#199 emailService Graph fetch timeout (engine uses Resend with its own bounded wait); kennitala approve gate (engine has none); sendNewAccountRequestNotification (ice-only)",
+        "#216 90 s vision timeout, visionCore extraction (no vision in the engine)",
+        "#218 shutdown handshake (engine AI calls end inside the 10 s grace), per-controller vision wiring, req.body blob nulling"
+      ]
     }
   ]
 }

@@ -29,4 +29,5 @@ Dynamic roles (056) with per-user role sets (061) and per-view grants: `ADMIN_VI
 **Rules**
 - `ADMIN_VIEW_IDS` stays 1:1 with `ADMIN_NAV` in `AdminSidebar.js` (`tests/unit/admin-views-parity.test.js`).
 - Server-side gating first: `requireView` on the route is the security layer; SPA guards are UX (invariant 8).
+- Creating, widening and deleting a role are staff-audit events (`role.created`, `role.updated`, `role.deleted`).
 - Full rules: [../docs/ARCHITECTURE.md#1-auth-users-rbac-2fa](../docs/ARCHITECTURE.md#1-auth-users-rbac-2fa).

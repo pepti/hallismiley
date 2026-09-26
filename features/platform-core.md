@@ -50,6 +50,9 @@ paths:
   - server/services/anthropicAuth.js
   - tests/unit/anthropicAuth.test.js
   - tests/unit/anthropicWifWiring.test.js
+  - server/services/aiGate.js
+  - tests/unit/aiGate.test.js
+  - tests/unit/errorHandlerAiBusy.test.js
 migrations: [001_initial_schema, 043_strip_stale_railway_references]
 since: 2026-08-09
 origin: null
@@ -65,4 +68,6 @@ The Express 5 app and boot sequence, the pg pool, the migration runner and the e
 - Never edit an applied migration; append. Express 5 catch-alls keep the braces. Node major pinned in THREE places.
 - The migration runner is transactional and locked; a release's migrations are backward-compatible with the previous release (invariant 14).
 - A Claude client is built from `anthropicAuth.clientAuthOptions()`, never from `ANTHROPIC_API_KEY` directly; in workload-identity mode the key is never read.
+- Every PAID Claude call takes an `aiGate` slot (`services/aiGate.js`, harvest2 from icelandicstore #218; `AI_MAX_CONCURRENT`, default 4): fan-out/background callers `withQueuedSlot`, request-path callers `withSlot`, whose `AiBusyError` the central error middleware answers 429 + `Retry-After` (`reason: AI_BUSY`). Resource protection, not a usage budget.
+- The error middleware honours a typed error's `messageKey` / `retryAfterSeconds` / `reason` for a safe client status only; a 5xx never picks its message.
 - Full rules: [../docs/ARCHITECTURE.md#20-infrastructure-and-cross-cutting](../docs/ARCHITECTURE.md#20-infrastructure-and-cross-cutting).

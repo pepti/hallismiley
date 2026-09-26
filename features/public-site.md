@@ -32,6 +32,8 @@ paths:
   - public/js/views/NotFoundView.js
   - public/js/views/AboutView.js
   - public/js/components/NavBar.js
+  - public/js/components/navMenuCloser.js
+  - tests/unit/navMenuCloser.client.test.js
   - public/js/utils/reveal.js
   - public/js/utils/productSite.js
   - public/js/utils/sanitizeHtml.js
@@ -70,6 +72,7 @@ The SPA shell and the visitor pages: home (video hero), `/thjonusta`, `/um-okkur
 - The public IA is `identity.surface.nav` (ordered `{ route, labelKey }`) minus `identity.surface.hiddenRoutes`, derived once server-side (`publicSurface.js` `PUBLIC_NAV` / `LEGAL_ROUTES`) and once client-side (`utils/identity.js` `publicNav()` / `isHiddenRoute()`); the NavBar, both footers, the sitemap and the noindex rule read those, never a route literal. The home products card renders only while `/thjonusta` is public. Everything hidden is still served.
 - The page parts and descriptions are i18n keys (`meta.<key>.title` / `.description`; `ssrMeta.js` `DEFAULT_META` and `pageTitle.js` name the keys, the tables carry the text, a product overrides in `product.<locale>.json`). `/manifest.json` (`manifestRoutes.js`), `/robots.txt` (`robotsRoutes.js`, Disallow lines from `hiddenRoutes` per locale) and the Product-schema `brand` read the identity; the Service catalogue JSON-LD is emitted only while `/thjonusta` is public; the Organization `@type` stays `Organization` for every product.
 - A product's OWN routes are `identity.routes` (identity-seam-3), never a hook: merged over `ROUTE_META`/`DEFAULT_META` (a `product:<route>` key, after the literal tables the parity test parses) and over the client table in `titleForRoute`; `noindex` → `publicSurface.js` `NOINDEX_ROUTES`/`isDeindexedRoute()` (the robots meta, a robots.txt Disallow block, filtered from the sitemap; exact routes, may still be linked); `locale` → the lock in `config/i18n.js`. `/manifest.json` describes itself from `routes['/'].descriptionKey` when the landing is re-described; `organizationSchema(locale)` resolves an i18n-key `organization.description` per locale; `OG_IMAGE_PATH` is `identity.organization.ogImage`. The company-page cases in the suites (`testServices` in `ssrMeta.test.js`, `testCompany` in `navigation.spec.js`) run only while `/thjonusta` is public; a locale-locked nav route is walked under its own locale.
+- The NavBar re-renders its auth area on every authchange/userchange/locale switch, so nothing it wires there may add a `document` listener per render: the account menu is closed by `navMenuCloser.installMenuCloser()` (one listener, idempotent; ported from icelandicstore #379) and the language buttons bind once (`data-lang-bound`).
 - No product tiers or prices on the company site; `SERVICE_OFFERINGS` mirrors the locale service names; `productSite.js` builds the one product-site URL.
 - A new hero clip gets a NEW filename (`identity.hero`); under reduced motion / Save-Data the hero shows the poster with no autoplay; `e2e/navigation.spec.js` pins the served clip to the config's.
 - The canonical origin is `APP_URL`; `public/index.html` is baked with it and `ssrMeta.js` swaps it on load (and drops the baked Organization, re-emitting it from the identity on every page) — change the two together.

@@ -10,6 +10,7 @@ paths:
   - e2e/signup-flow.spec.js
   - e2e/signup-closed.spec.js
   - tests/integration/signupSwitch.test.js
+  - tests/integration/signupEmailNonBlocking.test.js
 migrations: []
 since: 2026-09-24
 origin: null
@@ -21,5 +22,6 @@ Anyone may create an account: the `/signup` page, `POST /auth/signup`, the usern
 **Rules**
 - Signup, email verification and the login itself stay in [auth-sessions](auth-sessions.md); this feature is only the door for NEW accounts.
 - The nav's "Innskrá" is a separate switch (`identity.surface.navSignIn`); `/login` opens the login modal either way, and a signed-out `/admin` or `/admin/*` URL goes to `/login`.
+- `POST /auth/signup` never waits on email: the verification send is detached and `.catch`-logged, since the account is committed before it (icelandicstore #199; `signupEmailNonBlocking.test.js` hangs the mailer and expects the 201).
 - `signupSwitch.test.js` and `e2e/signup-closed.spec.js` test the OFF state and never call the feature gate (they must run where signup is off); `signup-flow.spec.js` tests the ON state and is gated.
 - Full rules: [../docs/ARCHITECTURE.md#1-auth-users-rbac-2fa](../docs/ARCHITECTURE.md#1-auth-users-rbac-2fa).

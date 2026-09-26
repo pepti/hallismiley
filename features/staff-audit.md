@@ -19,4 +19,5 @@ The immutable `staff_audit_log` (created by 098): account, commission and role w
 
 **Rules**
 - The log is immutable and written on the SAME client as the change it records.
+- `ACTIONS` is a closed vocabulary; a new action name is added to it in the same change that writes it (`recordSafe` swallows `record()`'s refusal — `user.totp_reset` and `user.password_replaced` were lost that way until 2026-09-26). Since harvest2 lane 1b the vocabulary also has `role.created`, `role.deleted` and `user.deleted`.
 - Full rules: [../docs/ARCHITECTURE.md#8-customer-accounts-commission-staff-audit](../docs/ARCHITECTURE.md#8-customer-accounts-commission-staff-audit).
