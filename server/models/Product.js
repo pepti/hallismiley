@@ -588,6 +588,22 @@ class Product {
     return rows.map(r => r.barcode);
   }
 
+  // Which of these codes (any case) already name one of our rows, as a SKU or a
+  // barcode, products and variants alike → lower-cased codes. The AI import's
+  // create-only check (services/productImport/aiExtract.js).
+  static async findCodesInUse(codes) {
+    const list = [...new Set((codes || []).map(c => String(c).trim().toLowerCase()).filter(Boolean))].slice(0, 2000);
+    if (!list.length) return [];
+    const { rows } = await db.query(
+      `SELECT lower(sku) AS code FROM products WHERE lower(sku) = ANY($1::text[])
+       UNION SELECT lower(barcode) FROM products WHERE lower(barcode) = ANY($1::text[])
+       UNION SELECT lower(sku) FROM product_variants WHERE lower(sku) = ANY($1::text[])
+       UNION SELECT lower(barcode) FROM product_variants WHERE lower(barcode) = ANY($1::text[])`,
+      [list]
+    );
+    return rows.map(r => r.code);
+  }
+
   // Every slug starting with `base` — so a generated slug can take the next free
   // suffix without one round-trip per candidate.
   static async slugsLike(base) {

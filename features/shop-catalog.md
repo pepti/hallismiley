@@ -17,6 +17,16 @@ paths:
   - server/models/Inventory.js
   - server/models/ProductMerge.js
   - server/controllers/adminProductMergeController.js
+  - server/controllers/adminProductImportAiController.js
+  - public/js/components/ProductImportAi.js
+  - public/js/utils/aiPdfChunks.js
+  - public/js/utils/importMarkup.js
+  - public/css/admin-product-import-ai.css
+  - tests/integration/adminProductImportAi.test.js
+  - tests/unit/productImportAiExtract.test.js
+  - tests/unit/aiPdfChunks.client.test.js
+  - tests/unit/importMarkup.client.test.js
+  - tests/unit/pdfLibVendor.test.js
   - server/services/productMerge/**
   - server/utils/productDedupe.js
   - tests/integration/productMerge.test.js
@@ -69,4 +79,5 @@ Products, variants, taxonomy, product codes, collections, stock bins and the bar
 - The 4 MB import body is parsed only after the admin gate, limiters and CSRF, and sanitized there ([history](../docs/HISTORY.md#ready-and-import-order-2026-09-23)).
 - Every product file (CSV, .xlsx, PDF) is read on the SERVER by `services/productImport` (`POST /products/import/parse-file`, memory-only, 10 MB); SKU then Barcode is the match key, an ambiguous or duplicate code is refused, an order quantity is never stock; rows with a Variant cell create one Draft product with its variants, whole or not at all, only with `create: true` ([history](../docs/HISTORY.md#harvest-ice-d-2026-09-24)).
 - Duplicate products merge in ONE transaction (migration 120): stock only through one `Inventory.applyLines` (`merge_out`/`merge_in`), every product FK named in `repointSpec.js` (a new one switches merging off), issued invoice lines never change, the merged product is inactive + `merged_into_id`, frozen, and its URLs 301 to the survivor ([history](../docs/history.d/2026-09-26-harvest2-lane6b-merge-ai.md#harvest2-lane6b-2026-09-26)).
+- "Read with AI" (a free-form supplier PDF → import rows) SHIPS DARK: `PRODUCT_IMPORT_AI_ENABLED=true` + Claude credentials. Every page is billed; the cost gate is `aiLimits.js` (pages per request / per file / per user per day / per instance per day, 2 of the `aiGate` slots), checked before the upload is read. The model is a reader: codes and prices must be printed in the PDF's text layer, a cost never becomes a price without the admin's markup, and an AI row may only CREATE through the unchanged preview → apply (`aiCreateOnly`) ([history](../docs/history.d/2026-09-26-harvest2-lane6b-merge-ai.md#harvest2-lane6b-2026-09-26)).
 - Full rules: [../docs/ARCHITECTURE.md#11-shop--cart-checkout-orders-products-collections-bins-discounts-hidden-surface](../docs/ARCHITECTURE.md#11-shop--cart-checkout-orders-products-collections-bins-discounts-hidden-surface).

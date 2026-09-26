@@ -73,6 +73,41 @@ export async function adminProductAdjustments(id, { limit = 50 } = {}) {
   return data; // { adjustments }
 }
 
+// ── "Read with AI" in the import (dark by default; ice #306/#314) ────────────
+
+// GET /products/import/ai-config → { enabled, chunkPages, maxPages, maxFilePages, remainingPages }.
+export async function adminProductImportAiConfig() {
+  try {
+    const res = await fetch('/api/v1/admin/shop/products/import/ai-config', { credentials: 'include' });
+    if (!res.ok) return { enabled: false };
+    return await res.json();
+  } catch {
+    return { enabled: false };
+  }
+}
+
+// POST /products/import/ai-extract?from=&to= with ONE PDF chunk → { rows, from,
+// to, pages, truncated, remainingPages, summary }. A failure throws an Error
+// carrying .status, .reason and .retryAfter (seconds) for utils/aiPdfChunks.js.
+export async function adminProductImportAiExtract(blob, { from, to, signal } = {}) {
+  const token = await getCSRFToken();
+  const fd = new FormData();
+  fd.append('file', blob, `pages-${from}-${to}.pdf`);
+  const res = await fetch(`/api/v1/admin/shop/products/import/ai-extract?from=${Number(from)}&to=${Number(to)}`, {
+    method: 'POST', credentials: 'include', headers: token ? { 'X-CSRF-Token': token } : {}, body: fd, signal,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const e = new Error(data.error || `AI read failed (${res.status})`);
+    e.status = res.status;
+    e.reason = data.reason || null;
+    const ra = res.headers.get('Retry-After');
+    e.retryAfter = ra == null || ra === '' ? null : Number(ra);
+    throw e;
+  }
+  return data;
+}
+
 // ── Products → Duplicates and the merge (migration 120, ice #309/#311/#312) ──
 
 // An Error carrying the envelope's code/reason/refusals, so the screen can say

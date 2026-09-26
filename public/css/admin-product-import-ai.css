@@ -1,0 +1,43 @@
+/* "Read with AI" in the products import modal (components/ProductImportAi.js,
+   harvest 2 lane 6b; ported from icelandicstore #306/#314). Tokens only
+   (invariant 15). The block is `hidden` unless the server enables the feature;
+   `.btn[hidden]` is re-asserted so Stop really hides (ice #306 found .btn's
+   display beating the attribute). */
+
+.prod-import-ai {
+  margin: var(--sp-3) 0;
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}
+.prod-import-ai[hidden], .prod-import-ai .btn[hidden], .prod-import-ai [hidden] { display: none; }
+.prod-import-ai__actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin: var(--sp-2) 0; }
+
+.prod-import-ai__pricing {
+  margin: var(--sp-3) 0 0;
+  padding: var(--sp-3);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-md);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: var(--sp-3);
+}
+.prod-import-ai__pricing legend { padding: 0 var(--sp-1); font-weight: 700; color: var(--text-primary); }
+.prod-import-ai__field { display: flex; flex-direction: column; gap: var(--sp-1); }
+.prod-import-ai__field label { font-weight: 600; color: var(--text-primary); font-size: 0.875rem; }
+.prod-import-ai__field .form-input[aria-invalid="true"] { border-color: var(--error); box-shadow: 0 0 0 1px var(--error); }
+.prod-import-ai__err { color: var(--error); font-size: 0.8rem; min-height: 1em; }
+.prod-import-ai__err:empty { display: none; }
+
+.prod-import-ai__notes-h { margin: var(--sp-3) 0 var(--sp-1); font-weight: 600; color: var(--text-primary); font-size: 0.875rem; }
+.prod-import-ai__notes {
+  margin: 0; padding-left: 1.2rem;
+  max-height: 14rem; overflow-y: auto;
+  font-size: 0.8rem; color: var(--text-secondary);
+}
+.prod-import-ai__notes code { font-family: var(--font-mono); color: var(--text-primary); }
+.prod-import-ai__page {
+  display: inline-block; padding: 0 0.35rem; border-radius: var(--radius-sm);
+  background: var(--bg-hover); color: var(--text-primary); font-size: 0.72rem;
+}

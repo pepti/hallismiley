@@ -4,6 +4,7 @@ const router  = express.Router();
 
 const adminShop                = require('../controllers/adminShopController');
 const productMerge             = require('../controllers/adminProductMergeController');
+const productImportAi          = require('../controllers/adminProductImportAiController');
 const { requireAuth }          = require('../auth/middleware');
 const { requireView }          = require('../auth/requireView');
 const { csrfProtect }          = require('../middleware/csrf');
@@ -45,6 +46,15 @@ const productImportUpload = (req, res, next) => {
   });
 };
 router.post('/products/import/parse-file', csrfProtect, productImportUpload, adminShop.parseProductImportFile);
+// "Read with AI" (PRODUCT_IMPORT_AI_ENABLED, off by default; ice #306/#314 —
+// controllers/adminProductImportAiController). /ai-config is always 200.
+// /ai-extract is the PAID call: CSRF, then the flag (404), then today's page
+// budget (429), and only THEN multer, so a dark or spent endpoint never
+// buffers an upload. (Uses the same inline multer wrapper as parse-file; move
+// both to lane 1a's uploadSingle when it lands.)
+router.get('/products/import/ai-config', productImportAi.productImportAiConfig);
+router.post('/products/import/ai-extract', csrfProtect, productImportAi.requireProductImportAi,
+  productImportAi.requireAiPageBudget, productImportUpload, productImportAi.productImportAiExtract);
 router.post('/products/import/preview', ...importBody, adminShop.previewProductImport);
 router.post('/products/import/apply',   csrfProtect, ...importBody, adminShop.applyProductImport);
 router.post('/products/bulk',           csrfProtect, adminShop.bulkUpdateProducts);
