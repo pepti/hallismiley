@@ -224,7 +224,7 @@ The survey's headline is that **the harvest is not one-directional**. This repo'
 
 ### 22. ✅ DONE 2026-09-24 (till) — Barcode scanning at the till and on the floor
 
-**Status.** Approved by Halli with the 2026-09-24 ice harvest (chunk C, his defaults) and landed: `components/ScanInput.js` (ice's file, unchanged) mounted on `AdminPosView` with `GET /api/v1/admin/bookkeeping/pos/lookup` (variant first). The sounds are a per-device switch on the till, not the `scan_sounds`/`scan_volume` settings pair; the pick / receive / inventory-check screens stay ice-only. [HISTORY](docs/HISTORY.md#harvest-ice-c-2026-09-24).
+**Status.** Approved by Halli with the 2026-09-24 ice harvest (chunk C, his defaults) and landed: `components/ScanInput.js` (ice's file, unchanged) mounted on `AdminPosView` with `GET /api/v1/admin/bookkeeping/pos/lookup` (variant first). The sounds are a per-device switch on the till, not the `scan_sounds`/`scan_volume` settings pair; the pick / receive / inventory-check screens stay ice-only. [HISTORY](docs/HISTORY.md#harvest-ice-c-2026-09-24). *Reopened 2026-09-26 by #27: receive and inventory-check are engine screens now; pick stays ice-only.*
 
 
 **What.** Port `ScanInput.js` (226 lines): a USB keyboard-wedge detector with an auto-focused field firing on Enter *plus* a document-level capture listener for scanners that send no Enter suffix, burst timings (35 ms gap, 60 ms idle flush, minimum length 3), a duplicate-read cooldown, six distinct WebAudio feedback tones synthesised with no asset (ok / error / wrong item / line done / all done / over-scan, told apart by tone count and pitch direction), vibrate patterns, and a reduced-motion-aware flash. It bails whenever an editable element has focus, so it never swallows typing.
@@ -244,7 +244,7 @@ The survey's headline is that **the harvest is not one-directional**. This repo'
 
 ### 24. ◐ PARTLY DONE 2026-09-24 — Import wizards with a dry-run stage
 
-**Status.** The products half landed with the 2026-09-24 ice harvest (chunk D): the product import reads CSV, .xlsx and PDF on the server (`services/productImport`, `exceljs` + `pdf-parse`), matches on SKU then barcode, never reads an order quantity as stock, and can create a product with its variants from grouped rows — the dry run is the existing preview. Still open: the customer importer's column mapping, goods receipt and the invoice merger (Ísprjón-specific). [HISTORY](docs/HISTORY.md#harvest-ice-d-2026-09-24).
+**Status.** The products half landed with the 2026-09-24 ice harvest (chunk D): the product import reads CSV, .xlsx and PDF on the server (`services/productImport`, `exceljs` + `pdf-parse`), matches on SKU then barcode, never reads an order quantity as stock, and can create a product with its variants from grouped rows — the dry run is the existing preview. Still open: the customer importer's column mapping and the invoice merger (Ísprjón-specific); goods receipt landed with #27 (2026-09-26). [HISTORY](docs/HISTORY.md#harvest-ice-d-2026-09-24).
 
 
 **What.** icelandicstore's four-stage customer importer (ingest → map columns → preview → confirm), the invoice merger with fuzzy catalogue matching, the goods-receipt receive/reconcile flow, and `utils/parseSalesReport.js` — delimiter detection, quote-aware splitting, header-row detection that disqualifies numeric and banner rows, and bilingual field hints.
@@ -268,7 +268,22 @@ The survey's headline is that **the harvest is not one-directional**. This repo'
 **Why.** The footer markup lives inside `HomeView.js` here, so most routes have no footer at all. icelandicstore's is a component with an explicit comment about the stale-locale trap it had to solve.
 **Effort.** S. **Risk.** Low.
 
-### 27. ✅ DONE 2026-09-26 (on its branch) — Merge duplicate products; AI reads a supplier PDF into the import (dark)
+### 27. ✅ DONE 2026-09-26 (branch) — Roles by name, one permissions grid, edit one customer
+
+**Status.** Approved 2026-09-26 (harvest 2, lane 3) and built on branch `harvest2/lane3-users`: [harvest2-lane3-2026-09-26](docs/history.d/2026-09-26-harvest2-lane3-users.md#harvest2-lane3-2026-09-26). Engine migrations `116_role_label` and `117_user_address` (provisional numbers). All new strings DRAFT.
+
+**What.** From icelandicstore #421/#416/#336: create an admin role by its display name (the server derives the slug; reserved back-office names refused folded), one roles × admin-screens grid with a save bar that counts the people a change reaches, the Profile badge naming the session's roles, 409-with-count on deleting a role in use, and editing one customer's contact details and address with a per-customer invite that never returns the set-password link ("send now" off by default on Add).
+**Why.** The role form refused Icelandic names; the per-role modal made comparing roles hard; the Customers screen could not correct an email or keep an address.
+**Effort.** M. **Risk.** Low: changing a customer's email is admin-only (the `customers` view edits name, phone and address); Halli may loosen it.
+
+### 28. ✅ Approved 2026-09-26 (harvest 2) — Inventory Watch, stock count, goods receiving
+
+**Status.** Approved by Halli 2026-09-26 as Harvest 2 lane 6a and built on branch `harvest2/lane6a-stock` ([harvest2-lane6a](docs/history.d/2026-09-26-harvest2-lane6a-stock.md#harvest2-lane6a-2026-09-26)). This reopens the 2026-09-24 call under #22 that the receive / inventory-check screens stay ice-only: both are engine screens now, hidden here with the retail surface (view ids `inventory`, `receiving`, owned by the `shop` module). Pick stays ice-only.
+
+**What.** Inventory Watch (ice #13/#15): every stocked unit, velocity over 90 days of paid order lines, months of cover, a status bucket on Available, and an audited "Fix stock". The stock count (ice #18): scan or search, per-line Set / Add / Remove, saved as ONE audited batch (`Inventory.applyBatch`, all or nothing, below zero refused). Goods receiving (ice #23): a receipt read from the supplier's file through the one product-file reader, scanned in, shorts / overs / not-on-invoice, finalised once into stock, a receipt PDF. Migration `118_goods_receipts` (provisional number).
+**Why.** A shop that counts, receives and re-orders on paper is the job the retail tiers are sold to replace; icelandicstore already runs these screens.
+**Effort.** L. **Risk.** Medium, contained: every write goes through the one audited writer, under its lock order, and the engine keeps `stock >= 0`.
+### 29. ✅ DONE 2026-09-26 (on its branch) — Merge duplicate products; AI reads a supplier PDF into the import (dark)
 
 **Status.** Approved 2026-09-26 (harvest 2) by Halli; built on `harvest2/lane6b-merge-ai` from icelandicstore `941cf51d` (#309/#311/#312/#315, #306/#314). Products → Duplicates suggests duplicates with their evidence and merges them in one transaction (engine migration 120, provisional number); "Read with AI" ships dark behind `PRODUCT_IMPORT_AI_ENABLED` — **switching it on costs money per page** (budgets and the cost note in `docs/DEPLOYMENT.md`). [history](docs/history.d/2026-09-26-harvest2-lane6b-merge-ai.md#harvest2-lane6b-2026-09-26).
 

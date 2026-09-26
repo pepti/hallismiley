@@ -26,6 +26,22 @@
   padding: 3px 10px; font-size: 0.78rem; color: var(--text-secondary); cursor: pointer;
 }
 .cust-notes-btn:hover { color: var(--text-primary); border-color: var(--text-muted); }
+.cust-actions { white-space: nowrap; }
+.cust-actions .cust-notes-btn + .cust-notes-btn { margin-left: 4px; }
+
+/* ── Edit one customer (harvest 2 lane 3, ported from icelandicstore #336) ── */
+#cust-add-invite-row[hidden] { display: none; }
+.cust-edit__row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 12px; }
+@media (max-width: 480px) { .cust-edit__row { grid-template-columns: 1fr; gap: 0; } }
+.cust-edit__invite { margin-top: var(--sp-4); padding-top: var(--sp-3); border-top: 1px solid var(--border); }
+.cust-edit__subhead {
+  margin: 0 0 var(--sp-2); font-size: 0.72rem; font-weight: 700;
+  letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-muted);
+}
+.cust-edit__status { margin: var(--sp-2) 0 0; font-size: 0.85rem; color: var(--text-secondary); }
+.cust-edit__status:empty { display: none; }
+.cust-edit__status--ok { color: var(--success); }
+@media (max-width: 480px) { .admin-shop__modal-card.cust-edit { padding: 18px; } }
 
 /* ── Customer notes log (CustomerNotes.js) ─────────────────────────────────── */
 .cn { display: block; }

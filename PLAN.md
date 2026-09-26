@@ -182,6 +182,16 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
 
 **Open technical items**
 
+- Test-database hygiene landed 2026-09-26 on `feat/test-db-hygiene`
+  ([test-db-hygiene-2026-09-26](docs/history.d/2026-09-26-feat-test-db-hygiene.md#test-db-hygiene-2026-09-26)):
+  throwaway test server `TEST_PG_URL` (`:5433`), product-scoped names,
+  labels + a sweep on every run, loud pattern teardown, DELETE-based
+  `cleanTables()` (a full run 389 s → 49 s). Owed: each downstream picks it up
+  by engine-sync, then `npm run test:db:clean -- --legacy --sweep` (dry run,
+  then `--yes`) on `:5432` clears the old `orangesmiley_*` leftovers; the
+  branch whose test creates `demo_reset_${pid}_test` switches to
+  `createExtraTestDb('demoreset')`.
+
 - Harvest 2 started 2026-09-26 (Halli approved the scope that day): generic
   icelandicstore work up to `ice@941cf51d` ported into the engine in lanes 0–9,
   each on its own branch. Lane 0 landed on `harvest2/lane0-history`
@@ -224,6 +234,19 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
     `--on-accent` by lane 4b or a follow-up.
   - (d) Settled in the master merge: `AdminUsersView.js`'s raw date call is
     on `formatDate`, and the date guard has no pending exceptions left.
+- Harvest 2 lane 3 (2026-09-26, branch `harvest2/lane3-users`,
+  [harvest2-lane3-2026-09-26](docs/history.d/2026-09-26-harvest2-lane3-users.md#harvest2-lane3-2026-09-26)):
+  roles created by display name (`116_role_label`), one roles × screens grid,
+  role labels everywhere, the Profile badge, 409-with-count on a role in use,
+  and editing one customer (`117_user_address`, per-customer invite). Open:
+  (a) **every new `adminRoles.*`, `adminCustomers.*`, `profile.roles`,
+  `errors.admin.*` and `validation.*` string is DRAFT** (Halli; listed in the
+  fragment); (b) changing a customer's email is **done, admin-only; Halli may loosen**
+  (the `customers` view edits name, phone and address; a changed email from
+  a non-admin is 403 `email_admin_only`); (c) migration numbers 116/117
+  are provisional; icelandicstore aliases `117_user_address` →
+  `114_user_address` in its next sync; (d) the `user` role can no longer gain
+  a view (a downstream that granted one keeps it until removed).
 - Harvest 2 lane 4b (2026-09-26, branch `harvest2/lane4b-shop-i18n`,
   [harvest2-lane4b-2026-09-26](docs/history.d/2026-09-26-harvest2-lane4b-shop-i18n.md#harvest2-lane4b-2026-09-26)):
   shop VAT per rate, re-priced basket, postcode/phone rules, colour names, no
@@ -234,6 +257,19 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
   product page's editable `vat_note` chrome still says 24 %; (d) the contact
   form now refuses a malformed phone (ice's shared rule) — Halli may prefer it
   looser there.
+- 2026-09-26: Harvest 2 lane 6a, stock, is on branch `harvest2/lane6a-stock`
+  (not merged): [harvest2-lane6a-2026-09-26](docs/history.d/2026-09-26-harvest2-lane6a-stock.md#harvest2-lane6a-2026-09-26).
+  Inventory Watch + "Fix stock" (ice #13/#15), the stock count as one audited
+  batch (`Inventory.applyBatch`, ice #18) and goods receiving (ice #23,
+  migration `118_goods_receipts`). Open:
+  - (a) **DRAFT strings** (Halli): `admin.nav.inventory`/`receiving`,
+    `adminInventory.*`, `adminStockCount.*`, `adminReceiving.*`, the new
+    `errors.inventory.*` and `errors.receiving.*`, and the receipt PDF labels.
+  - (b) The migration number 118 is provisional; renumber at the Harvest 2
+    merge if the order changes (115–117 are other lanes').
+  - (c) At ice's next graft, engine 118 runs on ice and adds only
+    `goods_receipt_lines.sku` + `inventory_adjustments.batch_id`/`goods_receipt_id`
+    (its CREATEs are no-ops against ice 080) — no alias.
 - Harvest 2 lane 6b (2026-09-26, branch `harvest2/lane6b-merge-ai`, not merged,
   [harvest2-lane6b-2026-09-26](docs/history.d/2026-09-26-harvest2-lane6b-merge-ai.md#harvest2-lane6b-2026-09-26)):
   Products → Duplicates + a one-transaction product merge (engine migration
@@ -244,9 +280,10 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
   read** — the day caps in `docs/DEPLOYMENT.md` bound it, per container; (b) the
   new Duplicates / AI strings are DRAFT (listed in the fragment); (c) AI lines
   without sizes/colours stay unmatched — the engine import has no single-row
-  create path (ice's is not ported); (d) whichever of lanes 6a/6c lands after
-  this adds its new product/variant foreign keys to `repointSpec.js`, or merging
-  switches itself off (`schema_drift`) and `productMerge.test.js` fails.
+  create path (ice's is not ported); (d) master (lane 6a's `118_goods_receipts`)
+  is merged into the branch and its four product/variant foreign keys are in
+  `repointSpec.js` (draft receipts locked like orders); lane 6c must add its own,
+  or merging switches itself off (`schema_drift`) and `productMerge.test.js` fails.
 - Upward harvest from icelandicstore `4694289`, lane 1 (chunks A then B, branch
   `harvest/ice-2026-09-24-ab`, not merged). Chunk A landed on the branch
   ([harvest-ice-a-2026-09-24](docs/HISTORY.md#harvest-ice-a-2026-09-24)): admin

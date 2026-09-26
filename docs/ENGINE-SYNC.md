@@ -267,6 +267,28 @@ CI green on the default branch → the instance boots → `/ready` 200 →
 `/admin/updates` row shows the release seen/applied. `migrate.js --plan` on
 the live database must print no `RUN` lines after boot.
 
+### Teardown after a sync (2026-09-26)
+
+A sync leaves three things behind on the operator's machine; remove them once
+the PR is merged (or abandoned):
+
+1. **Worktrees and clones.** `engine-sync.js` works in `<repo>/.wt/engine-sync-<date>`
+   (or a temporary clone). Unlink a `node_modules` junction first —
+   `cmd //c rmdir <worktree>\node_modules` — because `rm -rf` follows it and
+   empties the SOURCE `node_modules`; then `git worktree remove <path>` (a
+   clone: delete the folder) and `git branch -d engine-sync/<date>`.
+2. **Test databases.** The verify step's Jest and e2e runs created
+   `<product>_engine_sync_<date>_…_test` databases (per product since
+   2026-09-26 — before that every repo derived `orangesmiley_…` names). From
+   the downstream repo: `npm run test:db:clean -- --gone` (plan), then
+   `--gone --yes`. Every later `npm test` there also sweeps them once their
+   run is dead, but an e2e database waits 14 days unless its branch and
+   worktree are gone.
+3. **The first sync that brings the product prefix** leaves the repo's old
+   `orangesmiley_*` databases behind: `npm run test:db:clean -- --legacy --sweep`
+   shows them (dry run); read the plan — those names are shared with every repo
+   not yet synced — before adding `--yes`.
+
 ## 11. Rollback
 
 - Source: `git revert -m 1 <merge sha>` on the default branch (a revert of the

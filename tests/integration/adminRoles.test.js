@@ -102,12 +102,20 @@ describe('roles CRUD + validation', () => {
     expect(res.status).toBe(400);
   });
 
-  test('cannot delete a role still assigned to a user — 409', async () => {
+  test('cannot delete a role still assigned to a user — 409 with the holder count', async () => {
     await request(app).post('/api/v1/admin/roles')
       .set('Cookie', adminCookie).send({ name: 'inuse', view_access: ['products'] });
     await db.query("UPDATE users SET role = 'inuse' WHERE id = $1", [userId]);
+    // A second holder by membership only (user_roles), not as primary.
+    await request(app).post('/api/v1/admin/roles/inuse/members').set('Cookie', adminCookie).send({ userId: modId });
     const res = await request(app).delete('/api/v1/admin/roles/inuse').set('Cookie', adminCookie);
     expect(res.status).toBe(409);
+    expect(res.body.code).toBe(409);
+    expect(res.body.count).toBe(2);
+    expect(res.body.reason).toBe('role_in_use');
+    expect(res.body.error).toContain('2');
+    const { rows } = await db.query("SELECT 1 FROM roles WHERE name = 'inuse'");
+    expect(rows).toHaveLength(1);
   });
 
   test('moderator cannot create roles — 403 (hard admin-only, no escalation)', async () => {
@@ -264,5 +272,122 @@ describe('roles members (multi-role)', () => {
     expect(del.status).toBe(204);
     const c = await getTestSessionCookie(modId);
     expect((await request(app).get('/api/v1/admin/roles').set('Cookie', c)).status).toBe(403);
+  });
+});
+
+// ── Create by display name (harvest 2 G1/G4, ported from icelandicstore #421) ──
+
+describe('roles: create by display name, labels, reserved names', () => {
+  const create = (body) => request(app).post('/api/v1/admin/roles').set('Cookie', adminCookie).send(body);
+
+  test('a typed name becomes the label; the slug is derived on the server', async () => {
+    const res = await create({ label: '  Bókari á  skrifstofu ', view_access: ['books'] });
+    expect(res.status).toBe(201);
+    expect(res.body.role.name).toBe('bokari-a-skrifstofu');
+    expect(res.body.role.label).toBe('Bókari á skrifstofu');
+    expect(res.body.role.view_access).toEqual(['books']);
+  });
+
+  test('a slug collision takes -2; a label collision (folded) is 409', async () => {
+    // A legacy slug-only role already holds "bokari" (and so its folded name).
+    await create({ name: 'bokari', view_access: [] });
+    // "Bókari" folds to the same name as the unnamed "bokari" → taken.
+    expect((await create({ label: 'Bókari' })).status).toBe(409);
+    // Give "bokari" another name: the slug still collides, so -2 is taken.
+    await db.query("UPDATE roles SET label = 'Reikningar' WHERE name = 'bokari'");
+    const res = await create({ label: 'Bókari' });
+    expect(res.status).toBe(201);
+    expect(res.body.role.name).toBe('bokari-2');
+    // Case, accents and punctuation fold: "BOKARI." is the same name.
+    expect((await create({ label: 'BOKARI.' })).status).toBe(409);
+  });
+
+  test('reserved and back-office names are refused, folded (409)', async () => {
+    for (const label of ['Admin', 'Administrator', 'Admin sala', 'Stjórnandi', 'Kerfi', 'Starfsmaður', 'Root', 'Owner', 'Support', 'Notandi']) {
+      expect((await create({ label })).status).toBe(409);
+    }
+    for (const name of ['staff', 'administrator', 'kerfi', 'root']) {
+      expect((await create({ name })).status).toBe(409);
+    }
+  });
+
+  test('a label outside the rules is 400 (length, script)', async () => {
+    expect((await create({ label: 'B' })).status).toBe(400);
+    expect((await create({ label: 'x'.repeat(31) })).status).toBe(400);
+    expect((await create({ label: 'Бухгалтер' })).status).toBe(400);
+  });
+
+  test('the label is editable; the slug never changes', async () => {
+    const { body } = await create({ label: 'Sölumenn norður' });
+    const slug = body.role.name;
+    const res = await request(app).patch(`/api/v1/admin/roles/${slug}`).set('Cookie', adminCookie)
+      .send({ label: 'Sölufólk á Akureyri' });
+    expect(res.status).toBe(200);
+    expect(res.body.role.name).toBe(slug);
+    expect(res.body.role.label).toBe('Sölufólk á Akureyri');
+    // A reserved rename is refused like a reserved create.
+    expect((await request(app).patch(`/api/v1/admin/roles/${slug}`).set('Cookie', adminCookie)
+      .send({ label: 'Stjórnandi' })).status).toBe(409);
+    // A rename is a staff-audit event (role.updated with the label change).
+    const { rows } = await db.query(
+      "SELECT summary FROM staff_audit_log WHERE action = 'role.updated' AND entity_id = $1", [slug]);
+    expect(rows.map(r => r.summary)).toContainEqual(
+      expect.objectContaining({ label_before: 'Sölumenn norður', label_after: 'Sölufólk á Akureyri' }));
+  });
+
+  test('a built-in role keeps its name (label edit 400)', async () => {
+    for (const name of ['admin', 'moderator', 'user']) {
+      const res = await request(app).patch(`/api/v1/admin/roles/${name}`).set('Cookie', adminCookie)
+        .send({ label: 'Eitthvað annað' });
+      expect(res.status).toBe(400);
+    }
+  });
+
+  test('the user role (every account holds it) can never GAIN a view; it may shrink', async () => {
+    const res = await request(app).patch('/api/v1/admin/roles/user').set('Cookie', adminCookie)
+      .send({ view_access: ['customers'] });
+    expect(res.status).toBe(400);
+    // A downstream that already granted one can take it away again.
+    await db.query(`UPDATE roles SET view_access = '["leads"]'::jsonb WHERE name = 'user'`);
+    try {
+      expect((await request(app).patch('/api/v1/admin/roles/user').set('Cookie', adminCookie)
+        .send({ view_access: [] })).status).toBe(200);
+    } finally {
+      await db.query(`UPDATE roles SET view_access = '[]'::jsonb WHERE name = 'user'`);
+    }
+  });
+
+  test('the list and the members board carry the label', async () => {
+    await create({ label: 'Bókari' });
+    const list = await request(app).get('/api/v1/admin/roles').set('Cookie', adminCookie);
+    expect(list.body.roles.find(r => r.name === 'bokari').label).toBe('Bókari');
+    const members = await request(app).get('/api/v1/admin/roles/members').set('Cookie', adminCookie);
+    expect(members.body.roles.find(r => r.name === 'bokari').label).toBe('Bókari');
+  });
+
+  test('migration 116 backfilled the built-in roles', async () => {
+    const { rows } = await db.query("SELECT name, label FROM roles WHERE name IN ('admin', 'moderator', 'user')");
+    const byName = Object.fromEntries(rows.map(r => [r.name, r.label]));
+    expect(byName).toEqual({ admin: 'Admin', moderator: 'Moderator', user: 'User' });
+  });
+});
+
+// ── The Profile badge (harvest 2 G3) ─────────────────────────────────────────
+
+describe('GET /api/v1/users/me names the roles the session holds', () => {
+  test('a custom role comes back with its label', async () => {
+    await request(app).post('/api/v1/admin/roles').set('Cookie', adminCookie)
+      .send({ label: 'Bókari', view_access: ['books'] });
+    await request(app).post('/api/v1/admin/roles/bokari/members').set('Cookie', adminCookie).send({ userId });
+    const c = await getTestSessionCookie(userId);
+    const res = await request(app).get('/api/v1/users/me').set('Cookie', c);
+    expect(res.status).toBe(200);
+    expect(res.body.roles.map(r => r.name)).toEqual(expect.arrayContaining(['user', 'bokari']));
+    expect(res.body.roles.find(r => r.name === 'bokari')).toMatchObject({ label: 'Bókari', is_system: false });
+  });
+
+  test('an admin session names admin', async () => {
+    const res = await request(app).get('/api/v1/users/me').set('Cookie', adminCookie);
+    expect(res.body.roles.map(r => r.name)).toContain('admin');
   });
 });

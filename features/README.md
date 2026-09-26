@@ -12,13 +12,13 @@ Status: `live` · `hidden` (served, hidden from nav/sitemap/admin lines) ·
 `config/client.json` key path that gates the feature, when one exists.
 Downstream overrides go in `features/local.json`.
 
-## Engine features (54)
+## Engine features (55)
 
 | id | name (is / en) | domain | owner | status | flag | migrations | file |
 |---|---|---|---|---|---|---|---|
 | `admin-2fa` | Tvíþætt auðkenning / Admin 2FA (TOTP) | 1 | engine | live | `security.mfa.enrolment` | `082_admin_totp`, `107_totp_secret_enc`, `109_user_mfa_reminder` | [admin-2fa.md](admin-2fa.md) |
 | `auth-sessions` | Innskráning og lotur / Auth and sessions | 1 | engine | live | — | `002_auth_users`, `012_backfill_auth_columns`, `041_users_username_lower_unique`, `114_user_expires_at` | [auth-sessions.md](auth-sessions.md) |
-| `rbac-roles` | Hlutverk og aðgangsstýring / Roles and RBAC | 1 | engine | live | — | `056_dynamic_roles`, `061_user_roles` | [rbac-roles.md](rbac-roles.md) |
+| `rbac-roles` | Hlutverk og aðgangsstýring / Roles and RBAC | 1 | engine | live | — | `056_dynamic_roles`, `061_user_roles`, `116_role_label` | [rbac-roles.md](rbac-roles.md) |
 | `signup` | Nýskráning / Public sign-up | 1 | engine | live | `modules.signup.enabled` | — | [signup.md](signup.md) |
 | `social-login` | Innskráning með Google/Facebook / Social login | 1 | engine | dormant | — | `020_oauth_google`, `021_oauth_facebook` | [social-login.md](social-login.md) |
 | `users-admin` | Notendaumsjón / User administration | 1 | engine | live | — | `003_user_system`, `065_user_invited_at` | [users-admin.md](users-admin.md) |
@@ -34,7 +34,7 @@ Downstream overrides go in `features/local.json`.
 | `market-import` | Innlestur markaðsgagna / Market data importer | 7 | engine | live | `modules.salesOps.enabled` | — | [market-import.md](market-import.md) |
 | `commission` | Söluþóknun / Commission | 8 | engine | live | `modules.salesOps.enabled` | `102_commission_settlement` | [commission.md](commission.md) |
 | `customer-accounts` | Viðskiptareikningar / Customer accounts | 8 | engine | live | `modules.salesOps.enabled` | `098_customer_accounts`, `100_customer_account_party` | [customer-accounts.md](customer-accounts.md) |
-| `customers-crm` | Viðskiptavinir og minnispunktar / Customers and notes | 8 | engine | live | `modules.shop.enabled` | `064_customer_notes` | [customers-crm.md](customers-crm.md) |
+| `customers-crm` | Viðskiptavinir og minnispunktar / Customers and notes | 8 | engine | live | `modules.shop.enabled` | `064_customer_notes`, `117_user_address` | [customers-crm.md](customers-crm.md) |
 | `staff-audit` | Aðgerðaskrá starfsfólks / Staff audit log | 8 | engine | live | — | — | [staff-audit.md](staff-audit.md) |
 | `bookkeeping-core` | Bókhaldskjarni / Bookkeeping core | 9 | engine | live | `modules.books.enabled` | `072_bookkeeping`, `073_books_expenses`, `075_books_reconciliation`, `101_books_deferred_revenue`, `103_books_vehicle_accounts` | [bookkeeping-core.md](bookkeeping-core.md) |
 | `books-intake` | Innhólf fylgiskjala / Books intake queue | 9 | engine | live | `modules.books.enabled` | `096_books_capture_spine` | [books-intake.md](books-intake.md) |
@@ -48,6 +48,7 @@ Downstream overrides go in `features/local.json`.
 | `sales-handbook` | Handbók sölufólks / Sales handbook | 10 | engine | live | `modules.salesOps.enabled` | `090_sales_guides` | [sales-handbook.md](sales-handbook.md) |
 | `cart-checkout` | Verslun, karfa og greiðsla / Storefront, cart and checkout | 11 | engine | hidden | `modules.shop.enabled` | — | [cart-checkout.md](cart-checkout.md) |
 | `discounts` | Afslættir / Discounts | 11 | engine | hidden | `modules.shop.enabled` | `050_discounts`, `055_discount_types` | [discounts.md](discounts.md) |
+| `goods-receiving` | Vörumóttaka / Goods receiving | 11 | engine | hidden | `modules.shop.enabled` | `118_goods_receipts` | [goods-receiving.md](goods-receiving.md) |
 | `orders` | Pantanir / Orders | 11 | engine | hidden | `modules.shop.enabled` | `054_order_payment_fulfillment_tags`, `115_order_notes` | [orders.md](orders.md) |
 | `shop-catalog` | Vörulisti / Shop catalog | 11 | engine | hidden | `modules.shop.enabled` | `022_ecommerce`, `023_product_taxonomy`, `024_product_variants`, `025_shop_content`, `045_shop_sections`, `048_product_codes`, `049_collections`, `057_product_bin`, `074_product_vat_rate`, `112_inventory_adjustments`, `113_variant_barcode`, `120_product_merge` | [shop-catalog.md](shop-catalog.md) |
 | `bio` | Persónuleg kynning / Personal bio (/halli) | 12 | engine | hidden | `modules.bio.enabled` | `011_halli_bio_content`, `039_halli_bio_cv_arrays`, `040_halli_bio_image_urls`, `044_halli_bio_code_snippet` | [bio.md](bio.md) |
@@ -75,4 +76,4 @@ Downstream overrides go in `features/local.json`.
 
 | id | name (is / en) | domain | owner | status | flag | migrations | file |
 |---|---|---|---|---|---|---|---|
-| `company-content` | Efni fyrirtækisins / Company content | 3 | os | live | — | `091_home_content_company`, `092_contact_content_company`, `104_sales_guides_services_page`, `os_001_sales_guides_d001_pricing`, `os_002_contact_content_offering`, `os_003_sales_guides_d022_pricing` | [os/company-content.md](os/company-content.md) |
+| `company-content` | Efni fyrirtækisins / Company content | 3 | os | live | — | `091_home_content_company`, `092_contact_content_company`, `104_sales_guides_services_page`, `os_001_sales_guides_d001_pricing`, `os_002_contact_content_offering`, `os_003_sales_guides_d022_pricing`, `os_004_sales_guides_queue_spread` | [os/company-content.md](os/company-content.md) |

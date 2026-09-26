@@ -34,6 +34,10 @@ const ACTIONS = [
   // password) but missing here, so record() refused them and recordSafe
   // swallowed the refusal: neither action ever reached the log until 2026-09-26.
   'user.totp_reset', 'user.password_replaced',
+  // Editing one customer's contact details, and a customer created with the
+  // invite left for later (harvest 2 lane 3, ported from icelandicstore #336).
+  // user.updated names the FIELDS changed, never their values.
+  'user.updated', 'user.created',
   'commission.recorded',
   // Settlement (migration 102 / D-019): issuing a statement, recording that it
   // was paid, and any manual move of a balance. All three move real money.

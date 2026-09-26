@@ -432,7 +432,7 @@ npx jest tests/integration/booksReports.test.js     # one suite, still on its ow
 ```
 
 Since 2026-09-02 the test databases are derived per branch and per Jest worker
-(`tests/workerDb.js`: `orangesmiley_<branch>_w<N>_test`, migrated from one template), so
+(`tests/workerDb.js`: `<product>_<branch>_w<N>_test`, migrated from one template), so
 two worktrees never share one and `TEST_DATABASE_URL` is only needed to pin a fixed name —
 see `docs/TESTING.md`. The old advice here (a hand-named `hallismiley_books_test` and
 `--runInBand`) predates that.
