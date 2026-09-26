@@ -441,10 +441,14 @@ function deriveVariantSkus(inputRows) {
 
 /**
  * Read one PDF chunk. `lookupInUse(codes)` → Promise<{ codes: Set }> of the
- * lower-cased codes already ours. → { rows, meta } on success, null on any
- * failure (the controller answers 502). `signal` is the CLIENT going away: it
- * cancels the model call along with the timeout, and a call it cancelled is
- * not logged as a failure.
+ * lower-cased codes already ours. → { rows, meta } on success; on a failure
+ * { rows: null, refundable } — the controller answers 502 and gives the pages
+ * back ONLY when `refundable`: the API answered with an error status (nothing
+ * was billed). A reply that came back and was unusable (empty, an echo, not
+ * JSON) and a call that timed out may have been billed, so they stay charged —
+ * otherwise a PDF built to trip the echo guard would read for free (review of
+ * lane 6b). `signal` is the CLIENT going away: it cancels the model call along
+ * with the timeout; such a call returns null and is not logged as a failure.
  */
 async function extractProducts({ buffer, text, pages, from = 1, lookupInUse, signal = null }) {
   const started = Date.now();
@@ -466,12 +470,13 @@ async function extractProducts({ buffer, text, pages, from = 1, lookupInUse, sig
       logger.debug({ pages, ms: Date.now() - started }, 'product import ai: model call cancelled by the client');
       return null;
     }
-    logger.error({ err: { message: err.message, status: err.status || null }, pages, ms: Date.now() - started },
+    const status = err && Number.isInteger(err.status) ? err.status : null;
+    logger.error({ err: { message: err.message, status }, pages, ms: Date.now() - started },
       'product import ai: model call failed');
-    return null;
+    return { rows: null, refundable: status !== null };
   }
   // Metadata only — the reply can quote supplier prices and names.
-  const fail = (msg) => { logger.warn({ pages, ms: Date.now() - started, stopReason: out && out.stopReason, rawLength: out && out.raw ? out.raw.length : null }, msg); return null; };
+  const fail = (msg) => { logger.warn({ pages, ms: Date.now() - started, stopReason: out && out.stopReason, rawLength: out && out.raw ? out.raw.length : null }, msg); return { rows: null, refundable: false }; };
   if (!out || typeof out.raw !== 'string') return fail('product import ai: no reply');
   if (out.raw.includes(sentinel)) return fail('product import ai: echo guard tripped');
   const modelRows = salvageRows(out.raw);

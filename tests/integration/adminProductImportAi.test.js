@@ -151,10 +151,18 @@ describe('the read', () => {
     expect(res.body.rows[1].__uncertain).toEqual(expect.arrayContaining(['supplier_code', 'price']));
   });
 
-  test('a failed model read is 502 and gives its pages back', async () => {
+  test('an API error status is 502 and gives its pages back (nothing was billed)', async () => {
+    aiExtract._setClientFactory(() => ({ messages: { create: async () => { throw Object.assign(new Error('overloaded'), { status: 529 }); } } }));
     const res = await extract(await pdfPages([['a'], ['b']]));
     expect(res.status).toBe(502);
     expect((await request(app).get(CONFIG).set('Cookie', adminCookie)).body.remainingPages).toBe(60);
+  });
+
+  test('an unusable reply (the echo guard) is 502 and STAYS charged — a PDF cannot read for free', async () => {
+    aiExtract._setClientFactory(() => ({ messages: { create: async (req) => ({ content: [{ type: 'text', text: req.system }], usage: { input_tokens: 1, output_tokens: 1 } }) } }));
+    const res = await extract(await pdfPages([['a'], ['b']]));
+    expect(res.status).toBe(502);
+    expect((await request(app).get(CONFIG).set('Cookie', adminCookie)).body.remainingPages).toBe(58);
   });
 });
 

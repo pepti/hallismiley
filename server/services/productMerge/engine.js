@@ -173,6 +173,7 @@ async function apply(body, { userId = null, requestId = null, lockTimeoutMs = DE
 
   const client = await db.pool.connect();
   const q = (text, params) => client.query(text, params);
+  let broken = null;
   try {
     await q('BEGIN');
     const timeout = Math.max(100, Math.min(30000, Math.trunc(Number(lockTimeoutMs) || DEFAULT_LOCK_TIMEOUT_MS)));
@@ -409,13 +410,18 @@ async function apply(body, { userId = null, requestId = null, lockTimeoutMs = DE
       summary: result.summary, counts, warnings: result.warnings, lockWaitMs, ms: Date.now() - t0,
     };
   } catch (err) {
-    try { await client.query('ROLLBACK'); } catch { /* connection gone */ }
+    try { await client.query('ROLLBACK'); } catch (rbErr) { broken = rbErr; }
     // Lock timeout, or a deadlock Postgres broke by cancelling us: either way
     // someone else is working on these rows right now.
     if (err && (err.code === '55P03' || err.code === '40P01')) throw mergeError('MERGE_BUSY');
+    // The books refused a line: a draft invoice was issued between the draft
+    // check and the repoint (trg_invoice_lines_immutable, restrict_violation).
+    // Nothing was written; the world changed under the preview.
+    if (err && err.code === '23001') throw mergeError('STALE_PREVIEW');
     throw err;
   } finally {
-    client.release();
+    // A connection whose ROLLBACK failed is not handed back to the pool.
+    client.release(broken || undefined);
   }
 }
 

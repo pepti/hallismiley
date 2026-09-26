@@ -167,13 +167,16 @@ describe('extractProducts with a stubbed model', () => {
     expect(out.rows).toEqual([]);
   });
 
-  test('an echo of the instructions, an unparseable reply and a failed call all return null', async () => {
+  test('an echo or an unparseable reply fails and stays charged; an API error status is refundable; a timeout is not', async () => {
+    const go = () => extractProducts({ buffer: pdf, text: doc.text, pages: 1 });
     stub(async (req) => ({ content: [{ type: 'text', text: req.system }] }));
-    expect(await extractProducts({ buffer: pdf, text: doc.text, pages: 1 })).toBeNull();
+    expect(await go()).toEqual({ rows: null, refundable: false });
     stub(async () => ({ content: [{ type: 'text', text: 'no json' }] }));
-    expect(await extractProducts({ buffer: pdf, text: doc.text, pages: 1 })).toBeNull();
+    expect(await go()).toEqual({ rows: null, refundable: false });
     stub(async () => { throw Object.assign(new Error('overloaded'), { status: 529 }); });
-    expect(await extractProducts({ buffer: pdf, text: doc.text, pages: 1 })).toBeNull();
+    expect(await go()).toEqual({ rows: null, refundable: true });
+    stub(async () => { throw Object.assign(new Error('timed out'), { name: 'TimeoutError' }); });
+    expect(await go()).toEqual({ rows: null, refundable: false });
   });
 
   test('the client going away cancels the model call', async () => {

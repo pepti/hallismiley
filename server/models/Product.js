@@ -244,6 +244,9 @@ class Product {
     const numeric = new Set(['price_isk', 'price_eur', 'weight_grams', 'capacity_litres', 'duration_minutes']);
     const bool    = new Set(['active', 'is_bookable']);
     const jsonField = new Set(['variant_axes']);
+    // A merged product is frozen (migration 120) — for every writer that comes
+    // through here (the admin form, MCP update_product / set_stock, the import).
+    await Product.assertNotMerged(id);
 
     const sets   = [];
     const params = [];
@@ -360,7 +363,8 @@ class Product {
       await client.query('BEGIN');
       await Inventory.lockForWrite(client, { productIds: ids });
       const { rows } = await client.query(
-        `UPDATE products SET ${sets.join(', ')} WHERE id = ANY($${params.length}::text[]) RETURNING id`,
+        // A merged product is frozen (migration 120): bulk edits skip it.
+        `UPDATE products SET ${sets.join(', ')} WHERE id = ANY($${params.length}::text[]) AND merged_into_id IS NULL RETURNING id`,
         params
       );
       await client.query('COMMIT');
@@ -530,6 +534,18 @@ class Product {
   static async mergedInto(id) {
     const { rows } = await db.query('SELECT merged_into_id FROM products WHERE id = $1', [String(id)]);
     return rows[0] && rows[0].merged_into_id ? rows[0].merged_into_id : null;
+  }
+
+  // Throws a typed 409 (reason product_merged, movedTo) when the product was
+  // merged away — the model-level half of the freeze, so MCP and any other
+  // non-HTTP writer is refused like the admin routes are.
+  static async assertNotMerged(id) {
+    const into = await Product.mergedInto(id);
+    if (!into) return;
+    const e = new Error('Product was merged into another product');
+    e.status = 409; e.messageKey = 'errors.admin.productMerged'; e.reason = 'product_merged';
+    e.movedTo = { id: into };
+    throw e;
   }
 
   // Resolve a batch of BARCODES for import — the FALLBACK match key when a row's

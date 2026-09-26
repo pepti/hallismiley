@@ -225,6 +225,16 @@ describe('simple into simple', () => {
     expect(again.body.refusals.map(r => r.code)).toContain('already_merged');
   });
 
+  test('the freeze holds below the routes too: the model refuses (MCP, import), bulk edit skips', async () => {
+    await expect(Product.update(s.id, { name: 'x' })).rejects.toMatchObject({ status: 409, reason: 'product_merged', movedTo: { id: m.id } });
+    await expect(Product.update(s.id, { stock: 4 }, { userId: adminId })).rejects.toMatchObject({ reason: 'product_merged' });
+    const bulk = await request(app).post('/api/v1/admin/shop/products/bulk').set('Cookie', adminCookie)
+      .send({ ids: [s.id, m.id], action: 'edit', fields: { bin: 'Z9' } });
+    expect(bulk.status).toBe(200);
+    expect((await Product.findById(s.id)).bin).not.toBe('Z9');
+    expect((await Product.findById(m.id)).bin).toBe('Z9');
+  });
+
   test('its API and SSR URLs answer 301 to the survivor, never cached', async () => {
     const api = await request(app).get(`/api/v1/shop/products/${SLUG}ss-s`);
     expect(api.status).toBe(301);
@@ -297,6 +307,12 @@ describe('variants into variants', () => {
     expect(hit).toMatchObject({ kind: 'variant', variantId: mRedS.id });
     const scan = await Product.resolveByCode('VV-S-S');
     expect(scan).toMatchObject({ variantId: mRedS.id, productId: m.id });
+  });
+
+  test('a variant left on the merged product is frozen with it (MCP set_stock goes through here)', async () => {
+    await expect(ProductVariant.update(sRedS.id, { stock: 9 }, { userId: adminId })).rejects.toMatchObject({ reason: 'product_merged' });
+    // the moved row belongs to the survivor now and stays editable
+    await expect(ProductVariant.update(sM.id, { bin: 'B1' })).resolves.toBeTruthy();
   });
 });
 

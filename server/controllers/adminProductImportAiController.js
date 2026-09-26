@@ -99,8 +99,10 @@ module.exports = {
         // Before the null test: a call the abort cancelled returns null, and
         // that is the client leaving, not a 502. Charged pages stay charged.
         if (clientGone.signal.aborted) return endAborted(result ? 'after_model' : 'during_model', { pages: doc.pages });
-        if (!result) {
-          aiLimits.refundPages(charge);
+        if (!result || !result.rows) {
+          // Pages come back only when the API refused the call (nothing was
+          // billed); an unusable reply or a timeout stays charged.
+          if (result && result.refundable) aiLimits.refundPages(charge);
           return res.status(502).json({ error: t(req.locale, 'errors.admin.importAiFailed'), code: 502 });
         }
         // Counts, tokens and timings only — never the rows (supplier prices, names).

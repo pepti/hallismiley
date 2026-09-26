@@ -117,6 +117,10 @@ class ProductVariant {
     // No 'stock' here: it is not in `allowed`, so the loop below never sees it.
     const numeric = new Set(['price_isk', 'price_eur']);
     const bool    = new Set(['active']);
+    // A variant of a merged product is frozen with it (migration 120; MCP
+    // set_stock, the import and the variant grid all come through here).
+    const { rows: owner } = await db.query('SELECT product_id FROM product_variants WHERE id = $1', [String(id)]);
+    if (owner[0]) await require('./Product').assertNotMerged(owner[0].product_id);
 
     const sets = [];
     const params = [];
