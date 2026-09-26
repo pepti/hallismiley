@@ -1377,6 +1377,7 @@
   "admin.noOrders": "No orders found.",
   "admin.noProducts": "No products found.",
   "admin.confirmDelete": "Are you sure you want to delete this?",
+  "admin.actionCancelled": "Cancelled — nothing was changed.",
   "admin.confirmDeleteProject": "Delete this project? This cannot be undone.",
   "admin.unsavedChanges": "You have unsaved changes. Leave anyway?",
   "admin.editPage": "Edit Page",

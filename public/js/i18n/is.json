@@ -1377,6 +1377,7 @@
   "admin.noOrders": "Engar pantanir fundust.",
   "admin.noProducts": "Engar vörur fundust.",
   "admin.confirmDelete": "Ertu viss um að þú viljir eyða þessu?",
+  "admin.actionCancelled": "Hætt við — engu var breytt.",
   "admin.confirmDeleteProject": "Eyða þessu verkefni? Þetta er óafturkræft.",
   "admin.unsavedChanges": "Þú átt óvistaðar breytingar. Fara engu að síður?",
   "admin.editPage": "Breyta síðu",
