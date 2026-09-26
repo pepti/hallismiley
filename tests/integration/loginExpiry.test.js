@@ -363,3 +363,180 @@ describe('POST /api/v1/admin/customers with expires_at', () => {
     expect(rows).toHaveLength(0);
   });
 });
+
+// ── Security review follow-ups (Öryggisvörður, 2026-09-26) ──────────────────
+
+describe('review Low-1: an expiry is never set on an account with admin powers', () => {
+  const patch = (id, body) =>
+    request(app).patch(`/api/v1/admin/users/${id}/expiry`)
+      .set('Cookie', adminCookie).set('X-Locale', PUBLIC_DEFAULT_LOCALE).send(body);
+
+  async function makeRole(name, views) {
+    await db.query(
+      `INSERT INTO roles (name, description, view_access, is_system)
+       VALUES ($1, $1, $2::jsonb, FALSE)
+       ON CONFLICT (name) DO UPDATE SET view_access = EXCLUDED.view_access`,
+      [name, JSON.stringify(views)]
+    );
+  }
+  async function makeUser(username, role = 'user') {
+    const { rows } = await db.query(
+      `INSERT INTO users (email, username, role, email_verified) VALUES ($1, $2, $3, TRUE) RETURNING id`,
+      [`${username}@test.com`, username, role]
+    );
+    return rows[0].id;
+  }
+  async function grant(id, role) {
+    await db.query(
+      'INSERT INTO user_roles (user_id, role_name) VALUES ($1, $2) ON CONFLICT DO NOTHING', [id, role]);
+  }
+  const expiresOf = async (id) =>
+    (await db.query('SELECT expires_at FROM users WHERE id = $1', [id])).rows[0].expires_at;
+
+  test('another admin (primary role) — 409 admin_account, nothing written', async () => {
+    const id = await makeUser('otheradmin', 'admin');
+    const res = await patch(id, { expires_at: future(7).toISOString() });
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({ error: tx('errors.admin.cannotExpireAdmin'), code: 409, reason: 'admin_account' });
+    expect(await expiresOf(id)).toBeNull();
+  });
+
+  test('admin through the role SET only (primary role user) — 409', async () => {
+    const id = await makeUser('setadmin');
+    await grant(id, 'admin');
+    const res = await patch(id, { expires_at: future(7).toISOString() });
+    expect(res.status).toBe(409);
+    expect(res.body.reason).toBe('admin_account');
+  });
+
+  test.each([
+    ['usersmgr', ['users']],
+    ['rolesmgr', ['roles']],
+    ['allviews', ['*']],
+  ])('a role %s holding %j — 409', async (roleName, views) => {
+    await makeRole(roleName, views);
+    const id = await makeUser(`u_${roleName}`, roleName);
+    const res = await patch(id, { expires_at: future(7).toISOString() });
+    expect(res.status).toBe(409);
+    expect(res.body.reason).toBe('admin_account');
+  });
+
+  test('a demo prospect role with business views only (kynning) IS time-limitable', async () => {
+    await makeRole('kynning', ['handbok', 'leads', 'accounts']);
+    const id = await makeUser('prospect1', 'kynning');
+    const res = await patch(id, { expires_at: future(14).toISOString() });
+    expect(res.status).toBe(200);
+    expect(await expiresOf(id)).not.toBeNull();
+  });
+
+  test('other staff (moderator, a seller role) stay time-limitable', async () => {
+    const mod = await makeUser('amoderator', 'moderator');
+    expect((await patch(mod, { expires_at: future(3).toISOString() })).status).toBe(200);
+    const seller = await makeUser('aseller');
+    await grant(seller, 'solumadur');
+    expect((await patch(seller, { expires_at: future(3).toISOString() })).status).toBe(200);
+  });
+
+  test('clearing an admin\'s existing expiry is allowed (it only unlocks)', async () => {
+    const id = await makeUser('legacyadmin', 'admin');
+    await setExpiry(id, future(2));
+    const res = await patch(id, { expires_at: null });
+    expect(res.status).toBe(200);
+    expect(await expiresOf(id)).toBeNull();
+  });
+});
+
+describe('review Low-2: reviving an expired login revokes its MCP tokens first', () => {
+  const McpToken = require('../../server/models/McpToken');
+  const patch = (id, body) =>
+    request(app).patch(`/api/v1/admin/users/${id}/expiry`).set('Cookie', adminCookie).send(body);
+  const liveTokens = async (id) =>
+    (await db.query('SELECT COUNT(*)::int AS n FROM mcp_tokens WHERE user_id = $1 AND revoked_at IS NULL', [id])).rows[0].n;
+
+  beforeEach(async () => { await db.query('TRUNCATE TABLE mcp_tokens RESTART IDENTITY CASCADE'); });
+
+  test('clearing the expiry of an EXPIRED login revokes its tokens', async () => {
+    await McpToken.create({ userId, name: 'old connector' });
+    await setExpiry(userId, past());
+    expect(await liveTokens(userId)).toBe(1);
+    expect((await patch(userId, { expires_at: null })).status).toBe(200);
+    expect(await liveTokens(userId)).toBe(0);
+  });
+
+  test('extending an EXPIRED login into the future revokes its tokens too', async () => {
+    await McpToken.create({ userId, name: 'old connector' });
+    await setExpiry(userId, past());
+    expect((await patch(userId, { expires_at: future(7).toISOString() })).status).toBe(200);
+    expect(await liveTokens(userId)).toBe(0);
+  });
+
+  test('changing the expiry of a login that has NOT expired leaves its tokens alone', async () => {
+    await McpToken.create({ userId, name: 'live connector' });
+    await setExpiry(userId, future(2));
+    expect((await patch(userId, { expires_at: future(9).toISOString() })).status).toBe(200);
+    expect(await liveTokens(userId)).toBe(1);
+  });
+});
+
+describe('review Info-3: no reset or verification tokens for an expired login', () => {
+  test('forgot-password answers the same 200 but mints no reset token', async () => {
+    await setExpiry(userId, past());
+    const expired = await request(app).post('/auth/forgot-password').send({ email: 'user@test.com' });
+    expect(expired.status).toBe(200);
+    const { rows } = await db.query('SELECT password_reset_token FROM users WHERE id = $1', [userId]);
+    expect(rows[0].password_reset_token).toBeNull();
+
+    // A live account gets a token, and the SAME answer.
+    await setExpiry(userId, null);
+    const live = await request(app).post('/auth/forgot-password').send({ email: 'user@test.com' });
+    expect(live.body).toEqual(expired.body);
+    const { rows: after } = await db.query('SELECT password_reset_token FROM users WHERE id = $1', [userId]);
+    expect(after[0].password_reset_token).not.toBeNull();
+  });
+
+  test('resend-verification answers the same 200 but mints no verification token', async () => {
+    await db.query('UPDATE users SET email_verified = FALSE, email_verify_token = NULL WHERE id = $1', [userId]);
+    await setExpiry(userId, past());
+    const expired = await request(app).post('/auth/resend-verification').send({ email: 'user@test.com' });
+    expect(expired.status).toBe(200);
+    const { rows } = await db.query('SELECT email_verify_token FROM users WHERE id = $1', [userId]);
+    expect(rows[0].email_verify_token).toBeNull();
+
+    await setExpiry(userId, null);
+    const live = await request(app).post('/auth/resend-verification').send({ email: 'user@test.com' });
+    expect(live.body).toEqual(expired.body);
+    const { rows: after } = await db.query('SELECT email_verify_token FROM users WHERE id = $1', [userId]);
+    expect(after[0].email_verify_token).not.toBeNull();
+  });
+});
+
+describe('review Info-5: parseExpiresAt accepts only a zoned, anchored ISO date-time', () => {
+  const now = Date.parse('2026-09-26T12:00:00Z');
+  test.each([
+    '2026-10-03T10:00Z',
+    '2026-10-03T10:00:00Z',
+    '2026-10-03T10:00:00.123Z',
+    '2026-10-03T10:00:00+00:00',
+    '2026-10-03T10:00:00-05:30',
+  ])('accepts %s', (v) => {
+    expect(parseExpiresAt(v, now).ok).toBe(true);
+  });
+
+  test.each([
+    '2026-10-03T10:00:00Zgarbage',
+    '2026-10-03T10:00:00Z; DROP TABLE users',
+    '2026-10-03T10:00',          // no zone: refused, never read in server-local time
+    '2026-10-03T10:00:00',
+    '2026-10-03T10:00:00+0000',  // offset without the colon
+    '2026-10-03 10:00:00Z',
+    '2026-10-03junk',
+  ])('refuses %s', (v) => {
+    expect(parseExpiresAt(v, now)).toEqual({ ok: false, messageKey: 'errors.admin.expiresAtInvalid' });
+  });
+
+  test('the API refuses a trailing-garbage value — 400', async () => {
+    const res = await request(app).patch(`/api/v1/admin/users/${userId}/expiry`)
+      .set('Cookie', adminCookie).send({ expires_at: `${future(3).toISOString()}garbage` });
+    expect(res.status).toBe(400);
+  });
+});

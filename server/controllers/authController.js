@@ -673,7 +673,8 @@ const authController = {
 
       const { rows } = await dbQuery(
         `SELECT id, preferred_locale FROM users
-          WHERE email = $1 AND disabled = FALSE AND ${realEmailSql('email')}`,
+          WHERE email = $1 AND disabled = FALSE AND ${realEmailSql('email')}
+            AND (expires_at IS NULL OR expires_at > NOW())`,
         [email.toLowerCase()]
       );
 
@@ -832,7 +833,8 @@ const authController = {
 
       const { rows } = await dbQuery(
         `SELECT id, email_verified, email_verify_token, email_verify_expires
-         FROM users WHERE email = $1 AND disabled = FALSE AND ${realEmailSql('email')}`,
+         FROM users WHERE email = $1 AND disabled = FALSE AND ${realEmailSql('email')}
+           AND (expires_at IS NULL OR expires_at > NOW())`,
         [email.toLowerCase()]
       );
 

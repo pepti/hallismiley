@@ -243,6 +243,23 @@ Every other error returns the envelope from `server/middleware/errorHandler.js`:
 { "error": "Human-readable message", "code": 400 }
 ```
 
+Two optional fields ride on that shape; a client that ignores them loses
+nothing:
+
+- **`reason`** — a stable, machine-readable string next to the translated
+  `error`, for a client that must branch on WHY. The central handler emits it
+  for a TYPED 4xx error (one carrying an i18n `messageKey`, whose `error` it
+  translates for the request's locale), e.g. `account_expired` (403 on a
+  sign-in, 401 when a live session dies) and `admin_account` (409 on
+  `PATCH /api/v1/admin/users/:id/expiry`) —
+  [login-expiry-2026-09-26](HISTORY.md#login-expiry-2026-09-26). Some
+  controllers set it inline the same way (`password_required`,
+  `username_taken`, `POSSIBLE_DUPLICATE`, `INSUFFICIENT_STOCK`…). A 5xx never
+  carries one.
+- **`retryable: true`** — only on the `409` `reason: "BUSY"` answer to a
+  Postgres deadlock victim (40P01): nothing happened, send the same request
+  again.
+
 ## Rate limits (`express-rate-limit`, all skipped when `NODE_ENV` is `test` or `development`)
 
 | Scope | Limit | Where |
@@ -313,7 +330,7 @@ router's own gate still applies behind it.
 | `/api/v1/admin/accounts` | `adminAccountRoutes.js` | `accounts` view + `accountScope` | [ARCHITECTURE §8](ARCHITECTURE.md#8-customer-accounts-commission-staff-audit) · [HISTORY](HISTORY.md#accounts-commission) |
 | `/api/v1/admin/commission` | `adminCommissionRoutes.js` | `commission` view + `commissionScope`; writes admin | [ARCHITECTURE §8](ARCHITECTURE.md#8-customer-accounts-commission-staff-audit) · [HISTORY](HISTORY.md#migrations-100-102) |
 | `/api/v1/admin/audit` | `adminAuditRoutes.js` | admin | [ARCHITECTURE §8](ARCHITECTURE.md#8-customer-accounts-commission-staff-audit) · [HISTORY](HISTORY.md#accounts-commission) |
-| `/api/v1/admin` | `adminRoutes.js` | admin views (catch-all); `POST /users/:id/totp/reset` admin + CSRF (never self; a staff target needs the acting admin's `{ password }`, else 400 `reason: password_required` / 403); `POST /users/:id/new-password` admin + CSRF (placeholder-address, non-staff logins only, else 409; answers once, `no-store`); `PATCH /users/:id/expiry` admin + CSRF `{ expires_at }` — ISO date-time, `YYYY-MM-DD` (end of day UTC) or `null`; future only, never self (400) | [HISTORY](HISTORY.md#harvest-ice-a-2026-09-24) · [HISTORY](HISTORY.md#login-expiry-2026-09-26) |
+| `/api/v1/admin` | `adminRoutes.js` | admin views (catch-all); `POST /users/:id/totp/reset` admin + CSRF (never self; a staff target needs the acting admin's `{ password }`, else 400 `reason: password_required` / 403); `POST /users/:id/new-password` admin + CSRF (placeholder-address, non-staff logins only, else 409; answers once, `no-store`); `PATCH /users/:id/expiry` admin + CSRF `{ expires_at }` — ISO date-time with `Z`/±hh:mm, `YYYY-MM-DD` (end of day UTC) or `null`; future only, never self (400), never an account with admin powers (409 `reason: admin_account`; clearing is allowed); reviving an already-expired login revokes its MCP tokens first | [HISTORY](HISTORY.md#harvest-ice-a-2026-09-24) · [HISTORY](HISTORY.md#login-expiry-2026-09-26) |
 | `/api/v1/content` | `contentRoutes.js` | public reads; admin writes | — |
 | `/api/v1/seller` | `sellerRoutes.js` | GET only; `INSTANCE_ROLE=public` else 404; session; published seller (proven email) else 404; 2FA except `/me` only under `security.mfa.enrolment = required` (mfa-reminder-2026-09-23); per-section view else 403 | [ARCHITECTURE §21](ARCHITECTURE.md#21-seller-area--the-published-copy-on-the-public-instance) · [HISTORY](HISTORY.md#seller-area) |
 | `/api/v1/mcp` | `mcpRoutes.js` | `MCP_ENABLED` + bearer token | `docs/mcp.md` |

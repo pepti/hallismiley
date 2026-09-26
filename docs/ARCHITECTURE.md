@@ -227,7 +227,12 @@ company/                  gitignored: plans, decisions, logs, market-research st
   their sessions are deleted. The check rides on the row Lucia's join
   already loads (`expires_at` in `getUserAttributes`) — no extra query. An
   admin sets an expiry on ANOTHER account only, in the future, audited
-  (`user.expiry_set` / `user.expiry_cleared`).
+  (`user.expiry_set` / `user.expiry_cleared`), and NEVER on an account with
+  admin powers (`utils/adminRole.js` `userHoldsAdminPowers`: `admin` anywhere,
+  or a role with `*`/`users`/`roles`; 409 `admin_account`) — every other
+  role stays time-limitable. Reviving an already-expired login revokes its
+  MCP tokens first. An expired login gets no reset or verification token.
+  Rolling back to the previous image re-opens expired logins while it runs.
 - A typed client error carries an i18n `messageKey` and a string `reason`;
   `middleware/errorHandler.js` translates the one and passes the other
   through for 4xx only — an untyped error's shape is unchanged

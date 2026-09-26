@@ -366,6 +366,7 @@
   "errors.admin.cannotResetOwnTotp": "Notaðu prófílsíðuna til að slökkva á eigin tveggja þrepa auðkenningu",
   "errors.admin.cannotDisableSelf": "Ekki er hægt að loka eigin aðgangi",
   "errors.admin.cannotExpireSelf": "Ekki er hægt að setja gildistíma á eigin aðgang",
+  "errors.admin.cannotExpireAdmin": "Ekki er hægt að setja gildistíma á aðgang stjórnanda.",
   "errors.admin.expiresAtInvalid": "Ógild dagsetning í „Gildir til“",
   "errors.admin.expiresAtPast": "„Gildir til“ verður að vera fram í tímann",
   "errors.admin.cannotDeleteSelf": "Ekki er hægt að eyða eigin aðgangi",

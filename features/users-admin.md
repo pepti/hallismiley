@@ -36,7 +36,7 @@ The `/api/v1/users` self-service endpoints and the admin user list at `/admin/us
 
 **Rules**
 - The role-SET path carries the 2FA/OAuth gates via `utils/adminRole.js`; OAuth accounts are refused admin.
-- An expiry is set on ANOTHER account only (never your own), must lie in the future, and is audited (`user.expiry_set` / `user.expiry_cleared`).
+- An expiry is set on ANOTHER account only (never your own), must lie in the future, and is audited (`user.expiry_set` / `user.expiry_cleared`); never on an account with admin powers (`userHoldsAdminPowers`, 409 `admin_account`); reviving an expired login revokes its MCP tokens first.
 - Role grant/revoke, invitation, name-only creation, disable/enable and expiry changes log to the staff audit best-effort.
 - A placeholder address is never an address: ask `utils/placeholderEmail.js` before mailing, showing, searching or resetting `users.email`; `new-password` is keyed on the address, never the role, and refuses staff.
 - Full rules: [../docs/ARCHITECTURE.md#1-auth-users-rbac-2fa](../docs/ARCHITECTURE.md#1-auth-users-rbac-2fa).

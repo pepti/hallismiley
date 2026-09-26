@@ -366,6 +366,7 @@
   "errors.admin.cannotResetOwnTotp": "Use your profile page to turn off your own two-step verification",
   "errors.admin.cannotDisableSelf": "Cannot disable your own account",
   "errors.admin.cannotExpireSelf": "You cannot set an expiry on your own account",
+  "errors.admin.cannotExpireAdmin": "An administrator's login can't be time-limited.",
   "errors.admin.expiresAtInvalid": "Invalid “Valid until” date",
   "errors.admin.expiresAtPast": "“Valid until” must be in the future",
   "errors.admin.cannotDeleteSelf": "Cannot delete your own account",

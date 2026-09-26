@@ -65,7 +65,7 @@ Which domains an entry touches is read from the `**History**:` footers in `docs/
 | 2026-09-24 | [Ice harvest, chunk C — inventory and the shop floor (lane 2)](#harvest-ice-c-2026-09-24) | On hand / Committed / Available with ONE audited writer (`models/Inventory.js`, migration 112 `inventory_adjustments` + `orders.stock_deducted_at`); committed = paid, unshipped; stock moves at fulfilment, never below zero; the webhook re-checks Available and refunds an oversell; lock order + 40P01 → 409 BUSY; the sold-out basket guard (ENH #25); the search box that dropped letters; bulk product edit; the till scanner (ENH #22); MCP catalogue tools behind `mcp.write.*` switches, all off |
 | 2026-09-24 | [Ice harvest, chunk D — import, export, uploads (lane 2)](#harvest-ice-d-2026-09-24) | One server-side reader for every product file (CSV, .xlsx, PDF; `POST /products/import/parse-file`, `services/productImport`); barcode as the fallback match key (migration 113 `product_variants.barcode`), ambiguous/duplicate refused, order quantities never stock; rows with a Variant cell create one Draft product with its variants, whole or not at all; the orders list as a real .xlsx; product images normalised on upload + lazy `.thumb.webp` (Buffer writes, no mozjpeg); `exceljs` / `pdf-parse` pinned, `sharp` a runtime dependency |
 | 2026-09-25 | [The legal pages name the site they are on; the images are the company's own](#legal-pages-site-host-2026-09-25) | `/terms` and `/personuvernd` took "orangesmiley.is" as a literal, so rekstrarkerfi.is would have said it was orangesmiley.is; the host now comes from the canonical origin (APP_URL) via `utils/identity.js` `siteHost()`; the terms credit the landscape images to Orange Smiley ehf. (iceland-v2), not to licensed photographers; both dated 25. september 2026; copy approved by Halli |
-| 2026-09-26 | [Time-limited logins (R2b, D-020)](#login-expiry-2026-09-26) | Migration 114 `users.expires_at` (NULL = never); `auth/accountExpiry.js`; every sign-in path refuses an expired login with `reason: account_expired` — only after the credential checked out; every session reader signs it out and deletes its sessions, no extra query; `PATCH /admin/users/:id/expiry` + `expires_at` on the customers create path (future only, never self, audited); "Gildir til" column, badge and picker; the typed-error branch in the error handler; copy DRÖG |
+| 2026-09-26 | [Time-limited logins (R2b, D-020)](#login-expiry-2026-09-26) | Migration 114 `users.expires_at` (NULL = never); `auth/accountExpiry.js`; every sign-in path refuses an expired login with `reason: account_expired` — only after the credential checked out; every session reader signs it out and deletes its sessions, no extra query; `PATCH /admin/users/:id/expiry` + `expires_at` on the customers create path (future only, never self, audited); "Gildir til" column, badge and picker; the typed-error branch in the error handler; review: never on an account with admin powers (409 `admin_account`), MCP tokens revoked on revival, no reset/verify tokens for an expired login, anchored zoned ISO parser; copy DRÖG |
 
 ---
 
@@ -3279,7 +3279,9 @@ customer instance has it.
 - **Migration 114 `114_user_expires_at`** (engine array): `users.expires_at
   TIMESTAMPTZ NULL`, NULL = never expires. Expand-only (invariant 14): the
   previous release neither reads nor writes it. No index — it is only ever
-  read off a row already loaded by primary key.
+  read off a row already loaded by primary key. Rolling back to the previous
+  image re-opens expired logins for the length of the rollback: the old code
+  ignores the column (the values stay and apply again on roll-forward).
 - **`server/auth/accountExpiry.js`** is the one place the rule lives:
   `isExpired(user)` (fails closed on a non-date), `AccountExpiredError` (the
   typed refusal: 403 on a sign-in, 401 when a live session dies, `reason:
@@ -3353,3 +3355,38 @@ in), `auth.facebook.test.js` +2. `e2e/admin-user-expiry.spec.js` (new, 4):
 set 7 days → the badge, clear → no badge, the expired badge, no button on
 your own row, and the sign-in modal showing the expiry message only for the
 right password.
+
+**Review** (Öryggisvörður PASS, no Critical/High/Medium; invariant-reviewer
+PASS). Folded in on the same branch:
+- **Low-1** — an expiry is a delayed lockout, so two admins, or one hijacked
+  admin session, could time-limit the remaining admins. `PATCH …/expiry` now
+  refuses a value on any account with ADMIN POWERS (`utils/adminRole.js`
+  `userHoldsAdminPowers`: the `admin` role, primary or in the set, or any
+  held role whose views are `*` or include `users` or `roles`) with 409
+  `reason: admin_account`, `errors.admin.cannotExpireAdmin` (DRÖG: IS "Ekki er
+  hægt að setja gildistíma á aðgang stjórnanda." / EN "An administrator's
+  login can't be time-limited."). Clearing is still allowed. Every other
+  role stays time-limitable — the demo's prospect role (`kynning`, business
+  views) is exactly what this is for. The customers create path cannot make
+  such an account (always `role='user'`, no grants), so it holds there by
+  construction.
+- **Low-2** — clearing or extending the expiry of a login that has ALREADY
+  expired revokes its MCP tokens first (`revokeMcpTokens(req, id,
+  'expired')`, as disable does), so an old connector does not quietly come
+  back to life.
+- **Info-3** — `forgot-password` and `resend-verification` mint no token for
+  an expired login (`expires_at IS NULL OR expires_at > NOW()`); the answer
+  stays the same 200.
+- **Info-5** — `parseExpiresAt` takes a date-time only when it is anchored
+  and zoned: seconds and a fraction optional, `Z` or ±hh:mm required, nothing
+  after it. A value with no zone is refused rather than read in the server's
+  local time.
+- Docs (invariant-reviewer): `docs/API.md` "Error format" now documents the
+  optional `reason` (and the existing `retryable` on 409 BUSY); the rollback
+  note above.
+
+Tests: `loginExpiry.test.js` 28 → 54 (the admin-powers refusal both ways —
+primary admin, admin through the set, `users`/`roles`/`*` roles refused;
+`kynning`, moderator and a seller role allowed; clearing an admin's expiry
+allowed — token revocation on revival and not otherwise, the two mail paths,
+the anchored parser).

@@ -5570,8 +5570,11 @@ END; $$ LANGUAGE plpgsql`,
     //
     // Additive (invariant 14): the previous release neither reads nor writes
     // the column, and its user SELECTs that use `users.*` just carry one more
-    // attribute it ignores. Rollback: ALTER TABLE users DROP COLUMN expires_at
-    // once no release reads it.
+    // attribute it ignores. NOTE: rolling back to the previous image re-opens
+    // expired logins for the length of the rollback — the old code ignores
+    // the column (the values stay, and apply again on roll-forward). Rollback
+    // of the schema: ALTER TABLE users DROP COLUMN expires_at once no release
+    // reads it.
     // Reference copy: server/migrations/114_user_expires_at.sql
     name: '114_user_expires_at',
     statements: [

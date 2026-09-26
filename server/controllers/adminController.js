@@ -13,7 +13,8 @@ const mfaService         = require('../services/mfaService');
 const McpToken           = require('../models/McpToken');
 const { Scrypt }         = require('oslo/password');
 const { generatePassword } = require('../utils/generatePassword');
-const { parseExpiresAt } = require('../auth/accountExpiry');
+const { parseExpiresAt, isExpired, ExpiryOnAdminError } = require('../auth/accountExpiry');
+const { userHoldsAdminPowers } = require('../utils/adminRole');
 // A name-only login's reserved <username>@noemail.invalid is never shown or
 // searched as an address (ice #397): the list reads it as NULL + no_email.
 const { isPlaceholderEmail, realEmailSql, realEmailExpr } = require('../utils/placeholderEmail');
@@ -392,7 +393,9 @@ const adminController = {
   // YYYY-MM-DD (the end of that day, UTC), or null to clear it. A new value
   // must lie in the future (auth/accountExpiry.js parseExpiresAt); ending a
   // login NOW is what `disable` is for. Never your own account: an admin who
-  // time-limits themself locks the instance's door behind them.
+  // time-limits themself locks the instance's door behind them. Never an
+  // account with admin powers either (409 `admin_account`); every other role,
+  // staff included, is time-limitable.
   async setExpiry(req, res, next) {
     try {
       const { id } = req.params;
@@ -406,6 +409,20 @@ const adminController = {
       if (!parsed.ok) {
         return res.status(400).json({ error: t(req.locale, parsed.messageKey), code: 400 });
       }
+
+      const { rows: current } = await dbQuery('SELECT expires_at FROM users WHERE id = $1', [id]);
+      if (current.length === 0) {
+        return res.status(404).json({ error: t(req.locale, 'errors.admin.userNotFound'), code: 404 });
+      }
+      // Never on an account with admin powers (review Low-1): an expiry is a
+      // delayed lockout. Clearing one is always allowed — that only unlocks.
+      if (parsed.value && await userHoldsAdminPowers(dbQuery, id)) {
+        throw new ExpiryOnAdminError();
+      }
+      // Reviving an ALREADY-expired login (cleared, or moved into the future)
+      // must not silently revive its old MCP tokens (review Low-2): revoke
+      // them first, as disable does; a new connection is a fresh consent.
+      if (isExpired(current[0])) await revokeMcpTokens(req, id, 'expired');
 
       const { rows } = await dbQuery(
         `UPDATE users SET expires_at = $1 WHERE id = $2

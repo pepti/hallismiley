@@ -141,7 +141,10 @@ const adminCustomerController = {
   //
   // `expires_at` (optional, migration 114): a time-limited login — the demo
   // login a seller makes for a prospect. ISO date-time or YYYY-MM-DD, in the
-  // future; absent/null = never expires (auth/accountExpiry.js).
+  // future; absent/null = never expires (auth/accountExpiry.js). The
+  // admin-powers refusal on PATCH …/expiry (review Low-1) holds here by
+  // construction: this path only ever creates a role='user' account with no
+  // role grants, so the new row cannot hold admin powers.
   async createCustomer(req, res, next) {
     try {
       const c = cleanRow(req.body || {});

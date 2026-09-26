@@ -40,4 +40,29 @@ async function userHoldsView(dbQuery, userId, viewId) {
   return rows.length > 0;
 }
 
-module.exports = { userIsAdminAnywhere, userHoldsView };
+// Does this account hold ADMIN POWERS — the `admin` role (primary or in the
+// set), or any held role whose view set is every view or includes `users` or
+// `roles` (the views that manage other people's accounts)? Time-limited
+// logins (login-expiry-2026-09-26, security review Low-1) refuse an expiry on
+// such an account: an expiry is a delayed lockout, and two admins — or one
+// hijacked admin session — could otherwise time-limit the remaining admins.
+// Every OTHER staff role stays time-limitable (the demo's prospect logins
+// hold a business-views role).
+async function userHoldsAdminPowers(dbQuery, userId) {
+  const { rows } = await dbQuery(
+    `SELECT 1 FROM users WHERE id = $1 AND role = 'admin'
+      UNION ALL
+     SELECT 1 FROM user_roles WHERE user_id = $1 AND role_name = 'admin'
+      UNION ALL
+     SELECT 1
+       FROM roles r
+      WHERE (r.name = (SELECT role FROM users WHERE id = $1)
+             OR r.name IN (SELECT role_name FROM user_roles WHERE user_id = $1))
+        AND r.view_access ?| ARRAY['*', 'users', 'roles']
+     LIMIT 1`,
+    [userId]
+  );
+  return rows.length > 0;
+}
+
+module.exports = { userIsAdminAnywhere, userHoldsView, userHoldsAdminPowers };

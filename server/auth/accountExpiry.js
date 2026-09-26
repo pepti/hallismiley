@@ -41,6 +41,22 @@ class AccountExpiredError extends Error {
   }
 }
 
+/**
+ * An admin tried to time-limit an account that holds admin powers
+ * (utils/adminRole.js userHoldsAdminPowers; security review Low-1): an expiry
+ * is a delayed lockout, so it is never set on one. 409, reason
+ * 'admin_account'.
+ */
+class ExpiryOnAdminError extends Error {
+  constructor() {
+    super('An administrator\'s login cannot be time-limited');
+    this.name = 'ExpiryOnAdminError';
+    this.status = 409;
+    this.reason = 'admin_account';
+    this.messageKey = 'errors.admin.cannotExpireAdmin';
+  }
+}
+
 /** Has this user row's login expired? NULL/absent = never. Fails closed on a
  *  value that is not a date (it comes from a TIMESTAMPTZ, so it never is). */
 function isExpired(user, now = Date.now()) {
@@ -70,10 +86,18 @@ async function validateSession(sessionId) {
   return { session, user, expired: false };
 }
 
+// A full ISO 8601 date-time with an EXPLICIT zone: seconds and a fraction
+// optional, `Z` or ±hh:mm required, nothing after it (security review Info-5:
+// an unanchored prefix let trailing text through to Date.parse, and a value
+// with no zone would be read in the server's local time).
+const ISO_DATE_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:\d{2})$/;
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
 /**
  * Parse an admin-supplied expires_at. Accepts null/'' (no expiry), an ISO
- * date-time, or a bare YYYY-MM-DD (the END of that day, UTC — Iceland's
- * clock). A non-null value must lie in the future and within MAX_AHEAD_MS.
+ * date-time WITH a zone (`Z` or ±hh:mm), or a bare YYYY-MM-DD (the END of
+ * that day, UTC — Iceland's clock). Anything else is refused. A non-null
+ * value must lie in the future and within MAX_AHEAD_MS.
  * Returns { ok: true, value: Date|null } or { ok: false, messageKey }.
  */
 function parseExpiresAt(raw, now = Date.now()) {
@@ -81,9 +105,9 @@ function parseExpiresAt(raw, now = Date.now()) {
   if (typeof raw !== 'string') return { ok: false, messageKey: 'errors.admin.expiresAtInvalid' };
   const s = raw.trim();
   let ms;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+  if (ISO_DATE.test(s)) {
     ms = Date.parse(`${s}T23:59:59.999Z`);
-  } else if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s)) {
+  } else if (ISO_DATE_TIME.test(s)) {
     ms = Date.parse(s);
   } else {
     ms = NaN;
@@ -97,6 +121,7 @@ function parseExpiresAt(raw, now = Date.now()) {
 module.exports = {
   ACCOUNT_EXPIRED,
   AccountExpiredError,
+  ExpiryOnAdminError,
   isExpired,
   assertNotExpired,
   validateSession,
