@@ -100,10 +100,17 @@ function getTimeout() {
 
 // How long a call may wait for a free aiGate slot before giving up (the
 // caller then leaves the target locale empty, as for any other failure).
-// Twice the per-call timeout: every call ahead of it finishes or aborts
-// within one timeout of taking its slot, so a queued call is not starved by
-// a race between its wait timer and the release.
-function getQueueWaitMs() {
+//
+// translate() runs ON the request path — autoTranslateFields awaits it before
+// a product/news/project save is written — so it waits only briefly: under
+// load a save goes through with the IS field empty rather than stalling, and
+// wait + call stay inside server.js's 10 s shutdown grace (a self-update
+// SIGTERM must not drop a save mid-flight). The tree batches run in the
+// background (siteContentTranslate), so they may queue for two per-call
+// timeouts: every call ahead finishes or aborts within one timeout of taking
+// its slot, so a queued batch is not starved by a race with the release.
+const REQUEST_QUEUE_WAIT_MS = 1000;
+function getBatchQueueWaitMs() {
   return getTimeout() * 2;
 }
 
@@ -191,11 +198,18 @@ function withTimeout(promiseFactory, timeoutMs) {
 // A model call inside an aiGate slot. The slot is taken FIRST and the call's
 // own timeout starts once it is held, so time spent queued behind other calls
 // never eats into the model's budget.
-function gatedCall(args) {
+function gatedCall(args, waitMs) {
   return aiGate.withQueuedSlot(
     () => withTimeout((signal) => callModel({ ...args, signal }), getTimeout()),
-    { waitMs: getQueueWaitMs() },
+    { waitMs },
   );
+}
+
+// Every slot was taken for the whole wait: back-pressure, not a fault.
+const BUSY = Symbol('translator.busy');
+function logFailure(err, fields, msg) {
+  if (err instanceof aiGate.AiBusyError) logger.warn(fields, `${msg} (aiGate busy)`);
+  else logger.error({ err, ...fields }, msg);
 }
 
 function tryJsonParse(s) {
@@ -257,7 +271,7 @@ async function translate({ text, sourceLocale = 'en', targetLocale = 'is', forma
       systemText: systemPrompt(format, sourceLocale, targetLocale),
       userText: text,
       maxTokens,
-    });
+    }, REQUEST_QUEUE_WAIT_MS);
     const ms = Date.now() - started;
     if (typeof out === 'string' && out.length > 0) {
       logger.info({ chars: text.length, ms, ok: true }, 'translator.translate');
@@ -267,7 +281,7 @@ async function translate({ text, sourceLocale = 'en', targetLocale = 'is', forma
     return null;
   } catch (err) {
     const ms = Date.now() - started;
-    logger.error({ err, chars: text.length, ms, ok: false }, 'translator.translate failed');
+    logFailure(err, { chars: text.length, ms, ok: false }, 'translator.translate failed');
     return null;
   }
 }
@@ -333,7 +347,7 @@ async function translateBatch(strings, { sourceLocale = 'en', targetLocale = 'is
       systemText: systemPromptForTree(sourceLocale, targetLocale),
       userText: payload,
       maxTokens,
-    });
+    }, getBatchQueueWaitMs());
     if (typeof out !== 'string') {
       logger.warn({ count: strings.length, stopReason }, 'translator.batch no text in the response');
       return null;
@@ -359,8 +373,11 @@ async function translateBatch(strings, { sourceLocale = 'en', targetLocale = 'is
     return parsed.map((v, i) => (typeof v === 'string' ? v : strings[i]));
   } catch (err) {
     const ms = Date.now() - started;
-    logger.error({ err, count: strings.length, ms, ok: false }, 'translator.translateTree batch failed');
-    return null;
+    logFailure(err, { count: strings.length, ms, ok: false }, 'translator.translateTree batch failed');
+    // Busy is reported apart from a failure: the tree must not answer it
+    // with a per-leaf fallback, which would multiply the calls the gate is
+    // there to hold back.
+    return err instanceof aiGate.AiBusyError ? BUSY : null;
   }
 }
 
@@ -369,9 +386,9 @@ async function translateBatch(strings, { sourceLocale = 'en', targetLocale = 'is
 // N > ~30 the output token budget for a single call regularly exceeds
 // the per-call timeout (TRANSLATE_TIMEOUT_MS=8000ms) on big jsonb keys
 // like halli_bio (~200 leaves total). At CHUNK_SIZE=25 each batched
-// call comfortably fits within the timeout; chunks run in parallel via
-// Promise.all so the wall-clock cost is roughly the slowest single
-// chunk (~3-6s) regardless of total leaf count.
+// call comfortably fits within the timeout; chunks run in parallel waves of
+// aiGate.maxConcurrent() (default 4), so the wall-clock cost is roughly the
+// slowest chunk per wave (~3-6s each).
 const TRANSLATE_TREE_CHUNK_SIZE = 25;
 
 /**
@@ -380,7 +397,7 @@ const TRANSLATE_TREE_CHUNK_SIZE = 25;
  *
  * Strategy (in order):
  *   1. Single batched call if leaves <= CHUNK_SIZE — same as before.
- *   2. Chunked batched calls in parallel, each batch sized to fit
+ *   2. Chunked batched calls in parallel waves, each batch sized to fit
  *      within TRANSLATE_TIMEOUT_MS. Successful chunks contribute their
  *      translations; failed chunks fall through to per-leaf for those
  *      specific leaves only, NOT the whole tree.
@@ -404,41 +421,55 @@ async function translateTree(tree, { format = 'plain', sourceLocale = 'en', targ
   // round-trip and no overhead from chunk coordination.
   if (leaves.length <= TRANSLATE_TREE_CHUNK_SIZE) {
     const batched = await translateBatch(leaves.map(l => l.value), dir);
+    if (batched === BUSY) return null; // the gate was full: skip, never fan out
     if (batched) {
       leaves.forEach((leaf, i) => setPath(clone, leaf.path, batched[i]));
       return clone;
     }
     // Single batch failed — fall through to per-leaf below.
   } else {
-    // Chunk the leaves and translate chunks in parallel. Each chunk
-    // returns an array (success) or null (failure for that chunk).
+    // Chunk the leaves and translate them in WAVES of at most
+    // aiGate.maxConcurrent() chunks (harvest2 lane 1b review): a big tree
+    // never queues more calls than there are slots, so its own chunks cannot
+    // time out waiting on each other. Each chunk returns an array (success),
+    // BUSY (the gate stayed full) or null (failure for that chunk).
     const chunks = [];
     for (let i = 0; i < leaves.length; i += TRANSLATE_TREE_CHUNK_SIZE) {
       chunks.push(leaves.slice(i, i + TRANSLATE_TREE_CHUNK_SIZE));
     }
-    const chunkResults = await Promise.all(
-      chunks.map(chunk => translateBatch(chunk.map(l => l.value), dir))
-    );
+    const chunkResults = [];
+    const wave = aiGate.maxConcurrent();
+    for (let i = 0; i < chunks.length; i += wave) {
+      chunkResults.push(...await Promise.all(
+        chunks.slice(i, i + wave).map(chunk => translateBatch(chunk.map(l => l.value), dir))
+      ));
+    }
 
     // Apply translations from successful chunks. Track which leaves
-    // still need per-leaf translation (chunks that failed).
+    // still need per-leaf translation (chunks that failed). A BUSY chunk
+    // gets no per-leaf retry — that would multiply the calls the gate holds
+    // back; its leaves keep the source text, as a failed leaf always has.
     const needsPerLeaf = [];
+    let anyChunkOk = false;
     chunks.forEach((chunkLeaves, ci) => {
       const result = chunkResults[ci];
       if (result && Array.isArray(result) && result.length === chunkLeaves.length) {
         chunkLeaves.forEach((leaf, li) => setPath(clone, leaf.path, result[li]));
-      } else {
+        anyChunkOk = true;
+      } else if (result !== BUSY) {
         needsPerLeaf.push(...chunkLeaves);
       }
     });
 
-    if (needsPerLeaf.length === 0) return clone;
+    if (needsPerLeaf.length === 0) return anyChunkOk ? clone : null;
     logger.warn(
       { failed: needsPerLeaf.length, total: leaves.length },
       'translator.translateTree falling back to per-leaf for failed chunks'
     );
-    // Fall through to per-leaf only for the leaves whose chunk failed.
-    return await fillPerLeaf(clone, needsPerLeaf, dir);
+    // Fall through to per-leaf only for the leaves whose chunk failed; the
+    // chunks that DID translate count even if every leaf retry fails.
+    const filled = await fillPerLeaf(clone, needsPerLeaf, dir);
+    return filled || (anyChunkOk ? clone : null);
   }
 
   // Per-leaf fallback for the small-tree path (single batch failed).

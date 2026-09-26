@@ -26,9 +26,13 @@
  *                           target locale empty — its never-throw contract holds.
  *
  * ice's shutdown handshake (refuse new calls on SIGTERM, stretch the force-exit
- * grace to the vision timeout) is NOT ported: the engine's only AI calls are
- * bounded by TRANSLATE_TIMEOUT_MS (8 s default), inside server.js's 10 s grace.
- * Port it with the first AI call that can outlive that grace.
+ * grace to the vision timeout) is NOT ported. The one AI call a request
+ * waits on — translate(), awaited by autoTranslateFields before a save —
+ * queues for at most 1 s and then runs under TRANSLATE_TIMEOUT_MS (8 s), so
+ * each call stays inside server.js's 10 s grace. The tree batches queue longer
+ * (2 x the timeout) but run in the background after the save has answered, so
+ * a SIGTERM there loses a translation, never a save. Port the handshake with
+ * the first request-path AI call that can outlive the grace.
  */
 
 const DEFAULT_MAX_CONCURRENT = 4;
@@ -96,7 +100,7 @@ function waitForSlot(waitMs) {
   if (tryAcquire()) return Promise.resolve();
   if (!(waitMs > 0)) return Promise.reject(new AiBusyError());
   return new Promise((resolve, reject) => {
-    const entry = { grant: resolve, timer: null };
+    const entry = { grant: resolve, reject, timer: null };
     entry.timer = setTimeout(() => {
       const i = waiters.indexOf(entry);
       if (i !== -1) waiters.splice(i, 1);
@@ -117,10 +121,14 @@ async function withQueuedSlot(fn, { waitMs = 0 } = {}) {
   }
 }
 
-/** Test-only: clear the counter and drop any waiters. */
+/** Test-only: clear the counter; any waiter is rejected, never left hanging. */
 function _reset() {
   inFlightCount = 0;
-  while (waiters.length) clearTimeout(waiters.shift().timer);
+  while (waiters.length) {
+    const w = waiters.shift();
+    clearTimeout(w.timer);
+    w.reject(new AiBusyError());
+  }
 }
 
 module.exports = {

@@ -486,12 +486,15 @@ const authController = {
       const user = rows[0] ?? null;
 
       if (!user) {
+        authLoginAttempts.inc({ result: 'failure' });
         return res.status(400).json({ error: t(req.locale, 'errors.party.invalidMagicLink'), code: 400 });
       }
       if (user.disabled) {
+        authLoginAttempts.inc({ result: 'refused' });
         return res.status(403).json({ error: t(req.locale, 'errors.auth.accountDisabled'), code: 403 });
       }
       if (user.approval_status === 'declined') {
+        authLoginAttempts.inc({ result: 'refused' });
         return res.status(403).json({ error: t(req.locale, 'errors.party.requestDeclined'), code: 403 });
       }
       // A magic link is a permanent, reusable bearer credential that mints a
@@ -501,6 +504,7 @@ const authController = {
       // challenge lives on the password path only. Admins sign in there.
       if (await userIsAdminAnywhere(dbQuery, user.id)) {
         securityLogger.loginFailed(req.ip, `magic-link login refused for admin account ${user.username}`);
+        authLoginAttempts.inc({ result: 'refused' });
         return res.status(403).json({ error: t(req.locale, 'errors.auth.forbidden'), code: 403 });
       }
 

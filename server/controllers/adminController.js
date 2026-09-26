@@ -172,23 +172,25 @@ const adminController = {
         const { rows: dropped } = await client.query(
           'DELETE FROM user_roles WHERE user_id = $1 AND role_name <> $2 RETURNING role_name', [id, role]
         );
-        await client.query('COMMIT');
-        UserRole.invalidateUser(id); // clear the cached set after the commit
-        // Best-effort after the commit, like the Members tab: one row per role
-        // actually granted or revoked, so both surfaces read the same in the
-        // trail. `via` tells them apart.
+        // One audit row per role actually granted or revoked — the same
+        // actions the Members tab writes, `via` tells them apart. Written on
+        // THIS client, inside the transaction (staffAudit's rule for a
+        // transactional change): the trail commits or rolls back with the
+        // role swap, never one without the other.
         if (!heldBefore.includes(role)) {
-          await staffAudit.recordSafe({
+          await staffAudit.record(client, {
             ...staffAudit.actorOf(req), action: 'role.granted', entityType: 'user', entityId: id,
             summary: { role, via: 'users_page' },
           });
         }
         for (const { role_name: revoked } of dropped) {
-          await staffAudit.recordSafe({
+          await staffAudit.record(client, {
             ...staffAudit.actorOf(req), action: 'role.revoked', entityType: 'user', entityId: id,
             summary: { role: revoked, via: 'users_page' },
           });
         }
+        await client.query('COMMIT');
+        UserRole.invalidateUser(id); // clear the cached set after the commit
         if (role !== 'admin') await revokeMcpTokens(req, id, 'role_change');
         return res.json(rows[0]);
       } catch (err) {

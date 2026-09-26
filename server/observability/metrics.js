@@ -72,9 +72,10 @@ const authLoginAttempts = new client.Counter({
   help: 'Total login attempts',
   // Incremented by authController (login, login/totp, the party magic link):
   //   success        — a session was minted
-  //   failure        — wrong username/password, or a wrong/expired 2FA code
+  //   failure        — wrong username/password, a wrong/expired 2FA code, an unknown magic link
   //   locked         — refused because the account is in its lockout window
-  //   refused        — right password, but the account is disabled / pending / declined
+  //   refused        — right credential, but the account is disabled / pending / declined
+  //                    (or an admin trying the party magic link)
   //   totp_required  — password ok, a 2FA challenge was issued (the session
   //                    comes from /login/totp, which counts its own outcome)
   labelNames: ['result'],

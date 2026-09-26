@@ -354,6 +354,47 @@ describe('server/services/translator', () => {
   describe('aiGate: parallel batches never exceed AI_MAX_CONCURRENT', () => {
     afterEach(() => { delete process.env.AI_MAX_CONCURRENT; });
 
+    // harvest2 lane 1b review (S1/S2): a request-path translate() waits only
+    // briefly for a slot, and a tree whose batch finds the gate full does NOT
+    // fall back to one call per leaf.
+    const hold = () => {
+      const aiGate = require('../../server/services/aiGate');
+      let release;
+      const held = aiGate.withSlot(() => new Promise((r) => { release = r; }));
+      return { done: async () => { release(); await held; } };
+    };
+
+    test('translate() under a full gate gives up after ~1 s with null, no model call', async () => {
+      process.env.TRANSLATE_ENABLED = 'true';
+      process.env.ANTHROPIC_API_KEY = 'sk-x';
+      process.env.AI_MAX_CONCURRENT = '1';
+      const h = hold();
+      const started = Date.now();
+      try {
+        expect(await translator.translate({ text: 'Hello' })).toBeNull();
+        const ms = Date.now() - started;
+        expect(ms).toBeGreaterThanOrEqual(900);
+        expect(ms).toBeLessThan(3000);
+        expect(mockCreate).not.toHaveBeenCalled();
+      } finally {
+        await h.done();
+      }
+    });
+
+    test('a tree whose batch finds the gate full returns null — no per-leaf fan-out', async () => {
+      process.env.TRANSLATE_ENABLED = 'true';
+      process.env.ANTHROPIC_API_KEY = 'sk-x';
+      process.env.AI_MAX_CONCURRENT = '1';
+      process.env.TRANSLATE_TIMEOUT_MS = '20'; // batch queue wait = 40 ms
+      const h = hold();
+      try {
+        expect(await translator.translateTree({ a: 'one', b: 'two', c: 'three' })).toBeNull();
+        expect(mockCreate).not.toHaveBeenCalled();
+      } finally {
+        await h.done();
+      }
+    });
+
     test('a 110-leaf tree (5 chunks) under a cap of 2 runs at most 2 calls at once, and all land', async () => {
       process.env.TRANSLATE_ENABLED = 'true';
       process.env.ANTHROPIC_API_KEY = 'sk-x';

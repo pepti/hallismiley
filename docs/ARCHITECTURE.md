@@ -193,7 +193,8 @@ company/                  gitignored: plans, decisions, logs, market-research st
 - **Every role and account change on the admin surface writes a staff-audit
   row** ([harvest2-lane1b](history.d/2026-09-26-harvest2-lane1b-defects.md#harvest2-lane1b-2026-09-26)), whichever screen made it: the Users-page role dropdown writes
   `role.granted` / `role.revoked` (summary `via: 'users_page'`, one row per
-  role actually gained or dropped) exactly as the Members tab does; role
+  role actually gained or dropped, written on the transaction's client before
+  COMMIT) exactly as the Members tab does; role
   create/delete write `role.created` / `role.deleted`; a hard delete writes
   `user.deleted` (username + role, never contact details). A new action name
   goes into `staffAudit.ACTIONS` in the SAME change — `record()` refuses an
@@ -206,8 +207,9 @@ company/                  gitignored: plans, decisions, logs, market-research st
   icelandicstore #199; `signupEmailNonBlocking.test.js` hangs the mailer).
 - **`auth_login_attempts_total{result}`** ([harvest2-lane1b](history.d/2026-09-26-harvest2-lane1b-defects.md#harvest2-lane1b-2026-09-26)) is incremented on every sign-in
   outcome: `success` (session minted — `/login`, `/login/totp`, the party
-  magic link), `failure` (bad credentials or 2FA code), `locked`, `refused`
-  (right password, account disabled/pending/declined), `totp_required` (the
+  magic link), `failure` (bad credentials, 2FA code or magic link), `locked`,
+  `refused` (right credential, account disabled/pending/declined, or an
+  admin on the magic link), `totp_required` (the
   challenge was issued). A new login path counts its outcomes too.
 - **A cancelled `confirm()` says so** ([harvest2-lane1b](history.d/2026-09-26-harvest2-lane1b-defects.md#harvest2-lane1b-2026-09-26)) on the Users page (and the party
   revoke): an `info` toast `admin.actionCancelled`, never a bare `return` —
@@ -561,7 +563,11 @@ company/                  gitignored: plans, decisions, logs, market-research st
   background callers (the translator's parallel batches) use
   `withQueuedSlot` — FIFO wait, the call's own timeout starting only once the
   slot is held — and treat `AiBusyError` like any failure (target locale left
-  empty; the translator never throws). A request-path caller uses `withSlot`
+  empty; the translator never throws). A call a request awaits (`translate()`,
+  from `autoTranslateFields` before a save) waits at most 1 s, so wait + call
+  stay inside the 10 s shutdown grace; tree batches run in waves of
+  `maxConcurrent()` chunks and a BUSY batch is never retried per leaf (that
+  would multiply the calls the gate holds back). A request-path caller uses `withSlot`
   and lets `AiBusyError` reach the central error middleware: 429 +
   `Retry-After` + `reason: AI_BUSY`. It is resource protection, never a usage
   budget: no per-IP limiter on AI paths (ice's owner decision). The free

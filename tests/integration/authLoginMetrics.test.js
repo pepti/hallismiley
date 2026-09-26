@@ -81,6 +81,12 @@ describe('auth_login_attempts_total', () => {
     })).toEqual({ refused: 1 });
   });
 
+  test('the party magic link counts too: an unknown link is a failure', async () => {
+    expect(await deltas(async () => {
+      expect((await request(app).post('/auth/party-magic-login').send({ token: 'not-a-real-token' })).status).toBe(400);
+    })).toEqual({ failure: 1 });
+  });
+
   test('two-step: totp_required, then failure and success on /login/totp', async () => {
     const secret = totp.generateSecret();
     await makeUser({
