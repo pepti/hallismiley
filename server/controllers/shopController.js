@@ -17,6 +17,7 @@ const { t }                = require('../i18n');
 const { AnalyticsEvent }   = require('../models/Analytics');
 const { computeForCode, computeForCheckout } = require('../services/discountEngine');
 const Discount             = require('../models/Discount');
+const { decorateColorImages } = require('../utils/colorMatch');
 
 const MAX_QTY_PER_ITEM   = 50;
 const MAX_ITEMS_PER_ORDER = 20;
@@ -78,20 +79,44 @@ function buildLineName(product, variant) {
 // them would let any visitor read how much is on order, so they are stripped
 // for every viewer (harvested from icelandicstore #243). Inventory.decorate must
 // have run first.
+//
+// The warehouse codes go too (icelandicstore #62, harvest 2, 2026-09-26): `bin`
+// is the shelf location, and `sku` / `barcode` are the internal product number
+// and the scanner code. The storefront (ShopView, ProductView, the cart) reads
+// none of them — they belong to the admin product editor and the scanner, which
+// read /api/v1/admin/shop — and these public routes attach no session, so every
+// caller here is a visitor. An allow-list would be tighter still; the
+// deny-list mirrors ice's shape so the two stay mergeable.
+const PRODUCT_INTERNALS = ['stock', 'on_hand', 'committed', 'bin', 'sku', 'barcode'];
 function stripStockInternals(product) {
   const out = { ...product };
-  delete out.stock;
-  delete out.on_hand;
-  delete out.committed;
+  for (const k of PRODUCT_INTERNALS) delete out[k];
   if (Array.isArray(out.variants)) {
     out.variants = out.variants.map((v) => {
       const vc = { ...v };
-      delete vc.stock;
-      delete vc.on_hand;
-      delete vc.committed;
+      for (const k of PRODUCT_INTERNALS) delete vc[k];
       return vc;
     });
   }
+  return out;
+}
+
+// What a CUSTOMER may see of their own order row (icelandicstore #416 G5,
+// `customerOrderView`, harvest 2). Order.COLUMNS is the staff shape: it
+// carries staff tags, the Stripe session and payment-intent ids and the
+// stock-settlement stamp. An ALLOW-list, so a column added to COLUMNS later
+// stays staff-only until someone decides otherwise here. OrderHistoryView
+// reads order_number, created_at, status, total and currency. `vat_total` is
+// not here yet: Order.COLUMNS does not select it (harvest 2 lane 5 adds the
+// column) — name it here in the same change that selects it.
+const CUSTOMER_ORDER_FIELDS = [
+  'id', 'order_number', 'user_id', 'guest_email', 'guest_name', 'currency',
+  'subtotal', 'shipping', 'total', 'status', 'payment_status', 'fulfillment_status',
+  'shipping_method', 'shipping_address', 'paid_at', 'fulfilled_at', 'created_at', 'updated_at',
+];
+function customerOrderView(order) {
+  const out = {};
+  for (const k of CUSTOMER_ORDER_FIELDS) if (k in order) out[k] = order[k];
   return out;
 }
 
@@ -183,6 +208,9 @@ const shopController = {
         ProductVariant.listForProduct(product.id, { activeOnly: true }),
       ]);
       const full = await Inventory.decorate({ ...product, images, variants });
+      // `color_images` — which photo each colour shows, matched HERE, never in
+      // the browser (utils/colorMatch.js; ported from icelandicstore #265).
+      decorateColorImages(full);
       return res.json({ product: stripStockInternals(full) });
     } catch (err) { next(err); }
   },
@@ -438,7 +466,7 @@ const shopController = {
   // GET /api/v1/shop/orders/mine — logged-in user's order history
   async getMyOrders(req, res, next) {
     try {
-      const orders = await Order.findByUserId(req.user.id, { limit: 50 });
+      const orders = (await Order.findByUserId(req.user.id, { limit: 50 })).map(customerOrderView);
       return res.json({ orders });
     } catch (err) { next(err); }
   },

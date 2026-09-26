@@ -252,7 +252,7 @@ class Inventory {
   static async applyLines(client, lines, {
     userId = null, orderId = null,
     batchId = null, goodsReceiptId = null, clientToken = null,
-    collectShortfalls = false, refuseVariantParents = false,
+    collectShortfalls = false, refuseVariantParents = false, refuseArchived = false,
   } = {}) {
     if (!Array.isArray(lines) || lines.length === 0) {
       const e = new Error('No adjustments'); e.code = 'NO_ADJUSTMENTS'; throw e;
@@ -314,11 +314,16 @@ class Inventory {
       // product's history.
       const { rows: cur } = await client.query(
         line.variantId
-          ? `SELECT stock, product_id FROM product_variants WHERE id = $1 FOR UPDATE`
+          ? `SELECT stock, product_id, archived_at FROM product_variants WHERE id = $1 FOR UPDATE`
           : `SELECT stock, variant_axes FROM products WHERE id = $1 FOR UPDATE`,
         [id]
       );
-      if (!cur[0] || (line.variantId && String(cur[0].product_id) !== line.productId)) {
+      // A count or a receipt (refuseArchived) never moves an ARCHIVED variant
+      // (migration 119): it is deleted from the catalogue. Order fulfilment
+      // does not pass the flag — an order line may name an archived variant
+      // and must still ship or be restored.
+      if (!cur[0] || (line.variantId && String(cur[0].product_id) !== line.productId)
+          || (refuseArchived && line.variantId && cur[0].archived_at)) {
         const e = new Error('Adjustment line not found'); e.code = 'LINE_NOT_FOUND';
         e.index = line.i; e.productId = line.productId; e.variantId = line.variantId;
         throw e;
@@ -424,7 +429,7 @@ class Inventory {
     try {
       const results = await Inventory.applyLines(client, lines, {
         userId, batchId, goodsReceiptId, clientToken,
-        collectShortfalls: true, refuseVariantParents: true,
+        collectShortfalls: true, refuseVariantParents: true, refuseArchived: true,
       });
       await client.query('RELEASE SAVEPOINT inventory_batch');
       return { batchId, results };
@@ -485,9 +490,10 @@ class Inventory {
       if (variantId) {
         await client.query('SELECT 1 FROM products WHERE id = $1 FOR KEY SHARE', [String(productId)]);
         const { rows } = await client.query(
-          'SELECT stock, product_id FROM product_variants WHERE id = $1 FOR UPDATE', [String(variantId)]
+          'SELECT stock, product_id, archived_at FROM product_variants WHERE id = $1 FOR UPDATE', [String(variantId)]
         );
-        if (!rows[0] || String(rows[0].product_id) !== String(productId)) {
+        // An archived variant (119) is not correctable — it left the catalogue.
+        if (!rows[0] || String(rows[0].product_id) !== String(productId) || rows[0].archived_at) {
           const e = new Error('Adjustment line not found'); e.code = 'LINE_NOT_FOUND'; throw e;
         }
         previous = Number(rows[0].stock);
@@ -555,7 +561,7 @@ class Inventory {
          JOIN products p          ON p.id = v.product_id
          LEFT JOIN committed_v cv ON cv.product_variant_id = v.id
          LEFT JOIN sold sv        ON sv.product_variant_id = v.id
-        WHERE p.active = TRUE AND v.active = TRUE AND p.is_bookable IS NOT TRUE
+        WHERE p.active = TRUE AND v.active = TRUE AND v.archived_at IS NULL AND p.is_bookable IS NOT TRUE
           AND p.variant_axes IS NOT NULL AND p.variant_axes <> '[]'::jsonb
         ORDER BY name, variant_id NULLS FIRST`,
       [days]
@@ -579,7 +585,7 @@ class Inventory {
                 COALESCE(v.sku, p.sku) AS sku, COALESCE(v.barcode, p.barcode) AS barcode,
                 COALESCE(v.bin, p.bin) AS bin, v.stock, (p.active AND v.active) AS active
            FROM product_variants v JOIN products p ON p.id = v.product_id
-          WHERE v.id = ANY($1::text[])`, [vids]
+          WHERE v.id = ANY($1::text[]) AND v.archived_at IS NULL`, [vids]
       );
       for (const r of rows) out.set(`v:${r.variant_id}`, r);
     }
@@ -613,7 +619,7 @@ class Inventory {
   static async variantRefs(productId) {
     const { rows } = await db.query(
       `SELECT product_id, id AS variant_id FROM product_variants
-        WHERE product_id = $1 AND active = TRUE ORDER BY sku ASC, id`,
+        WHERE product_id = $1 AND active = TRUE AND archived_at IS NULL ORDER BY sku ASC, id`,
       [String(productId)]
     );
     return rows.map(r => ({ productId: r.product_id, variantId: r.variant_id }));
@@ -636,7 +642,7 @@ class Inventory {
          UNION ALL
          SELECT v.product_id, v.id, p.name
            FROM product_variants v JOIN products p ON p.id = v.product_id
-          WHERE p.is_bookable IS NOT TRUE
+          WHERE p.is_bookable IS NOT TRUE AND v.archived_at IS NULL
             AND (p.name ILIKE $1 OR v.sku ILIKE $1 OR v.barcode ILIKE $1 OR v.bin ILIKE $1
                  OR v.attributes::text ILIKE $1)
        ) hits

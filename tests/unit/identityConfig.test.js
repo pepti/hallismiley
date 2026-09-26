@@ -78,6 +78,15 @@ const ORANGE_SMILEY = {
     knowsAbout: ['Web Development', 'E-commerce', 'Inventory Management', 'Invoicing', 'VAT Accounting', 'Shopify Migration', 'Node.js', 'PostgreSQL'],
     sameAs: [],
   },
+  // Transactional email (harvest 2 lane 2, 2026-09-26): the header logo under
+  // public/assets/brand/ and optional palette overrides.
+  email: {
+    logo: 'orangesmiley-emblem.png',
+    logoWidth: 48,
+    logoHeight: 48,
+    logoWordmark: false,
+    palette: {},
+  },
 };
 
 // JSON round-trip strips Object.freeze so toEqual compares plain shapes.

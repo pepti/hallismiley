@@ -19,6 +19,7 @@ const { userHoldsAdminPowers, adminPowersSql } = require('../utils/adminRole');
 // searched as an address (ice #397): the list reads it as NULL + no_email.
 const { isPlaceholderEmail, realEmailSql, realEmailExpr } = require('../utils/placeholderEmail');
 const EMAIL_SHOWN = realEmailExpr('email');
+const { PENDING_APPROVAL_SQL } = require('../utils/signupApproval');
 
 // Only an admin may hold an MCP token (mcpAdminRoutes mints them; mcp/owner.js
 // refuses a non-admin owner on every call). When an account stops being an
@@ -77,9 +78,13 @@ const adminController = {
       // rows query and the count query, or pagination's total wouldn't match
       // the filtered set.
       const q = String(req.query.q || '').trim(); // String() guards array params (?q=a&q=b)
-      const whereSql = q
-        ? `WHERE (username ILIKE $1 OR ${EMAIL_SHOWN} ILIKE $1 OR display_name ILIKE $1)`
-        : '';
+      // ?status=pending — sign-ups awaiting approval, the list the "Í dag"
+      // card links to (services/adminHome.js counts PENDING_APPROVAL_SQL too;
+      // harvest 2 lane 5). Any other value is ignored.
+      const conds = [];
+      if (q) conds.push(`(username ILIKE $1 OR ${EMAIL_SHOWN} ILIKE $1 OR display_name ILIKE $1)`);
+      if (req.query.status === 'pending') conds.push(PENDING_APPROVAL_SQL);
+      const whereSql = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
       const term = q ? [`%${q}%`] : []; // $1 when present
 
       const { rows } = await dbQuery(

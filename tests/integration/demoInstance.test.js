@@ -27,7 +27,9 @@ beforeAll(async () => {
 
 describe('not a demo instance (the default)', () => {
   test('robots, headers, the page and the admin route are as before', async () => {
-    const robots = await request(app).get('/robots.txt');
+    // As the public host: off it, robots.txt is Disallow: / anyway
+    // (server/utils/indexability.js — supertest sends 127.0.0.1).
+    const robots = await request(app).get('/robots.txt').set('Host', new URL(process.env.APP_URL).host);
     expect(robots.text).toContain('Disallow: /auth/');
     expect(robots.text).not.toMatch(/^Disallow: \/$/m);
     const page = await request(app).get('/is/');

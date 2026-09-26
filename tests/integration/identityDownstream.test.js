@@ -32,6 +32,9 @@ const fs   = require('fs');
 const os   = require('os');
 const path = require('path');
 const request = require('supertest');
+// The public host (APP_URL's, pinned in tests/env.js): indexability is gated on
+// the request Host (server/utils/indexability.js) and supertest sends 127.0.0.1.
+const PUBLIC_HOST = new URL(process.env.APP_URL).host;
 const { composeTitle } = require('../../server/config/identity');
 
 // The product overlay a downstream would commit (server/i18n/product.<lc>.json):
@@ -213,7 +216,7 @@ describe('a downstream identity flows through the served page', () => {
   });
 
   test('the sitemap is the downstream nav + home + the legal pages, the locked /party once, and none of the company pages', async () => {
-    const res = await request(app).get('/sitemap.xml');
+    const res = await request(app).get('/sitemap.xml').set('Host', PUBLIC_HOST);
     expect(res.status).toBe(200);
     const locs = [...res.text.matchAll(/<loc>https:\/\/www\.hallismiley\.is\/(en|is)(\/[^<]*)<\/loc>/g)].map((m) => [m[1], m[2]]);
     const paths = locs.map(([, p]) => p);
@@ -271,7 +274,7 @@ describe('a downstream identity flows through the served page', () => {
 
   test('the nav routes are indexable and the company pages are not', async () => {
     for (const p of ['/en/verkefni', '/en/news', '/en/halli']) {
-      const res = await request(app).get(p);
+      const res = await request(app).get(p).set('Host', PUBLIC_HOST);
       expect(res.status).toBe(200);
       expect(robots(res.text)).toBe('index, follow');
     }
@@ -316,7 +319,7 @@ describe('identity.routes — a product’s own routes flow through the served p
 
   test('a re-described landing: title from the product’s key with {brand}, description from its key, in both locales', async () => {
     for (const lc of ['is', 'en']) {
-      const res = await request(app).get(`/${lc}/`);
+      const res = await request(app).get(`/${lc}/`).set('Host', PUBLIC_HOST);
       expect(res.status).toBe(200);
       expect(title(res.text)).toBe(esc(composeTitle(tDown(lc, 'meta.landing.title'), undefined, id)));
       expect(title(res.text)).toMatch(/^LedgerLink — /);
@@ -362,7 +365,7 @@ describe('identity.routes — a product’s own routes flow through the served p
     const cookie = await request(app).get('/en/aron13ara').set('Cookie', 'locale_choice=en');
     expect(cookie.status).toBe(301);
 
-    const is = await request(app).get('/is/aron13ara');
+    const is = await request(app).get('/is/aron13ara').set('Host', PUBLIC_HOST);
     expect(is.status).toBe(200);
     expect(is.text).toMatch(/<html lang="is"/);
     expect(title(is.text)).toBe(esc(OVERLAY.is['meta.aron13.title']));
@@ -373,7 +376,7 @@ describe('identity.routes — a product’s own routes flow through the served p
   });
 
   test('the sitemap lists the locked route under its locale only and never the noindex one', async () => {
-    const res = await request(app).get('/sitemap.xml');
+    const res = await request(app).get('/sitemap.xml').set('Host', PUBLIC_HOST);
     const locs = [...res.text.matchAll(/<loc>https:\/\/www\.hallismiley\.is\/(en|is)(\/[^<]*)<\/loc>/g)].map((m) => [m[1], m[2]]);
     const paths = locs.map(([, p]) => p);
     expect(paths.filter((p) => p === '/')).toHaveLength(2);
@@ -388,7 +391,7 @@ describe('identity.routes — a product’s own routes flow through the served p
   });
 
   test('robots.txt disallows the noindex routes per locale, next to the hidden ones', async () => {
-    const res = await request(app).get('/robots.txt');
+    const res = await request(app).get('/robots.txt').set('Host', PUBLIC_HOST);
     expect(res.status).toBe(200);
     for (const lc of ['en', 'is']) {
       expect(res.text).toContain(`Disallow: /${lc}/console`);
@@ -423,7 +426,7 @@ describe('identity.routes — a product’s own routes flow through the served p
   });
 
   test('an engine route the product does not describe keeps the engine meta', async () => {
-    const res = await request(app).get('/en/verkefni');
+    const res = await request(app).get('/en/verkefni').set('Host', PUBLIC_HOST);
     expect(title(res.text)).toBe(esc(composeTitle(tDown('en', 'meta.projects.title'), undefined, id)));
     expect(robots(res.text)).toBe('index, follow');
   });

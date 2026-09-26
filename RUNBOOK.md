@@ -174,8 +174,10 @@ destructive "deactivate every product not in the lineup" behavior — only
 ever use that on a local dev DB or during an authorised product-line pivot.
 
 ```bash
-# Dev (local Postgres, wipes-and-reloads the shop):
-node server/scripts/seed-shop.js --reset
+# Dev (local Postgres, wipes-and-reloads the shop). --reset is refused unless the
+# database is a local `_test` one or the local dev one named by --allow-dev-db
+# (server/scripts/targetGuard.js):
+node server/scripts/seed-shop.js --reset --allow-dev-db
 
 # Dev (local Postgres, preserves any admin-added rows):
 node server/scripts/seed-shop.js

@@ -9,6 +9,10 @@ const Order   = require('../models/Order');
 const Collection = require('../models/Collection');
 const Setting = require('../models/Setting');
 const { streamDeliveryNote, streamBulkDeliveryNotes } = require('../services/pdfService');
+// Harvest 2 lane 6c (ported from icelandicstore #334 / #432).
+const { loadDeliveryNoteItems, loadDeliveryNoteItemsForOrders } = require('../services/deliveryNote');
+const variantAdd = require('../services/variantAdd');
+const { axisKey } = require('../utils/variantAxis');
 const { UPLOAD_ROOT } = require('../config/paths');
 const { normaliseUpload, thumbPathFor } = require('../services/productImages');
 const orderExport = require('../services/orderExport');
@@ -16,6 +20,11 @@ const { t }           = require('../i18n');
 const { autoTranslateFields } = require('../services/autoTranslateFields');
 const { submitLocalized }     = require('../services/indexNow');
 const logger                  = require('../logger');
+// Harvest 2 lane 5 (reports): the window parser, the per-view check the
+// insights/marketing blocks make, and their queries.
+const { parseReportWindow }   = require('../utils/reportWindow');
+const { resolveViews }        = require('../auth/requireView');
+const SalesReports            = require('../models/SalesReports');
 
 // EN → IS pairs for auto-translation on admin save.
 // Shop-redesign section fields (category, subcategory, duration_minutes,
@@ -331,6 +340,25 @@ const BIN_MAX_LEN = 40;
 // The acting admin, for the audit rows.
 function actorId(req) { return (req.user && req.user.id) || null; }
 
+// Option keys in the product's own spelling (case-blind match against
+// variant_axes). uniq_product_variants_attrs_live compares the jsonb exactly,
+// so {"Color":…} beside {"color":…} would be two different rows — the bulk
+// writer (services/variantAdd.js) already writes the product's spelling; the
+// single-row routes do the same (invariant-reviewer, lane 6c). A key that
+// names no axis is kept as sent.
+function axisSpelled(attributes, axes) {
+  if (!attributes || typeof attributes !== 'object' || Array.isArray(attributes)) return attributes;
+  const byKey = new Map((Array.isArray(axes) ? axes : []).map(a => [axisKey(a), a]));
+  const out = {};
+  for (const [k, v] of Object.entries(attributes)) out[byKey.get(axisKey(k)) || k] = v;
+  return out;
+}
+
+// A 23505 from a variant write: the live SKU index or the live option index.
+function variantConflictKey(err) {
+  return /attrs/.test(String(err.constraint || '')) ? 'errors.admin.variantAttrsTaken' : 'errors.admin.skuTaken';
+}
+
 // A stock figure from an admin body: absent → undefined (leave it), else a
 // whole number ≥ 0 or a localised 400 via the returned error string.
 function stockError(req, body) {
@@ -625,9 +653,11 @@ const adminShopController = {
   // ── Product images ────────────────────────────────────────────────────────
 
   async uploadImage(req, res, next) {
+    // Resolved by adminShopRoutes' requireProduct BEFORE multer wrote anything
+    // (icelandicstore #150, harvest 2). Re-querying here would straddle the
+    // disk write: a product deleted mid-upload would 404 and strand the file.
+    const product = req.product;
     try {
-      const product = await Product.findById(req.params.id);
-      if (!product) return res.status(404).json({ error: t(req.locale, 'errors.admin.productNotFound'), code: 404 });
       if (!req.file) return res.status(400).json({ error: t(req.locale, 'errors.admin.noFileUploaded'), code: 400 });
 
       // Auto-orient, cap the long edge, strip metadata — and prove the bytes
@@ -648,7 +678,16 @@ const adminShopController = {
         alt_text: req.body.alt_text || null,
       });
       return res.status(201).json({ image });
-    } catch (err) { next(err); }
+    } catch (err) {
+      // The bytes are already on disk; without this an FK failure (the product
+      // deleted mid-upload) leaves an orphan on the uploads share.
+      if (req.file && req.file.path) fs.unlink(req.file.path, () => {});
+      // …and that FK failure is the product being gone, not a server fault.
+      if (err && err.code === '23503') {
+        return res.status(404).json({ error: t(req.locale, 'errors.admin.productNotFound'), code: 404 });
+      }
+      return next(err);
+    }
   },
 
   async deleteImage(req, res, next) {
@@ -675,6 +714,27 @@ const adminShopController = {
     } catch (err) { next(err); }
   },
 
+  // PATCH /products/:id/images/:imageId { color } — which variant colour this
+  // photo shows (ported from icelandicstore #182/#265; migration 119). Blank or
+  // null clears it. The editor offers only the product's ACTIVE colours
+  // (ice #270); the server stores the folded tag and matches it to the
+  // variants when the product page asks (utils/colorMatch.js).
+  async updateImageColor(req, res, next) {
+    try {
+      const body = req.body || {};
+      if (!('color' in body)) {
+        return res.status(400).json({ error: t(req.locale, 'errors.admin.imageColorRequired'), code: 400 });
+      }
+      const c = body.color;
+      if (c !== null && (typeof c !== 'string' || c.length > 100)) {
+        return res.status(400).json({ error: t(req.locale, 'errors.admin.imageColorRequired'), code: 400 });
+      }
+      const image = await Product.updateImageColor(req.params.id, req.params.imageId, c);
+      if (!image) return res.status(404).json({ error: t(req.locale, 'errors.admin.imageNotFound'), code: 404 });
+      return res.json({ image });
+    } catch (err) { next(err); }
+  },
+
   async reorderImages(req, res, next) {
     try {
       const { order } = req.body;
@@ -690,12 +750,14 @@ const adminShopController = {
 
   async listOrders(req, res, next) {
     try {
-      const { status, paymentStatus, fulfillmentStatus, q, sort, dir } = req.query;
+      const { status, paymentStatus, fulfillmentStatus, q, view, sort, dir } = req.query;
       const filter = {
         status:            status            ? String(status) : null,
         paymentStatus:     paymentStatus     ? String(paymentStatus) : null,
         fulfillmentStatus: fulfillmentStatus ? String(fulfillmentStatus) : null,
         q:                 q                 ? String(q) : null,
+        // A named list view (Order.ORDER_VIEWS: ?view=open) — the "Í dag" card links here.
+        view:              view              ? String(view) : null,
       };
       const [orders, total] = await Promise.all([
         Order.listAll({ ...filter, sort: sort ? String(sort) : 'date', dir: dir === 'asc' ? 'asc' : 'desc', limit: 200 }),
@@ -728,31 +790,28 @@ const adminShopController = {
       const product = await Product.findById(req.params.id);
       if (!product) return res.status(404).json({ error: t(req.locale, 'errors.admin.productNotFound'), code: 404 });
 
-      const { sku, attributes, price_isk, price_eur, stock, active } = req.body || {};
+      // Shape checks live in validateVariant (middleware/validate.js, ported
+      // from icelandicstore #194) so the messages are i18n'd. `barcode` and
+      // `bin` used to be dropped here although the model writes both — a
+      // barcode typed on a new grid row was silently lost (ice #194).
+      const { sku, attributes, price_isk, price_eur, stock, active, barcode, bin } = req.body || {};
       const stockErr = stockError(req, req.body);
       if (stockErr) return res.status(400).json({ error: stockErr, code: 400 });
-      if (!sku || typeof sku !== 'string' || sku.length > 100) {
-        return res.status(400).json({ error: 'sku is required (max 100 chars)', code: 400 });
-      }
-      if (!attributes || typeof attributes !== 'object' || Array.isArray(attributes)) {
-        return res.status(400).json({ error: 'attributes must be an object', code: 400 });
-      }
 
       const variant = await ProductVariant.create({
         product_id: product.id,
-        sku, attributes,
+        sku: String(sku).trim(), attributes: axisSpelled(attributes, product.variant_axes),
         price_isk: price_isk != null ? Number(price_isk) : null,
         price_eur: price_eur != null ? Number(price_eur) : null,
         stock: Number(stock) || 0,
         active: active !== false,
+        barcode: typeof barcode === 'string' && barcode.trim() ? barcode.trim() : null,
+        bin: typeof bin === 'string' && bin.trim() ? bin.trim() : null,
       }, { userId: actorId(req) });
       return res.status(201).json({ variant });
     } catch (err) {
       if (err.code === '23505') {
-        return res.status(409).json({
-          error: t(req.locale, 'errors.admin.variantAttrsTaken'),
-          code: 409,
-        });
+        return res.status(409).json({ error: t(req.locale, variantConflictKey(err)), code: 409 });
       }
       next(err);
     }
@@ -762,29 +821,74 @@ const adminShopController = {
     try {
       const stockErr = stockError(req, req.body);
       if (stockErr) return res.status(400).json({ error: stockErr, code: 400 });
-      // A variant of ANOTHER product is not this route's to edit.
-      const owned = await ProductVariant.findById(req.params.variantId);
-      if (!owned || String(owned.product_id) !== String(req.params.id)) {
+      // A variant of ANOTHER product — or an archived one — is not this
+      // route's to edit.
+      const owned = await ProductVariant.findByIdForProduct(req.params.variantId, req.params.id);
+      if (!owned) {
         return res.status(404).json({ error: t(req.locale, 'errors.admin.variantNotFound'), code: 404 });
       }
       // stockOpts: a stock cell edit lands in inventory_adjustments naming who
       // moved it (the variant grid PATCHes one field at a time — ice #275).
-      const variant = await ProductVariant.update(req.params.variantId, req.body || {}, stockOpts(req, req.body));
+      const body = { ...(req.body || {}) };
+      if (body.attributes !== undefined) {
+        const product = await Product.findById(req.params.id);
+        body.attributes = axisSpelled(body.attributes, product && product.variant_axes);
+      }
+      const variant = await ProductVariant.update(req.params.variantId, body, stockOpts(req, req.body));
       if (!variant) return res.status(404).json({ error: t(req.locale, 'errors.admin.variantNotFound'), code: 404 });
       return res.json({ variant });
     } catch (err) {
       if (err.code === '23505') {
-        return res.status(409).json({ error: t(req.locale, 'errors.admin.skuTaken'), code: 409 });
+        return res.status(409).json({ error: t(req.locale, variantConflictKey(err)), code: 409 });
       }
       next(err);
     }
   },
 
-  async deactivateVariant(req, res, next) {
+  // DELETE a variant for real (ported from icelandicstore #194). It used to
+  // mean active = false, which kept the SKU and the size taken for ever. A
+  // variant nothing names is deleted and frees both; one an order or the stock
+  // history still names is ARCHIVED (migration 119: out of every list, SKU and
+  // attribute slot freed, row kept). The answer says which, so the grid can
+  // explain it.
+  async deleteVariant(req, res, next) {
     try {
-      const variant = await ProductVariant.update(req.params.variantId, { active: false });
-      if (!variant) return res.status(404).json({ error: t(req.locale, 'errors.admin.variantNotFound'), code: 404 });
-      return res.json({ variant });
+      // The check and the delete run in one transaction under a row lock
+      // (ProductVariant.deleteOrArchive), so nothing can come to name the
+      // variant in between.
+      const result = await ProductVariant.deleteOrArchive(req.params.variantId, req.params.id);
+      if (!result) return res.status(404).json({ error: t(req.locale, 'errors.admin.variantNotFound'), code: 404 });
+      if (result.archived) {
+        return res.json({ deleted: false, archived: true, variant: result.variant, message: t(req.locale, 'errors.admin.variantArchived') });
+      }
+      return res.json({ deleted: true, archived: false, id: result.id });
+    } catch (err) { next(err); }
+  },
+
+  // POST /products/:id/variants/bulk { variants: [...], dry_run? } — several
+  // variants at once, whole or not at all (services/variantAdd.js, shared with
+  // the MCP add_variants tool; ported from icelandicstore #432). dry_run
+  // answers what would be created without writing.
+  async createVariantsBulk(req, res, next) {
+    try {
+      const body = req.body || {};
+      const result = await variantAdd.addVariants(req.params.id, body.variants, {
+        userId: actorId(req), source: 'admin', dryRun: body.dry_run === true,
+      });
+      if (!result.ok) {
+        if (result.reason === 'not_found') return res.status(404).json({ error: t(req.locale, 'errors.admin.productNotFound'), code: 404 });
+        if (result.reason === 'conflict') return res.status(409).json({ error: t(req.locale, 'errors.variantAdd.conflict'), code: 409 });
+        if (result.reason === 'merged') {
+          return res.status(409).json({
+            error: t(req.locale, 'errors.admin.productMerged'), code: 409,
+            reason: 'product_merged', movedTo: { id: result.product.merged_into_id },
+          });
+        }
+        const axes = Array.isArray(result.product && result.product.variant_axes) ? result.product.variant_axes : [];
+        const errors = variantAdd.describe(result.errors, req.locale, axes);
+        return res.status(result.status).json({ error: errors.map(e => e.message).join('; '), code: result.status, errors });
+      }
+      return res.status(result.dryRun ? 200 : 201).json({ dry_run: result.dryRun, axes: result.axes, variants: result.variants });
     } catch (err) { next(err); }
   },
 
@@ -829,11 +933,54 @@ const adminShopController = {
 
   // ── Reports ─────────────────────────────────────────────────────────────────
 
+  // GET /reports?from&to[&compare_from&compare_to][&bucket] — the sales report
+  // (harvest 2 lane 5; icelandicstore #414): per-currency KPIs with net sales,
+  // the comparison window's KPIs, the chart series. `?days=` (the previous
+  // release's call) still answers the trailing window — the old client runs
+  // during a self-update swap. An unparsable, empty or backwards window (either
+  // one) is a 400 in the envelope.
   async salesReport(req, res, next) {
     try {
-      const days = Number(req.query.days) || 30;
-      const report = await Order.salesReport({ days });
+      const q = req.query;
+      const windowed = ['from', 'to', 'compare_from', 'compare_to'].some(k => q[k] !== undefined);
+      if (!windowed) {
+        const days = Number(q.days) || 30;
+        return res.json({ report: await Order.salesReport({ days }) });
+      }
+      const w = parseReportWindow(q);
+      if (!w.ok) return res.status(400).json({ error: t(req.locale, 'errors.admin.invalidDateRange'), code: 400 });
+      const report = await Order.salesReport({ from: w.from, to: w.to, compare: w.compare, bucket: w.bucket });
       return res.json({ report });
+    } catch (err) { next(err); }
+  },
+
+  // GET /reports/insights?from&to — the analyses under the sales block
+  // (icelandicstore #419): fulfilment time, new customers, dormant customers.
+  // Fetched on its own so the sales block never waits for it. Customer names
+  // are sent only to a viewer who may see customers or orders; the counts go
+  // to every holder of the `sales` view.
+  async salesInsights(req, res, next) {
+    try {
+      const w = parseReportWindow(req.query);
+      if (!w.ok) return res.status(400).json({ error: t(req.locale, 'errors.admin.invalidDateRange'), code: 400 });
+      const views = await resolveViews(req);
+      const named = views.includes('*') || views.includes('customers') || views.includes('orders');
+      const insights = await SalesReports.insights({ from: w.from, to: w.to, named });
+      return res.json({ insights });
+    } catch (err) { next(err); }
+  },
+
+  // GET /reports/marketing?from&to — sessions by channel, sales that used a
+  // discount, and the campaigns (discounts) table. The traffic block needs the
+  // `analytics` view as well; without it the key is absent.
+  async marketingReport(req, res, next) {
+    try {
+      const w = parseReportWindow(req.query);
+      if (!w.ok) return res.status(400).json({ error: t(req.locale, 'errors.admin.invalidDateRange'), code: 400 });
+      const views = await resolveViews(req);
+      const traffic = views.includes('*') || views.includes('analytics');
+      const marketing = await SalesReports.marketing({ from: w.from, to: w.to, traffic });
+      return res.json({ marketing });
     } catch (err) { next(err); }
   },
 
@@ -842,8 +989,9 @@ const adminShopController = {
     try {
       const order = await Order.findById(req.params.id);
       if (!order) return res.status(404).json({ error: t(req.locale, 'errors.admin.orderNotFound'), code: 404 });
+      // Lines with the live SKU/bin, the size label and a picture (ice #334).
       const [items, store] = await Promise.all([
-        Order.listItems(order.id),
+        loadDeliveryNoteItems(order.id),
         Setting.getGeneralSettings(),
       ]);
       return streamDeliveryNote({ res, order, items, store });
@@ -860,16 +1008,13 @@ const adminShopController = {
         return res.status(400).json({ error: t(req.locale, 'errors.admin.bulkIdsInvalid'), code: 400 });
       }
       const store  = await Setting.getGeneralSettings();
-      const found  = await Promise.all(ids.map(async (id) => {
-        const order = await Order.findById(id);
-        if (!order) return null;
-        const items = await Order.listItems(order.id);
-        return { order, items };
-      }));
-      const orders = found.filter(Boolean);
-      if (!orders.length) {
+      const found  = (await Promise.all(ids.map(id => Order.findById(id)))).filter(Boolean);
+      if (!found.length) {
         return res.status(404).json({ error: t(req.locale, 'errors.admin.orderNotFound'), code: 404 });
       }
+      // One pass for the whole batch: each photo decoded once (ice #334).
+      const lists  = await loadDeliveryNoteItemsForOrders(found.map(o => o.id));
+      const orders = found.map((order, i) => ({ order, items: lists[i] }));
       return streamBulkDeliveryNotes({ res, orders, store });
     } catch (err) { next(err); }
   },
@@ -982,12 +1127,14 @@ const adminShopController = {
   // past the cap is refused (413), never truncated.
   async exportOrders(req, res, next) {
     try {
-      const { status, paymentStatus, fulfillmentStatus, q, sort, dir } = req.query;
+      const { status, paymentStatus, fulfillmentStatus, q, view, sort, dir } = req.query;
       const filter = {
         status:            status            ? String(status) : null,
         paymentStatus:     paymentStatus     ? String(paymentStatus) : null,
         fulfillmentStatus: fulfillmentStatus ? String(fulfillmentStatus) : null,
         q:                 q                 ? String(q) : null,
+        // A named list view (Order.ORDER_VIEWS: ?view=open) — the "Í dag" card links here.
+        view:              view              ? String(view) : null,
       };
       const cap = orderExport.limits.maxRows;
       const orders = await Order.listAll({ ...filter, sort: sort ? String(sort) : 'date', dir: dir === 'asc' ? 'asc' : 'desc', limit: cap + 1 });

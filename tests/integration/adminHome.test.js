@@ -175,7 +175,7 @@ describe('an admin', () => {
     const lead = body.todo.find(i => i.kind === 'leads_new');
     if (lead) expect(lead.detail.latest).toBe('Heildsala fyrir nýtt kaffihús á Selfossi');
     const cr = body.todo.find(i => i.kind === 'change_requests_open');
-    if (cr) expect(cr).toEqual(expect.objectContaining({ count: 1, route: '/admin/feedback' }));
+    if (cr) expect(cr).toEqual(expect.objectContaining({ count: 1, route: '/admin/feedback?status=open' }));
     // Never a state the model does not have.
     expect(kinds).not.toContain('change_requests_awaiting');
 

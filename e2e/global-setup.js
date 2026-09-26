@@ -1,6 +1,7 @@
 const { execSync } = require('child_process');
 const { Pool }     = require('pg');
 const { e2eDatabaseUrl } = require('./lib/dbUrl');
+const { checkTarget } = require('../server/scripts/targetGuard');
 const sweep = require('../tests/lib/testDbSweep');
 const { ensureTestServer, assertNotSharedPort } = require('../tests/lib/testPg');
 const { fileEnvValue } = require('../tests/workerDb');
@@ -19,6 +20,16 @@ const { fileEnvValue } = require('../tests/workerDb');
 // the DB is ready before the server boots. (Ported from icelandicstore #197.)
 module.exports = async function globalSetup() {
   const dbUrl = e2eDatabaseUrl();
+  // The steps below migrate, upsert the e2e admin and seed fixtures into this
+  // database, and the specs then write orders into it. Ported from
+  // icelandicstore #370 (the e2e fixtures guard) via the shared
+  // server/scripts/targetGuard.js: a LOCAL `_test` database only — an
+  // E2E_DATABASE_URL pointing at an Azure server, or a run inside a deployed
+  // container, is refused before anything connects.
+  const target = checkTarget({ databaseUrl: dbUrl, env: process.env });
+  if (!target.ok) {
+    throw new Error(`[e2e provision] refusing to provision: ${target.reason}.`);
+  }
   // The local test cluster may be down: with TEST_PG_DATA known and the
   // database on the TEST_PG_URL server, start it (tests/lib/testPg.js).
   // TEST_PG_URL names the throwaway test server — never the shared :5432 one.

@@ -62,8 +62,10 @@ describe('server i18n — implicit {siteName} / {legalName} / {siteHost}', () =>
     expect(t('en', 'email.invite.body')).toContain('An account has been created for you at orangesmiley.is.');
     expect(t('en', 'email.order.subject', { orderNumber: 'HP-2026-ABCD' })).toBe('Your Orange Smiley order HP-2026-ABCD');
     expect(t('is', 'email.order.subject', { orderNumber: 'HP-2026-ABCD' })).toBe('Pöntun þín hjá Orange Smiley HP-2026-ABCD');
-    expect(t('en', 'email.footer', { appUrl: 'https://www.orangesmiley.is' }))
-      .toContain('<a href="https://www.orangesmiley.is" style="color:#c9a84c;text-decoration:none;">orangesmiley.is</a>');
+    // The link's style is the shell's (the email palette's accent, underlined —
+    // harvest 2 lane 2), handed in as {linkStyle}; the table carries no colour.
+    expect(t('en', 'email.footer', { appUrl: 'https://www.orangesmiley.is', linkStyle: 'color:#4F3722;text-decoration:underline;' }))
+      .toContain('<a href="https://www.orangesmiley.is" style="color:#4F3722;text-decoration:underline;">orangesmiley.is</a>');
     expect(t('en', 'email.footer', { appUrl: 'x' })).not.toContain('{siteHost}');
   });
 
