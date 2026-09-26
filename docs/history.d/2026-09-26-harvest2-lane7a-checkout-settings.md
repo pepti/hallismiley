@@ -5,7 +5,7 @@ Lane 7a of Harvest 2 (generic icelandicstore work up to `ice@941cf51d`; Halli ap
 2026-09-26). Branch `harvest2/lane7a-checkout-settings`. Two ice features: #151 (`444bcc93`), the
 checkout settings screen, and #200 (`7196533a`), the time-limited announcement. Code carries
 "Ported from icelandicstore #NNN" where it was ported. **No migration**: every setting lives in
-`app_settings` (047) through `server/models/Setting.js`. ENHANCEMENTS #31.
+`app_settings` (047) through `server/models/Setting.js`. ENHANCEMENTS #32.
 
 **What shipped.**
 

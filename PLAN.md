@@ -324,6 +324,7 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
   their multer wrapper (hidden surfaces; the builders already use
   `ensureDestination`).
 - Harvest 2 lane 6c (2026-09-26, branch `harvest2/lane6c-variants`,
+- Harvest 2 lane 5 (2026-09-26, branch `harvest2/lane5-reports`,
   [harvest2-lane6c-2026-09-26](docs/history.d/2026-09-26-harvest2-lane6c-variants.md#harvest2-lane6c-2026-09-26)):
   the variant grid (add / delete / archive, colour → size order, header sort,
   "+ Add a colour"), the bulk variants route + MCP `add_variants` /
@@ -338,6 +339,18 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
   variants archived; (c) settled 2026-09-26: the other `--bg-nav`
   labels on `--gold` fills clear AA on every theme and are now pinned by the
   contrast test; lane 6a's stock code skips archived variants.
+  [harvest2-lane5-2026-09-26](docs/history.d/2026-09-26-harvest2-lane5-reports.md#harvest2-lane5-2026-09-26)):
+  the sales report's period presets + comparison + net sales, insights and
+  marketing sections, the "Í dag" attention cards with filtered links, an order
+  VAT snapshot at checkout (engine migration `121_order_vat_snapshot`,
+  number confirmed by the coordinator; 119 is reserved for lane 6c; approximate backfill), MCP
+  `sales_report` / `recent_orders`. Open: (a) **the new `adminSales.*`,
+  `adminHome.waiting.*` and list-filter strings are DRAFT** (Halli; listed in
+  the fragment); (b) the invoice still books each line at the product's
+  CURRENT rate — reading the new `order_items.vat_rate` snapshot there is a
+  books-path decision for Halli/Bókari; (c) the sold-out card counts the
+  Birgðavakt's `out` units (lane 6a, merged into this branch) and links to
+  `/admin/inventory?status=out`.
 - Upward harvest from icelandicstore `4694289`, lane 1 (chunks A then B, branch
   `harvest/ice-2026-09-24-ab`, not merged). Chunk A landed on the branch
   ([harvest-ice-a-2026-09-24](docs/HISTORY.md#harvest-ice-a-2026-09-24)): admin

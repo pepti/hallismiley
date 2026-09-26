@@ -32,4 +32,33 @@ async function ownerMayUseMcp(userId) {
   return hasRole(user, 'admin');
 }
 
-module.exports = { ownerMayUseMcp };
+// Which admin views the token's owner holds on this instance (harvest 2 lane
+// 5): a read tool that names a `view` (registry.js) is listed and callable only
+// when this says yes — the same answer the admin home gives the owner in a
+// browser (services/adminHome.js homeAccess): the role set's views, minus a
+// switched-off module's, minus — for an all-views holder — the product's
+// hidden admin views. So a product that hides its shop from the admin nav
+// does not hand its orders to Claude either. Returns (view) → boolean.
+async function ownerViewAccess(userId) {
+  const Role = require('../models/Role');
+  const { homeAccess } = require('../services/adminHome');
+  const { disabledAdminViews } = require('../config/modules');
+  const { identity } = require('../config/identity');
+  const { rows } = await db.query('SELECT role FROM users WHERE id = $1', [String(userId)]);
+  if (!rows.length) return () => false;
+  let roles;
+  try {
+    roles = await UserRole.listForUser(userId);
+  } catch (err) {
+    logger.warn({ err: err.message, userId }, 'mcp owner role lookup failed; using users.role');
+    roles = [];
+  }
+  const views = await Role.getViewsForRoles(roles.length ? roles : [rows[0].role]);
+  return homeAccess({
+    views,
+    disabled: disabledAdminViews(),
+    hidden: (identity.surface && identity.surface.hiddenAdminViews) || [],
+  }).can;
+}
+
+module.exports = { ownerMayUseMcp, ownerViewAccess };
