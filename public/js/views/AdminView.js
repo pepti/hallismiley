@@ -25,6 +25,7 @@
 import { isAuthenticated, canEdit, canSeeView } from '../services/auth.js';
 import { escHtml }         from '../utils/escHtml.js';
 import { formatNumber }    from '../utils/format.js';
+import { moduleEnabled }   from '../utils/modules.js';
 import { t, href, plural, isSingular, getLocale } from '../i18n/i18n.js';
 import { navigateReplace } from '../navigate.js';
 import { renderAdminShell, ADMIN_NAV, adminIcon } from '../components/AdminSidebar.js';
@@ -105,10 +106,6 @@ function countedTitle(n, oneKey, manyKey) {
 
 const unit = () => (isIs() ? 'kr.' : 'ISK');
 const link = (view, route) => (view && canSeeView(view) ? href(route) : null);
-const iconFor = (view) => {
-  for (const g of ADMIN_NAV) for (const it of g.items) if (it.id === view) return adminIcon(it.icon);
-  return '';
-};
 
 // ── Bíður þín ────────────────────────────────────────────────────────────────
 function vatDue(v) {
@@ -135,12 +132,29 @@ const TODO = {
     ],
     go: t('adminHome.waiting.overdue.action'),
   }),
-  vat_deadline: (i) => ({
-    title: vatDue({ dueOn: i.detail.dueOn, amount: i.amount }),
-    tag: inDays(i.detail.daysLeft),
-    detail: [t('adminHome.waiting.vat.period', { period: `${monthRange(i.detail.from, i.detail.to)} (${i.detail.period})` })],
-    go: t('adminHome.waiting.vat.action'),
-  }),
+  // Hönnuður 2026-09-26: the number column carries the days left, and the
+  // title reads on from it ("9" · "dagar í VSK-skil"); the amount and the
+  // period go to the detail line; the tag is a word, never the number again.
+  // At 0/1 days (or past) the title says so in words and the number cell is empty.
+  vat_deadline: (i) => {
+    const d = Number(i.detail.daysLeft);
+    const counted = d > 1;
+    let title;
+    if (counted) title = countedTitle(d, 'adminHome.waiting.vat.daysLeft.one', 'adminHome.waiting.vat.daysLeft.many');
+    else if (d === 1) title = t('adminHome.waiting.vat.titleTomorrow');
+    else if (d === 0) title = t('adminHome.waiting.vat.titleToday');
+    else title = t('adminHome.waiting.vat.titleOverdue');
+    return {
+      n: counted ? d : null,
+      title,
+      tag: t(i.tone === 'warn' ? 'adminHome.waiting.tag.urgent' : 'adminHome.waiting.tag.soon'),
+      detail: [
+        vatDue({ dueOn: i.detail.dueOn, amount: i.amount }),
+        t('adminHome.waiting.vat.period', { period: `${monthRange(i.detail.from, i.detail.to)} (${i.detail.period})` }),
+      ],
+      go: t('adminHome.waiting.vat.action'),
+    };
+  },
   orders_to_ship: (i) => ({
     title: countedTitle(i.count, 'adminHome.waiting.toShip.one', 'adminHome.waiting.toShip.many'),
     detail: [i.detail?.oldestAt ? t('adminHome.figures.openOrders.oldest', {
@@ -176,7 +190,7 @@ function renderTodo(todo) {
     const url = link(i.view, i.route);
     const tag = url ? 'a' : 'div';
     return `<li><${tag} class="idag-todo__item${i.tone ? ` idag-todo__item--${escHtml(i.tone)}` : ''}"${url ? ` href="${escHtml(url)}" data-route="${escHtml(i.route)}"` : ''} data-kind="${escHtml(i.kind)}">
-      <span class="idag-todo__n">${escHtml(formatNumber(i.count))}</span>
+      <span class="idag-todo__n">${c.n === null ? '' : escHtml(formatNumber(Number(c.n ?? i.count)))}</span>
       <span class="idag-todo__body"><span class="idag-todo__title">${escHtml(c.title)}</span>${c.tag ? `<span class="idag-todo__tag">${escHtml(c.tag)}</span>` : ''}${detail ? `
         <span class="idag-todo__detail">${escHtml(detail)}</span>` : ''}</span>
       ${url ? `<span class="idag-todo__go" aria-hidden="true">${escHtml(c.go)} →</span>` : ''}
@@ -217,7 +231,7 @@ function figSales(f) {
     + `<time datetime="${escHtml(f.asOf)}">${escHtml(t('adminHome.figures.asOf', { time: hhmm(f.asOf) }))}</time></span>`
     + value(f.total)
     + (f.total > 0 ? `<span class="idag-split" aria-hidden="true">${segs}</span>` : '')
-    + `<dl class="idag-legend">${legend}</dl>`
+    + (f.total > 0 ? `<dl class="idag-legend">${legend}</dl>` : '')
     + notes.map(n => `<span class="idag-fig__note">${n}</span>`).join('');
   return figShell('sales', link('sales', '/admin/sales'), '/admin/sales', inner);
 }
@@ -262,7 +276,7 @@ function figVat(f) {
   const month = isIs() ? IS_MONTHS_SHORT[due.month - 1] : enName(due, { month: 'short' });
   const inner = `<span class="idag-fig__label"><span>${escHtml(t('adminHome.figures.vat.label'))}</span><span>${escHtml(f.period)}</span></span>
     <span class="idag-fig__row">
-      <span class="idag-date" aria-hidden="true"><span class="idag-date__m">${escHtml(month)}</span><span class="idag-date__d">${due.day}</span></span>
+      <span class="idag-date" aria-hidden="true"><span class="idag-date__m">${escHtml(month)}</span><span class="idag-date__d">${Number(due.day)}</span></span>
       <span>${value(Math.abs(f.payable))}
         <span class="idag-fig__note">${escHtml(note)} · ${escHtml(inDays(f.daysLeft))}</span></span>
     </span>`;
@@ -288,10 +302,10 @@ function feedWhat(e) {
   switch (e.type) {
     case 'order_placed':
       return e.party
-        ? t('adminHome.feed.orderPlaced', { number: e.ref, customer: e.party, amount: isk(e.amount) })
-        : t('adminHome.feed.orderPlacedGuest', { number: e.ref, amount: isk(e.amount) });
+        ? t('adminHome.feed.orderPlaced', { number: e.ref, customer: e.party })
+        : t('adminHome.feed.orderPlacedGuest', { number: e.ref });
     case 'invoice_paid':
-      return t('adminHome.feed.invoicePaid', { customer: e.party || '', number: e.ref, amount: isk(e.amount) });
+      return t('adminHome.feed.invoicePaid', { customer: e.party || '', number: e.ref });
     case 'invoice_part_paid':
       return t('adminHome.feed.invoicePartPaid', { customer: e.party || '', number: e.ref, amount: isk(e.amount) });
     case 'lead_received':
@@ -303,6 +317,23 @@ function feedWhat(e) {
     default:
       return null;
   }
+}
+
+// The glyph says what HAPPENED (Hönnuður 2026-09-26), not which screen it is from.
+const FEED_ICON = {
+  order_placed: 'receipt',
+  invoice_paid: 'bank',
+  invoice_part_paid: 'bank',
+  lead_received: 'inbox',
+  change_request_received: 'activity',
+  change_request_resolved: 'activity',
+};
+
+// The amount rides the right-hand column; a part payment already says its
+// amount in the sentence ("greiddi 20.000 kr. inn á reikning 418"), so it is
+// not repeated there.
+function showsAmount(e) {
+  return e.amount !== null && e.amount !== undefined && e.type !== 'invoice_part_paid';
 }
 
 function relTime(at, now) {
@@ -333,9 +364,10 @@ function renderRecent(recent) {
     const tag = url ? 'a' : 'div';
     const who = e.type === 'lead_received' ? [e.company, e.summary].filter(Boolean).join(' · ') : '';
     return `${head}<li><${tag} class="idag-feed__item"${url ? ` href="${escHtml(url)}" data-route="${escHtml(e.route)}"` : ''} data-type="${escHtml(e.type)}">
-      <span class="idag-feed__icon" aria-hidden="true">${iconFor(e.view)}</span>
+      <span class="idag-feed__icon" aria-hidden="true">${adminIcon(FEED_ICON[e.type] || '')}</span>
       <span><span class="idag-feed__what">${escHtml(what)}</span>${who ? `<span class="idag-feed__who">${escHtml(who)}</span>` : ''}</span>
-      <span class="idag-feed__meta"><time datetime="${escHtml(e.at)}">${escHtml(relTime(e.at, now))}</time></span>
+      <span class="idag-feed__meta"><time datetime="${escHtml(e.at)}">${escHtml(relTime(e.at, now))}</time>${
+        showsAmount(e) ? `<span class="idag-feed__amount">${escHtml(isk(Number(e.amount)))}</span>` : ''}</span>
     </${tag}></li>`;
   }).join('');
   return `<section class="dash-card idag-feed-card" aria-labelledby="idag-feed-h" data-block="recent">
@@ -366,8 +398,8 @@ function renderSetup(s) {
   return `<section class="idag-setup" aria-labelledby="idag-setup-h" data-block="setup">
     <div><h2 class="idag-setup__title" id="idag-setup-h">${escHtml(t('adminHome.setup.title'))}</h2>
       <p class="idag-setup__lead">${escHtml(t('adminHome.setup.lead'))}</p>
-      <div class="idag-progress" role="progressbar" aria-valuemin="0" aria-valuemax="${steps.length}" aria-valuenow="${s.done}" aria-label="${escHtml(t('adminHome.setup.title'))}">${segs}</div>
-      <p class="idag-progress__text">${escHtml(t('adminHome.setup.progress', { done: s.done, total: s.total }))}</p></div>
+      <div class="idag-progress" role="progressbar" aria-valuemin="0" aria-valuemax="${Number(steps.length)}" aria-valuenow="${Number(s.done)}" aria-label="${escHtml(t('adminHome.setup.title'))}">${segs}</div>
+      <p class="idag-progress__text">${escHtml(t('adminHome.setup.progress', { done: Number(s.done), total: Number(s.total) }))}</p></div>
     <ol class="idag-steps">${rows}</ol></section>`;
 }
 
@@ -447,11 +479,13 @@ export class AdminView {
     // A role without the dashboard view — e.g. `solufolk` with only 'handbok' —
     // lands here from the NavBar "Admin" entry: forward it to the first sidebar
     // item it can see (the server would answer 403). An editor with no admin
-    // view at all gets the projects board, which the old overview linked to.
+    // view at all gets the projects board, which the old overview linked to —
+    // where this instance has the projects module; else the site.
     if (!canSeeView('dashboard')) {
       const first = ADMIN_NAV.flatMap(g => g.items)
         .find(item => !item.soon && item.route !== '/admin' && canSeeView(item.id));
-      const to = first ? first.route : (canEdit() ? '/admin/projects' : '/');
+      const to = first ? first.route
+        : (canEdit() && moduleEnabled('projects') ? '/admin/projects' : '/');
       navigateReplace(href(to));
       return document.createTextNode('');
     }

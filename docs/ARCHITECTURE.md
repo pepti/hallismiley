@@ -222,12 +222,12 @@ company/                  gitignored: plans, decisions, logs, market-research st
 |---|---|
 | Routes | `server/routes/adminNavRoutes.js` → `/api/v1/admin/nav-config` · `server/routes/adminHomeRoutes.js` → `GET /api/v1/admin/home` (the "Í dag" read) · `server/routes/userRoutes.js` → `PUT /api/v1/users/me/{page-width, page-width-motion, aside-width}` (the layout preferences) |
 | Models | `server/models/AdminNavConfig.js` |
-| Services | `server/services/adminHome.js` (the home's per-view sources, one `Promise.allSettled`) |
+| Services | `server/services/adminHome.js` (the home's per-view sources, one `Promise.allSettled`; `homeAccess`), `adminHomeCache.js` (the per-viewer answer cache; `clearHomeCache()` from the leads erasure and retention paths) |
 | Views | `public/js/views/AdminView.js` ("Í dag", the admin home at `/admin`), `AdminProjectsView.js` (the `/admin/projects` board, a Vefur line since 2026-09-26) |
 | Components | `public/js/components/AdminSidebar.js` (`ADMIN_NAV`), `adminNavLayout.js`, `adminSurface.js` (`HIDDEN_ADMIN_VIEWS`), `adminTable.js`, `adminPager.js`, `FilterBar.js`, `Toast.js`, `ToastLog.js`, `ErrorDialog.js` (every error toast), `Lightbox.js`, `ChangesList.js`, `PageWidthControl.js`, `AsideWidthControl.js`, `widthMenu.js` |
 | Client | `public/js/services/adminNav.js`, `toastLog.js`, `buildInfo.js`, `pageWidth.js`; `public/js/utils/stickyHScroll.js`, `listState.js`, `localPref.js`, `debounce.js`, `format.js`, `pageTitle.js`, `downloadCsv.js`, `csv.js`, `escHtml.js`, `api.js` |
 | CSS | `public/css/admin-shell.css`, `admin-dashboard.css`, `admin-idag.css` (the home; `idag-*` only, tokens only), `admin-kit.css`, `layout.css`, `components.css`, `variables.css`, `reset.css` |
-| Jest | `tests/integration/adminNavConfig.test.js`, `admin.test.js`, `adminHome.test.js`; `tests/unit/admin-surface-parity.test.js`, `admin-views-parity.test.js`, `adminTableKit.test.js`, `kitFormatters.test.js`, `pageTitle.test.js`, `debounce.test.js`, `csvClientParity.test.js`, `pageWidth.client.test.js`; `tests/integration/pageWidth.test.js` |
+| Jest | `tests/integration/adminNavConfig.test.js`, `admin.test.js`, `adminHome.test.js`; `tests/unit/admin-surface-parity.test.js`, `admin-views-parity.test.js`, `adminTableKit.test.js`, `kitFormatters.test.js`, `pageTitle.test.js`, `debounce.test.js`, `csvClientParity.test.js`, `pageWidth.client.test.js`, `adminHomeCache.test.js`; `tests/integration/pageWidth.test.js` |
 | e2e | `e2e/admin.spec.js`, `admin-home.spec.js`, `admin-surface.spec.js`, `admin-list-kit.spec.js`, `admin-sidebar-scroll.spec.js`, `admin-nav-colors.spec.js`, `admin-page-width.spec.js` |
 | Migrations | 053 (nav config), 111 (per-account page width, Mjúk hreyfing, side-column width, cookie choice) |
 | Features | [admin-shell](../features/admin-shell.md), [admin-ui-kit](../features/admin-ui-kit.md) |
@@ -282,7 +282,10 @@ company/                  gitignored: plans, decisions, logs, market-research st
   UTC, no labels from the server (the words are `adminHome.*`). Setup (Fyrstu
   skrefin) is admins only and derived, never stored; `null` once every step
   is done. A 45 s per-viewer cache is allowed (the header prints "staðan kl.
-  HH:MM"), never polling. Dashboard-less roles are forwarded to their first
+  HH:MM"), never polling: keyed on the viewer + resolved views + admin flag +
+  switched-off modules (`adminHomeCache.cacheKey`), never storing an answer
+  with `errors`, and cleared when a lead is erased or aged out (the feed
+  names enquirers). Dashboard-less roles are forwarded to their first
   visible view, an editor with none to the projects board
   ([admin-reshape](HISTORY.md#admin-reshape), [sales-staff](HISTORY.md#sales-staff)).
 - **Sales channels (`salesToday.byChannel`) — the rule is to confirm with
@@ -290,6 +293,10 @@ company/                  gitignored: plans, decisions, logs, market-research st
   wholesale = invoices issued today NOT created from an order (`invoices`);
   pos = till receipts rung up today (`pos`). A channel the instance has but
   the role lacks is omitted, never zeroed, and the figure says `partial`.
+  **The sales totals are gated by the CHANNEL views** (`orders` /
+  `invoices` / `pos`) — each is the screen that already shows those
+  documents — **not by the `sales` report view** (decision I1, security
+  review 2026-09-26); holding `sales` alone shows no sales figure.
   The comparison is the same weekday last week up to the same time of day.
   Till sales are aggregated, never listed in the feed. Change requests have
   only open/resolved: the home says "N opnar", never "waiting on you"
@@ -961,8 +968,14 @@ company/                  gitignored: plans, decisions, logs, market-research st
 - Slug folding (ð/þ/æ/ö, `server/utils/slug.js` and its ESM twin
   `public/js/utils/slug.js`) applies on GENERATION only; stored slugs never change
   ([harvest-2](HISTORY.md#harvest-2)).
+- The projects board (`AdminProjectsView`, `/admin/projects`) is gated on the
+  `projects` admin view OR editor; the `projects` module owns that view, so
+  switching the module off removes it for everyone. Its Vefur sidebar line is
+  hidden from all-views holders on this product
+  (`identity.surface.hiddenAdminViews`, now in the engine defaults too); the
+  route stays live and the view grantable ([admin-home-idag-2026-09-26](HISTORY.md#admin-home-idag-2026-09-26)).
 
-**History**: [r1](HISTORY.md#r1) · [harvest-2](HISTORY.md#harvest-2)
+**History**: [r1](HISTORY.md#r1) · [harvest-2](HISTORY.md#harvest-2) · [admin-home-idag-2026-09-26](HISTORY.md#admin-home-idag-2026-09-26)
 
 ## 13. Monitoring — event logs, metrics, analytics
 

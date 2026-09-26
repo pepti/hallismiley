@@ -346,6 +346,26 @@ async function setupSource(userId, can) {
   return { done: doneCount, total: steps.length, steps };
 }
 
+// ── Access ────────────────────────────────────────────────────────────────────
+
+/**
+ * Which views the home may compute for one viewer. Pure; the route feeds it
+ * the resolved views (requireView.resolveViews), the switched-off modules'
+ * views and the product's hidden admin views.
+ *   instanceLacks(id): this INSTANCE has no such screen for this viewer — its
+ *     module is off, or the product hides it from an all-views holder (the
+ *     sidebar's rule; an explicit grant is always shown);
+ *   can(id): held AND not lacking.
+ */
+function homeAccess({ views = [], disabled = [], hidden = [] } = {}) {
+  const all = views.includes('*');
+  const off = new Set(disabled);
+  const hide = new Set(hidden);
+  const instanceLacks = id => off.has(id) || (all && hide.has(id));
+  const can = id => !instanceLacks(id) && (all || views.includes(id));
+  return { can, instanceLacks };
+}
+
 // ── Assembly ──────────────────────────────────────────────────────────────────
 
 /**
@@ -387,7 +407,7 @@ async function buildHome({ can, instanceLacks = () => false, isAdmin = false, us
   settled.forEach((s, i) => {
     const name = names[i];
     if (s.status === 'fulfilled') { out[name] = s.value; return; }
-    logger.error({ err: s.reason?.message, source: name }, 'adminHome: a source failed; its blocks are left out');
+    logger.error({ err: s.reason, source: name }, 'adminHome: a source failed; its blocks are left out');
     for (const b of jobs[name].blocks) if (!errors.includes(b)) errors.push(b);
     out[name] = undefined;
   });
@@ -492,4 +512,4 @@ async function buildHome({ can, instanceLacks = () => false, isAdmin = false, us
   return body;
 }
 
-module.exports = { buildHome, CHANNELS, VAT_TODO_DAYS, VAT_WARN_DAYS };
+module.exports = { buildHome, homeAccess, CHANNELS, VAT_TODO_DAYS, VAT_WARN_DAYS };

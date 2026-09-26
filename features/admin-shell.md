@@ -11,6 +11,8 @@ paths:
   - public/js/views/AdminView.js
   - server/routes/adminHomeRoutes.js
   - server/services/adminHome.js
+  - server/services/adminHomeCache.js
+  - tests/unit/adminHomeCache.test.js
   - public/css/admin-idag.css
   - tests/integration/adminHome.test.js
   - e2e/admin-home.spec.js

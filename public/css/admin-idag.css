@@ -39,6 +39,14 @@
   .idag-grid--solo { grid-template-columns: minmax(0, 1fr); }
   .idag-main { display: flex; flex-direction: column; gap: var(--sp-5); min-width: 0; }
   .idag-grid > .idag-tally { position: sticky; top: calc(var(--nav-h) + var(--sp-5)); }
+  /* No main column (a role that sees figures only): the rail spreads its
+     figures across the width instead of a lone 300px strip. */
+  .idag-grid--solo > .idag-tally .idag-tally__list { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); column-gap: var(--sp-5); }
+}
+/* A short viewport: a sticky rail taller than the window would hide its own
+   lower figures, so it scrolls with the page. */
+@media (max-height: 759.98px) {
+  .idag-grid > .idag-tally { position: static; }
 }
 
 /* The two list blocks reuse .dash-card / .dash-card__head / __title. The kit's
@@ -123,10 +131,14 @@
 .idag-fig:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
 a.idag-fig:hover .idag-fig__label { color: var(--text-primary); }
 .idag-fig__label {
-  display: flex; justify-content: space-between; gap: var(--sp-2);
+  display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--sp-2); column-gap: var(--sp-3);
   font-size: 0.7rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
   color: var(--text-secondary);
 }
+/* Each half stays on one line; when both do not fit, the right-hand one
+   wraps below and keeps to the right. */
+.idag-fig__label > * { white-space: nowrap; }
+.idag-fig__label > :last-child:not(:first-child) { margin-left: auto; }
 .idag-fig__label time { font-family: var(--font-mono); font-weight: 400; letter-spacing: 0; text-transform: none; }
 .idag-fig__value {
   display: block; margin-top: var(--sp-1);

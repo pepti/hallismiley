@@ -128,7 +128,15 @@ test.describe('admin nav — hidden-by-policy retail lines', () => {
     // The home resolves — no skeleton is left behind.
     await expect(page.locator('.idag .admin-skeleton__bar')).toHaveCount(0, { timeout: 15_000 });
 
-    await page.click('.admin-sidebar a[data-route="/admin/projects"]');
+    // Through its sidebar line where the product shows it; by URL where the
+    // product hides it (identity.surface.hiddenAdminViews — the route stays live).
+    const line = page.locator('.admin-sidebar a[data-route="/admin/projects"]');
+    if (HIDDEN.includes('projects')) {
+      await expect(line).toHaveCount(0);
+      await gotoAndSettle(page, '/admin/projects');
+    } else {
+      await line.click();
+    }
     await expect(page.locator('#add-project-btn')).toBeVisible();
     await expect(page.locator('.idag')).toHaveCount(0);
   });

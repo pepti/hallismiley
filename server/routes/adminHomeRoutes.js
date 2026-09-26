@@ -15,50 +15,32 @@
 //      (identity.surface.hiddenAdminViews — the sidebar's rule: an explicit
 //      grant is always shown, a wildcard skips the hidden retail surface).
 //
-// A per-viewer answer is cached for CACHE_MS: the page prints "staðan kl.
-// HH:MM", so a figure up to a minute old is honest, and a reload storm costs
-// one computation. No polling anywhere. Off under NODE_ENV=test so every
-// integration test reads the database it just wrote.
+// A per-viewer answer is cached briefly (services/adminHomeCache.js — the key,
+// the TTL and what is never cached are documented there). No polling anywhere.
 const express = require('express');
 const router = express.Router();
 
 const { requireAuth } = require('../auth/middleware');
 const { requireView, resolveViews } = require('../auth/requireView');
 const { hasRole } = require('../auth/roles');
-const { ALL } = require('../auth/adminViews');
 const { disabledAdminViews } = require('../config/modules');
 const { identity } = require('../config/identity');
-const { buildHome } = require('../services/adminHome');
-
-const CACHE_MS = process.env.NODE_ENV === 'test' ? 0 : 45_000;
-const CACHE_MAX = 500;
-const cache = new Map(); // key → { exp, body }
-
-function cacheGet(key) {
-  const hit = cache.get(key);
-  if (!hit) return null;
-  if (hit.exp <= Date.now()) { cache.delete(key); return null; }
-  return hit.body;
-}
-
-function cacheSet(key, body) {
-  if (!CACHE_MS) return;
-  if (cache.size >= CACHE_MAX) cache.delete(cache.keys().next().value); // oldest first
-  cache.set(key, { exp: Date.now() + CACHE_MS, body });
-}
+const { buildHome, homeAccess } = require('../services/adminHome');
+const { cacheKey, cacheGet, cacheSet } = require('../services/adminHomeCache');
 
 router.get('/', requireAuth, requireView('dashboard'), async (req, res, next) => {
   try {
     res.set('Cache-Control', 'no-store');
     const views = await resolveViews(req);
-    const all = views.includes(ALL);
-    const disabled = new Set(disabledAdminViews());
-    const hidden = new Set((identity.surface && identity.surface.hiddenAdminViews) || []);
-    const instanceLacks = id => disabled.has(id) || (all && hidden.has(id));
-    const can = id => !instanceLacks(id) && (all || views.includes(id));
+    const disabledList = disabledAdminViews();
+    const { can, instanceLacks } = homeAccess({
+      views,
+      disabled: disabledList,
+      hidden: (identity.surface && identity.surface.hiddenAdminViews) || [],
+    });
     const isAdmin = hasRole(req.user, 'admin');
 
-    const key = `${req.user.id}|${isAdmin ? 'a' : ''}|${[...views].sort().join(',')}|${[...disabled].sort().join(',')}`;
+    const key = cacheKey(req.user, views, disabledList, isAdmin);
     const cached = cacheGet(key);
     if (cached) return res.json(cached);
 

@@ -16,9 +16,11 @@ const Role = require('../../server/models/Role');
 const Bin = require('../../server/models/Bin');
 const Setting = require('../../server/models/Setting');
 const ledger = require('../../server/services/bookkeeping/ledgerService');
-const { buildHome } = require('../../server/services/adminHome');
+const { buildHome, homeAccess } = require('../../server/services/adminHome');
 const { identity } = require('../../server/config/identity');
-const { disabledAdminViews } = require('../../server/config/modules');
+const {
+  disabledAdminViews, setModuleSwitch, resetAdminSwitchesForTests,
+} = require('../../server/config/modules');
 const {
   createTestAdminUser, createTestModeratorUser, getTestSessionCookie, cleanTables,
 } = require('../helpers');
@@ -248,6 +250,71 @@ describe('a restricted role (orders, bins, pos — the counter)', () => {
     expect(raw).not.toContain('Leynd Fyrirspurn');
     expect(raw).not.toContain('receivables');
     expect(raw).not.toContain('vatNext');
+  });
+});
+
+describe('what the instance lacks', () => {
+  afterEach(async () => {
+    await setModuleSwitch('books', true);
+    resetAdminSwitchesForTests();
+    await db.query(`DELETE FROM app_settings WHERE key = 'modules.admin_off'`);
+  });
+
+  test('books switched off: an `ar`/`vat` role gets no receivables or VAT keys at all', async () => {
+    await ledger.withTransaction(c => ledger.postEntry(c, {
+      entryDate: '2017-03-15', memo: 'adminHome test', sourceType: 'manual', createdBy: adminId,
+      lines: [{ accountCode: '1100', debit: 1240 }, { accountCode: '4110', credit: 1000 }, { accountCode: '2200', credit: 240, vatRate: 24 }],
+    }));
+    await db.query(
+      `INSERT INTO tax_deadlines (kind, period, due_on, label_is, label_en, note)
+       VALUES ('vsk', '2017-P2', (now() AT TIME ZONE 'Atlantic/Reykjavik')::date, 'x', 'x', 'adminHome test')`);
+    await insertInvoice({ customer: 'Hótel Heiði ehf.', total: 50000, issuedAt: "now() - INTERVAL '60 days'", dueAt: "now() - INTERVAL '40 days'" });
+    const cookie = await makeRoleUser('home-books-off', ['dashboard', 'ar', 'vat', 'invoices'], 'home-booksoff-user');
+
+    // On: the role sees its books blocks.
+    let res = await request(app).get(URL).set('Cookie', cookie);
+    expect(res.body.figures.receivables).toBeDefined();
+
+    const r = await setModuleSwitch('books', false);
+    expect(r.ok).toBe(true);
+    res = await request(app).get(URL).set('Cookie', cookie);
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toBeUndefined();
+    expect(res.body.todo).toEqual([]);
+    expect(res.body.figures).not.toHaveProperty('receivables');
+    expect(res.body.figures).not.toHaveProperty('vatNext');
+    // `invoices` is a books view too: no wholesale channel, no payments feed.
+    expect(res.body.figures).not.toHaveProperty('salesToday');
+    expect(res.body.recent).toEqual([]);
+  });
+
+  test('a wildcard admin on a product that hides orders/bins/pos gets none of those blocks, and partial:false', async () => {
+    await insertOrder({ total: 11980 });
+    await insertInvoice({ series: 'receipt', customer: 'Almenn sala', total: 2400, dueAt: 'now()' });
+    await insertInvoice({ total: 5000 }); // wholesale today: the channel the admin still sees
+    await db.query(
+      `INSERT INTO products (slug, name, description, price_isk, price_eur, stock, sku, active, bin)
+       VALUES ('home-no-bin-2', 'Eþíópía Guji 250 g', '', 5000, 30, 5, 'HOME-2', TRUE, NULL)
+       ON CONFLICT (slug) DO UPDATE SET active = TRUE, bin = NULL`);
+    const RETAIL = ['products', 'collections', 'bins', 'orders', 'discounts', 'sales', 'pos', 'background'];
+    const { can, instanceLacks } = homeAccess({ views: ['*'], disabled: [], hidden: RETAIL });
+    const home = await buildHome({ can, instanceLacks, isAdmin: true, userId: adminId });
+    const kinds = home.todo.map(i => i.kind);
+    expect(kinds).not.toContain('orders_to_ship');
+    expect(kinds).not.toContain('bins_unshelved');
+    expect(home.figures).not.toHaveProperty('openOrders');
+    expect(home.figures.salesToday.byChannel.map(c => c.channel)).toEqual(['wholesale']);
+    expect(home.figures.salesToday.partial).toBe(false);
+    expect(home.recent.some(e => e.type === 'order_placed')).toBe(false);
+
+    // The same through HTTP where THIS product hides them (Orange Smiley does).
+    if (['orders', 'bins', 'pos'].every(v => HIDDEN.has(v))) {
+      const res = await request(app).get(URL).set('Cookie', adminCookie);
+      expect(res.body.todo.map(i => i.kind)).not.toContain('orders_to_ship');
+      expect(res.body.todo.map(i => i.kind)).not.toContain('bins_unshelved');
+      expect(res.body.figures).not.toHaveProperty('openOrders');
+      expect(res.body.figures.salesToday.partial).toBe(false);
+    }
   });
 });
 

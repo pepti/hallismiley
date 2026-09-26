@@ -3368,3 +3368,43 @@ the blocks painted, a 390px phone has no sideways scroll, and each theme in the
 picker paints the status line and the rail from its own tokens.
 `e2e/admin-surface.spec.js` adapted (the home, then the board via its new
 sidebar line). No migration.
+
+**Review pass (same day).** Three reviews (Öryggisvörður, invariant-reviewer,
+Hönnuður) folded in before merge:
+- **Verkefni is hidden on this product** (Halli 2026-09-24: projects hidden for
+  now): `projects` joins `identity.surface.hiddenAdminViews`. This repo's
+  committed `client.json` must equal the engine defaults (the
+  `identityConfig` pin), so the id went into the schema default
+  (`clientConfig.js`), the client fallback (`utils/identity.js`) and the pin
+  too — every downstream that keeps the default hides the line, which is where
+  the board stood before this chunk (unlisted). The view stays live and
+  grantable; the specs reach the board by URL where the line is hidden. A
+  moderator with no admin view falls back to `/` where the `projects` module
+  is off. `features/projects.md` records the view and the gate.
+- **Cache** moved to `server/services/adminHomeCache.js`: a pure
+  `cacheKey(user, views, disabled, isAdmin)` (unit-tested), an answer with
+  `errors` is never stored, and `clearHomeCache()` runs on lead erasure
+  (`leadsController.remove`) and the retention job (`leadsCleanup`). The view
+  resolution is a pure `homeAccess()` in `adminHome.js`. Sources log the error
+  object, not its message.
+- **Decision I1** (recorded in ARCHITECTURE §2): the sales figure is gated by
+  the channel views (`orders` / `invoices` / `pos`), not the `sales`
+  report view.
+- **Design** (Hönnuður): the VSK row counts the days in its number column
+  ("9" · "dagar í VSK-skil"), puts the amount and the period on the detail
+  line and a word in the tag (Á næstunni / Brýnt); at one day, today or past it
+  says so in words with an empty number cell. The rail stops being sticky on a
+  viewport under 760px tall; a figure label wraps its right half below instead
+  of crushing it; the feed's amounts are back in their own column (a part
+  payment keeps its amount in the sentence only), its glyphs follow the event
+  type; the channel legend shows only when there are sales; relative times are
+  lower-case metadata ("fyrir 4 mín."); a figures-only grid spreads the rail
+  across the width. New DRÖG keys: `waiting.tag.soon`, `waiting.tag.urgent`,
+  `waiting.vat.daysLeft.*`, `waiting.vat.titleToday`, `.titleTomorrow`,
+  `.titleOverdue`; changed: `figures.receivables.invoices.*` ("{n} reikningar",
+  no "ógreiddir"), `feed.orderPlaced`, `.orderPlacedGuest`, `.invoicePaid` (no
+  amount), `time.justNow`, `time.minutesAgo.*`.
+- New tests: `tests/unit/adminHomeCache.test.js`; in `adminHome.test.js`, the
+  books module switched off (an `ar`/`vat`/`invoices` role gets none of its
+  keys) and a wildcard admin on a product that hides orders/bins/pos (none of
+  those blocks, `partial: false`).

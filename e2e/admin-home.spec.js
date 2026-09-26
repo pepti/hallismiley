@@ -88,8 +88,9 @@ test.describe('admin home — Í dag', () => {
       await expect(page.locator('.idag-setup')).toBeVisible();
       await expect(page.locator('.idag-step[data-step="twoStep"]')).toBeVisible();
     }
-    // The projects board is a Vefur sidebar line now.
-    await expect(page.locator('.admin-sidebar a[data-route="/admin/projects"]')).toHaveCount(1);
+    // The projects board is a Vefur sidebar line now — unless this product
+    // hides it from all-views holders (Orange Smiley does: projects are hidden).
+    await expect(page.locator('.admin-sidebar a[data-route="/admin/projects"]')).toHaveCount(HIDDEN.has('projects') ? 0 : 1);
     expect(errors).toEqual([]);
   });
 
