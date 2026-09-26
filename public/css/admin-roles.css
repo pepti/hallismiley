@@ -103,8 +103,11 @@
 }
 
 /* ── Sticky save bar (only while there are unsaved changes or errors) ─────── */
+/* It sticks 76px above the viewport's bottom edge, clear of the fixed
+   round buttons in the bottom corners (the theme picker, "Óska eftir
+   breytingu"), which otherwise sat on top of Save. */
 .role-savebar {
-  position: sticky; bottom: 0; z-index: 5;
+  position: sticky; bottom: 76px; z-index: 5;
   display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-3);
   margin-top: var(--sp-4); padding: var(--sp-3) var(--sp-4);
   background: var(--bg-elevated);
@@ -117,7 +120,12 @@
 .role-savebar__msg { font-size: 0.85rem; color: var(--text-primary); }
 .role-savebar__errors { margin: var(--sp-1) 0 0; padding-left: 1.1em; font-size: 0.8rem; color: var(--error); }
 .role-savebar__errors:empty { display: none; }
-.role-savebar__actions { display: flex; gap: var(--sp-2); }
+.role-savebar__actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+@media (max-width: 600px) {
+  .role-savebar { padding: var(--sp-3); }
+  .role-savebar__actions { flex: 1 1 100%; }
+  .role-savebar__actions .btn { flex: 1 1 0; min-width: 0; white-space: normal; }
+}
 
 /* ── Tabs (Roles | Members) ───────────────────────────────────────────────── */
 .role-tabs {

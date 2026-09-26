@@ -21,6 +21,7 @@ paths:
   - server/utils/roleName.js
   - public/js/utils/roleLabel.js
   - tests/unit/roleName.test.js
+  - e2e/admin-roles-grid.spec.js
 migrations: [056_dynamic_roles, 061_user_roles, 116_role_label]
 since: 2026-08-09
 origin: null
