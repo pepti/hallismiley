@@ -22,10 +22,9 @@ DO $$
     FOR c IN
       SELECT con.conname
         FROM pg_constraint con
-        JOIN pg_class rel ON rel.oid = con.conrelid
         JOIN pg_attribute att
           ON att.attrelid = con.conrelid AND att.attnum = ANY (con.conkey)
-       WHERE rel.relname = 'product_variants'
+       WHERE con.conrelid = 'product_variants'::regclass
          AND con.contype = 'u'
          AND array_length(con.conkey, 1) = 1
          AND att.attname = 'sku'

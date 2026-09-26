@@ -256,6 +256,13 @@ nothing:
   controllers set it inline the same way (`password_required`,
   `username_taken`, `POSSIBLE_DUPLICATE`, `INSUFFICIENT_STOCK`…). A 5xx never
   carries one.
+- **`errors`** — a list of per-row problems next to `error` (which joins
+  their messages) when one request carries many rows and every problem is
+  reported at once: `POST /api/v1/admin/shop/products/:id/variants/bulk`
+  answers 400 / 409 with `errors: [{ index, field, reason, value?, message }]`
+  (`index` counts from 0, `null` for the list itself; `reason` is stable, the
+  `message` localised) —
+  [harvest2-lane6c](history.d/2026-09-26-harvest2-lane6c-variants.md#harvest2-lane6c-2026-09-26).
 - **`retryable: true`** — on the two "busy, send it again" answers; nothing
   happened, send the same request again:
 
@@ -317,7 +324,7 @@ router's own gate still applies behind it.
 | `/api/v1/analytics` | `analyticsRoutes.js` | public beacon | `RUNBOOK.md` (Analytics) |
 | `/api/v1/change-requests` | `changeRequestRoutes.js` | `changeRequestGate` (admin, and non-prod or switch on) | — |
 | `/api/v1/system` | `systemRoutes.js` | `/changes` admin (above the module gate); `/version`, `/updates` and the writes are behind the `modules.selfUpdate.enabled` gate (404 when off) and the `updates` view / admin | `docs/SELF-UPDATE.md` |
-| `/api/v1/admin/shop` | `adminShopRoutes.js` | `products` / `collections` / `sales` views per sub-path (hidden retail surface). Variants (harvest 2 lane 6c): `POST /products/:id/variants` and `PATCH …/:variantId` run `validateVariant` (localised 400s; PATCH may change `attributes`, 409 on a live collision); `DELETE …/:variantId` → `{ deleted: true }`, or `{ archived: true, variant, message }` when an order line or the stock history names it (the SKU and option slot are freed either way); `POST /products/:id/variants/bulk` `{ variants: [{ attributes, sku, barcode?, price_isk?, price_eur?, bin? }], dry_run? }` → 200 (dry run) / 201 `{ variants }` / 400 or 409 `{ errors: [{ index, field, reason, value, message }] }`, whole or nothing, stock 0; `PATCH /products/:id/images/:imageId` `{ color }` (null clears) → `{ image }`. All CSRF | [ARCHITECTURE §11](ARCHITECTURE.md#11-shop--cart-checkout-orders-products-collections-bins-discounts-hidden-surface) · [HISTORY](history.d/2026-09-26-harvest2-lane6c-variants.md#harvest2-lane6c-2026-09-26) |
+| `/api/v1/admin/shop` | `adminShopRoutes.js` | `products` / `collections` / `sales` views per sub-path (hidden retail surface). Variants (harvest 2 lane 6c): `POST /products/:id/variants` and `PATCH …/:variantId` run `validateVariant` (localised 400s; PATCH may change `attributes`, 409 on a live collision); `DELETE …/:variantId` → `{ deleted: true }`, or `{ archived: true, variant, message }` when an order line or the stock history names it (the SKU and option slot are freed either way); `POST /products/:id/variants/bulk` `{ variants: [{ attributes, sku, barcode?, price_isk?, price_eur?, bin? }], dry_run? }` → 200 (dry run) / 201 `{ variants }` / 400 or 409 `{ error, code, errors: [{ index, field, reason, value, message }] }` (see Error format), whole or nothing, stock 0; `PATCH /products/:id/images/:imageId` `{ color }` (null clears) → `{ image }`. All CSRF | [ARCHITECTURE §11](ARCHITECTURE.md#11-shop--cart-checkout-orders-products-collections-bins-discounts-hidden-surface) · [HISTORY](history.d/2026-09-26-harvest2-lane6c-variants.md#harvest2-lane6c-2026-09-26) |
 | `/api/v1/admin/analytics` | `analyticsAdminRoutes.js` | `analytics` view | — |
 | `/api/v1/admin/general-settings` | `adminGeneralSettingsRoutes.js` | `general` view | — |
 | `/api/v1/admin/discounts` | `adminDiscountRoutes.js` | admin views (hidden) | — |

@@ -68,6 +68,21 @@ describe('POST /products/:id/variants', () => {
     expect(badAttrs.body.code).toBe(400);
   });
 
+  test('option keys are written in the product\'s spelling, and a SKU clash says SKU', async () => {
+    const res = await request(app).post(base(tee.id)).set('Cookie', adminCookie)
+      .send({ sku: 'L6C-GRN-S', attributes: { Color: 'Green', SIZE: 'S' } });
+    expect(res.status).toBe(201);
+    expect(res.body.variant.attributes).toEqual({ color: 'Green', size: 'S' });
+    const clash = await request(app).post(base(tee.id)).set('Cookie', adminCookie).set('x-locale', 'en')
+      .send({ sku: 'L6C-BLK-M', attributes: { color: 'Pink', size: 'S' } });
+    expect(clash.status).toBe(409);
+    expect(clash.body.error).toMatch(/SKU/);
+    const combo = await request(app).patch(`${base(tee.id)}/${res.body.variant.id}`).set('Cookie', adminCookie).set('x-locale', 'en')
+      .send({ attributes: { COLOR: 'Black', size: 'M' } });
+    expect(combo.status).toBe(409);
+    expect(combo.body.error).toMatch(/attributes/);
+  });
+
   test('403 for a signed-in user without the products view', async () => {
     const res = await request(app).post(base(tee.id)).set('Cookie', userCookie)
       .send({ sku: 'NOPE', attributes: { color: 'Blue', size: 'S' } });
@@ -81,6 +96,14 @@ describe('PATCH /products/:id/variants/:variantId', () => {
       .send({ attributes: { color: 'Black', size: 'L' } });
     expect(res.status).toBe(200);
     expect(res.body.variant.attributes).toEqual({ color: 'Black', size: 'L' });
+  });
+
+  test('a SKU can change but never be emptied', async () => {
+    const empty = await request(app).patch(`${base(tee.id)}/${blk.id}`).set('Cookie', adminCookie).send({ sku: '  ' });
+    expect(empty.status).toBe(400);
+    const moved = await request(app).patch(`${base(tee.id)}/${blk.id}`).set('Cookie', adminCookie).send({ sku: 'L6C-BLK-M2' });
+    expect(moved.status).toBe(200);
+    expect(moved.body.variant.sku).toBe('L6C-BLK-M2');
   });
 
   test('a collision with a live sibling is a 409', async () => {

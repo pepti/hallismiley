@@ -246,24 +246,54 @@ class ProductVariant {
     return ProductVariant._refCols;
   }
 
-  static async hasReferences(id) {
+  // `runner` = the pool, or a client inside the caller's transaction.
+  static async hasReferences(id, runner = db) {
     const cols = await ProductVariant._referencingColumns();
     if (!cols.length) return false;
     // Identifiers come from pg_catalog, never from a request; quoted anyway.
     const q = (s) => `"${String(s).replace(/"/g, '""')}"`;
     const exists = cols.map(c => `EXISTS (SELECT 1 FROM ${q(c.schema)}.${q(c.tbl)} WHERE ${q(c.col)} = $1)`);
-    const { rows } = await db.query(`SELECT (${exists.join(' OR ')}) AS referenced`, [String(id)]);
+    const { rows } = await runner.query(`SELECT (${exists.join(' OR ')}) AS referenced`, [String(id)]);
     return rows[0].referenced === true;
   }
 
-  // Hard delete, scoped to the product. A 23503 (a reference created between
-  // the check and the delete) propagates; the caller archives instead.
-  static async deleteForProduct(id, productId) {
-    const { rows } = await db.query(
-      `DELETE FROM product_variants WHERE id = $1 AND product_id = $2 AND archived_at IS NULL RETURNING id`,
-      [String(id), String(productId)]
-    );
-    return rows[0] || null;
+  // The DELETE route's one writer: delete, or archive when something names
+  // the variant — decided and done in ONE transaction, with the variant row
+  // locked FOR UPDATE first (after its product FOR KEY SHARE — the lock order
+  // in models/Inventory.js). The stock writers lock the variant row, and an
+  // order line's foreign key takes FOR KEY SHARE on it, so a movement or an
+  // order cannot land between the check and the delete: without the lock a
+  // stock adjustment committed in that gap would be CASCADE-deleted with the
+  // variant, the very audit trail the check exists to keep (invariant-reviewer,
+  // lane 6c). Returns { deleted: true, id } | { archived: true, variant } | null
+  // (not this product's, or already archived).
+  static async deleteOrArchive(id, productId) {
+    const client = await db.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('SELECT id FROM products WHERE id = $1 FOR KEY SHARE', [String(productId)]);
+      const { rows: cur } = await client.query(
+        `SELECT id FROM product_variants
+          WHERE id = $1 AND product_id = $2 AND archived_at IS NULL FOR UPDATE`,
+        [String(id), String(productId)]
+      );
+      if (!cur[0]) { await client.query('ROLLBACK'); return null; }
+      let out;
+      if (await ProductVariant.hasReferences(id, client)) {
+        const variant = await ProductVariant.archive(id, productId, client);
+        out = { archived: true, variant };
+      } else {
+        await client.query('DELETE FROM product_variants WHERE id = $1', [String(id)]);
+        out = { deleted: true, id: String(id) };
+      }
+      await client.query('COMMIT');
+      return out;
+    } catch (err) {
+      try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+      throw err;
+    } finally {
+      client.release();
+    }
   }
 
   // For a variant something still names: out of every list, both unique slots
@@ -271,8 +301,8 @@ class ProductVariant {
   // history. Its shelf is cleared too — a deleted variant occupies no bin, and
   // the bin board lists variants without an archive filter. Stock is left as
   // it stands: on hand only moves through models/Inventory.js.
-  static async archive(id, productId) {
-    const { rows } = await db.query(
+  static async archive(id, productId, runner = db) {
+    const { rows } = await runner.query(
       `UPDATE product_variants SET archived_at = NOW(), active = FALSE, bin = NULL
         WHERE id = $1 AND product_id = $2 AND archived_at IS NULL
         RETURNING ${COLUMNS}`,

@@ -1098,7 +1098,10 @@ company/                  gitignored: plans, decisions, logs, market-research st
   ([harvest2-lane6c](history.d/2026-09-26-harvest2-lane6c-variants.md#harvest2-lane6c-2026-09-26)):
   `DELETE /products/:id/variants/:variantId` removes a variant nothing
   references and ARCHIVES one an order line or the stock history names
-  (`archived_at` set, `active` false, shelf cleared). `hasReferences` reads
+  (`archived_at` set, `active` false, shelf cleared) — decided and done in ONE
+  transaction under the variant's FOR UPDATE lock
+  (`ProductVariant.deleteOrArchive`), so no movement lands in between. Option
+  keys are written in the product's axis spelling on every write path. `hasReferences` reads
   every foreign key onto `product_variants` from the catalogue — never a
   hand-kept list — because `inventory_adjustments` is CASCADE and a delete
   would take the audit trail with it. The SKU and the `(product_id,

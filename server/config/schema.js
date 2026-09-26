@@ -5651,7 +5651,12 @@ END; $$ LANGUAGE plpgsql`,
     // until the swap completes — cosmetic, and only for a row archived in
     // that window. Loosening a unique rule is not a contract: no release
     // relies on a conflict the partial index no longer raises (archived rows
-    // exist only once this release writes them). Rollback of the schema:
+    // exist only once this release writes them). A ROLLBACK to the previous
+    // image after this release has archived variants and re-used their SKUs
+    // is degraded, not broken: the old Product.resolveByCode (… LIMIT 1, no
+    // archive filter) can resolve a scanned code to the archived twin, and
+    // the old seed-shop.js (ON CONFLICT without the predicate) fails with
+    // 42P10 — a manual script. No minCompatibleVersion is needed. Rollback of the schema:
     // DROP COLUMN product_images.color / product_variants.archived_at once no
     // release reads them; restoring the global SKU rule would first need the
     // duplicate SKUs of archived rows renamed.
@@ -5672,10 +5677,9 @@ END; $$ LANGUAGE plpgsql`,
            FOR c IN
              SELECT con.conname
                FROM pg_constraint con
-               JOIN pg_class rel ON rel.oid = con.conrelid
                JOIN pg_attribute att
                  ON att.attrelid = con.conrelid AND att.attnum = ANY (con.conkey)
-              WHERE rel.relname = 'product_variants'
+              WHERE con.conrelid = 'product_variants'::regclass
                 AND con.contype = 'u'
                 AND array_length(con.conkey, 1) = 1
                 AND att.attname = 'sku'

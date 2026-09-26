@@ -12,6 +12,7 @@ const { streamDeliveryNote, streamBulkDeliveryNotes } = require('../services/pdf
 // Harvest 2 lane 6c (ported from icelandicstore #334 / #432).
 const { loadDeliveryNoteItems, loadDeliveryNoteItemsForOrders } = require('../services/deliveryNote');
 const variantAdd = require('../services/variantAdd');
+const { axisKey } = require('../utils/variantAxis');
 const { UPLOAD_ROOT } = require('../config/paths');
 const { normaliseUpload, thumbPathFor } = require('../services/productImages');
 const orderExport = require('../services/orderExport');
@@ -329,6 +330,25 @@ const BIN_MAX_LEN = 40;
 
 // The acting admin, for the audit rows.
 function actorId(req) { return (req.user && req.user.id) || null; }
+
+// Option keys in the product's own spelling (case-blind match against
+// variant_axes). uniq_product_variants_attrs_live compares the jsonb exactly,
+// so {"Color":…} beside {"color":…} would be two different rows — the bulk
+// writer (services/variantAdd.js) already writes the product's spelling; the
+// single-row routes do the same (invariant-reviewer, lane 6c). A key that
+// names no axis is kept as sent.
+function axisSpelled(attributes, axes) {
+  if (!attributes || typeof attributes !== 'object' || Array.isArray(attributes)) return attributes;
+  const byKey = new Map((Array.isArray(axes) ? axes : []).map(a => [axisKey(a), a]));
+  const out = {};
+  for (const [k, v] of Object.entries(attributes)) out[byKey.get(axisKey(k)) || k] = v;
+  return out;
+}
+
+// A 23505 from a variant write: the live SKU index or the live option index.
+function variantConflictKey(err) {
+  return /attrs/.test(String(err.constraint || '')) ? 'errors.admin.variantAttrsTaken' : 'errors.admin.skuTaken';
+}
 
 // A stock figure from an admin body: absent → undefined (leave it), else a
 // whole number ≥ 0 or a localised 400 via the returned error string.
@@ -758,7 +778,7 @@ const adminShopController = {
 
       const variant = await ProductVariant.create({
         product_id: product.id,
-        sku: String(sku).trim(), attributes,
+        sku: String(sku).trim(), attributes: axisSpelled(attributes, product.variant_axes),
         price_isk: price_isk != null ? Number(price_isk) : null,
         price_eur: price_eur != null ? Number(price_eur) : null,
         stock: Number(stock) || 0,
@@ -769,10 +789,7 @@ const adminShopController = {
       return res.status(201).json({ variant });
     } catch (err) {
       if (err.code === '23505') {
-        return res.status(409).json({
-          error: t(req.locale, 'errors.admin.variantAttrsTaken'),
-          code: 409,
-        });
+        return res.status(409).json({ error: t(req.locale, variantConflictKey(err)), code: 409 });
       }
       next(err);
     }
@@ -790,14 +807,17 @@ const adminShopController = {
       }
       // stockOpts: a stock cell edit lands in inventory_adjustments naming who
       // moved it (the variant grid PATCHes one field at a time — ice #275).
-      const variant = await ProductVariant.update(req.params.variantId, req.body || {}, stockOpts(req, req.body));
+      const body = { ...(req.body || {}) };
+      if (body.attributes !== undefined) {
+        const product = await Product.findById(req.params.id);
+        body.attributes = axisSpelled(body.attributes, product && product.variant_axes);
+      }
+      const variant = await ProductVariant.update(req.params.variantId, body, stockOpts(req, req.body));
       if (!variant) return res.status(404).json({ error: t(req.locale, 'errors.admin.variantNotFound'), code: 404 });
       return res.json({ variant });
     } catch (err) {
       if (err.code === '23505') {
-        // The live SKU index or the live attribute-combination index.
-        const key = /attrs/.test(String(err.constraint || '')) ? 'errors.admin.variantAttrsTaken' : 'errors.admin.skuTaken';
-        return res.status(409).json({ error: t(req.locale, key), code: 409 });
+        return res.status(409).json({ error: t(req.locale, variantConflictKey(err)), code: 409 });
       }
       next(err);
     }
@@ -811,24 +831,15 @@ const adminShopController = {
   // explain it.
   async deleteVariant(req, res, next) {
     try {
-      const owned = await ProductVariant.findByIdForProduct(req.params.variantId, req.params.id);
-      if (!owned) return res.status(404).json({ error: t(req.locale, 'errors.admin.variantNotFound'), code: 404 });
-
-      const archiveInstead = async () => {
-        const variant = await ProductVariant.archive(req.params.variantId, req.params.id);
-        if (!variant) return res.status(404).json({ error: t(req.locale, 'errors.admin.variantNotFound'), code: 404 });
-        return res.json({ deleted: false, archived: true, variant, message: t(req.locale, 'errors.admin.variantArchived') });
-      };
-      if (await ProductVariant.hasReferences(req.params.variantId)) return archiveInstead();
-      try {
-        const gone = await ProductVariant.deleteForProduct(req.params.variantId, req.params.id);
-        if (!gone) return res.status(404).json({ error: t(req.locale, 'errors.admin.variantNotFound'), code: 404 });
-        return res.json({ deleted: true, archived: false, id: gone.id });
-      } catch (err) {
-        // Backstop: a reference created between the check and the delete.
-        if (err.code !== '23503') throw err;
-        return archiveInstead();
+      // The check and the delete run in one transaction under a row lock
+      // (ProductVariant.deleteOrArchive), so nothing can come to name the
+      // variant in between.
+      const result = await ProductVariant.deleteOrArchive(req.params.variantId, req.params.id);
+      if (!result) return res.status(404).json({ error: t(req.locale, 'errors.admin.variantNotFound'), code: 404 });
+      if (result.archived) {
+        return res.json({ deleted: false, archived: true, variant: result.variant, message: t(req.locale, 'errors.admin.variantArchived') });
       }
+      return res.json({ deleted: true, archived: false, id: result.id });
     } catch (err) { next(err); }
   },
 

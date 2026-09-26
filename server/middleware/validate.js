@@ -984,6 +984,9 @@ function validateVariant(req, res, next) {
   if (req.method === 'POST') {
     if (!present(b.sku) || (typeof b.sku === 'string' && !b.sku.trim())) errors.push({ key: 'validation.variant.skuRequired' });
     if (b.attributes === undefined) errors.push({ key: 'validation.variant.attributesRequired' });
+  } else if (b.sku !== undefined && (b.sku === null || (typeof b.sku === 'string' && !b.sku.trim()))) {
+    // PATCH: a SKU may change, never be emptied (the grid sends the cell as typed).
+    errors.push({ key: 'validation.variant.skuRequired' });
   }
   if (present(b.sku) && (typeof b.sku !== 'string' || b.sku.length > VARIANT_MAX_SKU)) {
     errors.push({ key: 'validation.variant.skuMaxLength', params: { n: VARIANT_MAX_SKU } });

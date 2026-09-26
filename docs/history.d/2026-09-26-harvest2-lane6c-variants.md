@@ -139,7 +139,43 @@ the editable-region focus outline uses `--accent-ink`.
   the default MCP read surface is unchanged (ENHANCEMENTS #13).
 
 ### Review (invariant-reviewer on `git diff master...HEAD`)
-Recorded in the section below once the pass has run.
+Verdict: every stack invariant passes (1, 2, 4, 5, 6, 7 incl. MCP gating, 8,
+9, 10, 13/15, stock only through `Inventory.js`, no SQL injection in
+`hasReferences`, no IDOR). Findings and what was done:
+- **Fixed — the delete could lose stock history to a race.** The reference
+  check and the delete were two statements, and `inventory_adjustments` is
+  CASCADE, so a movement committed in between would have been deleted with the
+  variant. Now `ProductVariant.deleteOrArchive` decides and acts in ONE
+  transaction after locking the product FOR KEY SHARE and the variant FOR
+  UPDATE (the engine lock order); the stock writers and an order line's FK
+  queue behind it.
+- **Fixed — option-key spelling on the single-row routes.** POST/PATCH now
+  write the product's own axis spelling (`axisSpelled`), as the bulk writer
+  does, so `{"Color":…}` and `{"color":…}` cannot become two rows.
+- **Fixed — a SKU clash on create said "combination taken".** Both single-row
+  routes map a 23505 by constraint (`variantConflictKey`).
+- **Fixed — the migration's DO block** matches `con.conrelid =
+  'product_variants'::regclass` (schema-safe), and its comment now spells out
+  the rollback case: after SKUs were re-used, the previous image's
+  `resolveByCode` can resolve a code to the archived twin and the old
+  `seed-shop.js` fails with 42P10 — degraded, not broken; no
+  `minCompatibleVersion`.
+- **Fixed — docs:** the bulk route's `errors` array is documented under
+  "Error format" in `docs/API.md`. Also found in passing: PATCH could empty a
+  SKU; `validateVariant` now refuses that.
+- **Won't fix — the archived-variant notice uses `errors.admin.variantArchived`
+  for a 200.** The server locale has no success namespace (email, validation,
+  errors, export, meta); the message is shown as a row status. Kept as ice has it.
+- **Won't fix — the single POST is not case-blind across SKU and barcode like
+  the bulk writer.** The single route keeps the engine's existing rule (exact
+  SKU via the unique index); the bulk path is stricter by design (ice #432).
+- **Won't fix — `list_variants` shows inactive products' bin and stock to a
+  read token.** It is behind the `variantCreate` switch (off), and every MCP
+  token's owner is re-checked as an admin on each call (`server/mcp/owner.js`),
+  the same exposure as the existing catalogue tools.
+- **Won't fix — the swatch `box-shadow` literals.** Decorative depth on a
+  garment-colour disc, not text; the disc's edge is the `--border` token, which
+  carries it on Miðnætti.
 
 ### DRAFT strings (Halli approves)
 Client (`public/js/i18n`): `adminProducts.variantHint` and `adminProducts.noVariants`
@@ -158,9 +194,17 @@ the 19 `errors.variantAdd.*`, the 11 `validation.variant.*`. Icelandic drafted
 natively (most follow ice's approved wording).
 
 ### Still owed
-- Lane 6a's receiving/count tables will reference `product_variants`;
-  `hasReferences` reads the catalogue, so nothing to change — but its test should
-  gain a case once those tables exist.
+- **At merge (master moved on while this lane ran):** master already has
+  engine migrations 116–118, so 119 goes after 118 (renumber if the harvest
+  wants a different slot). Lane 6a's queries that resolve a code or list
+  variants need `AND v.archived_at IS NULL` once 119 exists — the reviewer
+  named `GoodsReceipt.js` (code matching: `v.sku = ANY … OR v.barcode = ANY …`,
+  which could now see an archived twin) and `Inventory.searchItems` (the count
+  picker); the `v.active` filters elsewhere already exclude archived rows.
+- Lane 6a's receiving/count tables reference `product_variants`;
+  `hasReferences` reads the catalogue, so a variant with a receipt or count line
+  is archived, not deleted — its test should gain a case once those tables are
+  on this branch.
 - Lane 6b (merges): the merged-product refusal in `variantAdd` and on the variant
   routes (ice's `refuseMergedProduct`).
 - The engine's other `color: var(--bg-nav)` labels on `--gold` fills (cart,
