@@ -380,7 +380,12 @@ describe('the day’s takings', () => {
 
 describe('the receipt list', () => {
   it('returns receipts only, newest first, with the tender', async () => {
-    const { receipts, total } = await pos.listReceipts({ limit: 5 });
+    // Scoped to this suite's own days (the 2018 year no other suite writes): a
+    // suite sharing the worker DB may leave receipts of its own — adminHome
+    // inserts tenderless receipts with high numbers straight into `invoices` —
+    // and an unscoped "newest 5" would list theirs, not ours (LedgerLink CI
+    // 36259126420, 2026-09-26).
+    const { receipts, total } = await pos.listReceipts({ limit: 5, from: DAY, to: NEXT_DAY });
     expect(total).toBeGreaterThan(0);
     expect(receipts.length).toBeGreaterThan(0);
     for (const r of receipts) expect(['cash', 'card']).toContain(r.tender);

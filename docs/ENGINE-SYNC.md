@@ -127,7 +127,11 @@ engine commit absent from a downstream's `engine.json.rev..upstream/master`
   paths are never overwritten by a sync; `.gitattributes` marks them
   `merge=ours`.
 - **`package-lock.json`**: take theirs, then `npm install --package-lock-only`
-  (the tool does this).
+  (the tool does this). When `package.json` conflicted too, npm cannot read it
+  yet: the tool writes its state, stops with exit 3 and asks you to resolve
+  `package.json` and rerun with `--continue`, which regenerates the lock from
+  your resolution (site-factory, 2026-09-26). A failed regeneration is exit 3
+  as well — fix the cause, then `--continue`.
 - **`.engine-paths`, `.gitattributes`, `features/README.md`** are DERIVED —
   written by `scripts/features-index.js` from `features/**/*.md` — and differ
   per repo (a product's own feature paths), so they conflict on every sync.
@@ -295,6 +299,9 @@ no `.env`, so `engine-sync.js` hands the downstream's npm scripts `TEST_PG_URL`
 (`--allow-main-pg` overrides) and a `TEST_PG_URL` on `:5432`. `--worktree` also
 adds `/.wt/` to `.git/info/exclude`, and the engine's `.gitignore` lists `.wt/`
 since the same day, so a sync worktree never reads as stray untracked files.
+`--worktree` reads `engine.json` from `origin/<default>` (`git show`) — the
+commit the worktree is cut from — so the main checkout may sit on any branch,
+even one without an `engine.json` (2026-09-26).
 
 What `--cleanup` does, by hand:
 

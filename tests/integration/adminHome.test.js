@@ -91,6 +91,11 @@ beforeEach(async () => {
 
 afterAll(async () => {
   await db.query(`DELETE FROM tax_deadlines WHERE note = 'adminHome test'`);
+  // Leave the worker DB as we found it: the last test's invoices, receipts
+  // (tenderless, numbered 900000+) and orders would otherwise outlive this
+  // file and show up in the next suite on the same worker that does not clean
+  // first (booksPos's receipt list, LedgerLink CI 36259126420).
+  await cleanTables();
 });
 
 describe('the gate', () => {
@@ -313,7 +318,17 @@ describe('what the instance lacks', () => {
       expect(res.body.todo.map(i => i.kind)).not.toContain('orders_to_ship');
       expect(res.body.todo.map(i => i.kind)).not.toContain('bins_unshelved');
       expect(res.body.figures).not.toHaveProperty('openOrders');
-      expect(res.body.figures.salesToday.partial).toBe(false);
+      // The wholesale channel rides the `invoices` view: a product that hides
+      // (or switches off) that one too keeps no sales channel at all, so there
+      // is no figure and no payments feed — the rule of "books switched off"
+      // above. Read from the seam, never from a product name (LedgerLink hides it).
+      if (HIDDEN.has('invoices')) {
+        expect(res.body.figures).not.toHaveProperty('salesToday');
+        expect(res.body.recent.some(e => e.view === 'invoices')).toBe(false);
+      } else {
+        expect(res.body.figures.salesToday.byChannel.map(c => c.channel)).toEqual(['wholesale']);
+        expect(res.body.figures.salesToday.partial).toBe(false);
+      }
     }
   });
 });

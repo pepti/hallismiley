@@ -191,6 +191,17 @@ describe('history links resolve', () => {
     expect(sources['PLAN.md'].length).toBeGreaterThan(3);
     expect(sources['docs/API.md'].length).toBeGreaterThan(3);
     expect(sources['features/testing-infra.md'].length).toBeGreaterThan(0);
+  });
+
+  // The fragment-link parser guard over PLAN.md. PLAN.md is product-owned: a
+  // downstream records its own open items and may not link a fragment yet
+  // (LedgerLink and hallismiley at their 2026-09-26 syncs). So the engine,
+  // whose PLAN.md links fragments since the day they began, always asserts
+  // it; a downstream asserts it once its PLAN.md mentions `history.d/` at all
+  // — a fragment link written there that the parser misses is still a failure.
+  test('PLAN.md fragment links are parsed (guard)', () => {
+    const { role } = JSON.parse(fs.readFileSync(path.join(ROOT, 'engine.json'), 'utf8'));
+    if (role !== 'engine' && !read('PLAN.md').includes('history.d/')) return;
     expect(sources['PLAN.md'].some((l) => l.file.startsWith('docs/history.d/'))).toBe(true);
   });
 

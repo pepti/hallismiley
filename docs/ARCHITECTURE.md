@@ -348,7 +348,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Jest | `tests/integration/adminNavConfig.test.js`, `admin.test.js`, `adminHome.test.js`; `tests/unit/admin-surface-parity.test.js`, `admin-views-parity.test.js`, `adminTableKit.test.js`, `kitFormatters.test.js`, `pageTitle.test.js`, `debounce.test.js`, `csvClientParity.test.js`, `pageWidth.client.test.js`, `adminHomeCache.test.js`, `adminHomeTodo.client.test.js`; `tests/integration/adminHomeAttention.test.js`, `pageWidth.test.js`, `combobox.client.test.js`, `stickyHScroll.client.test.js`, `dragFiles.client.test.js`, `adminPageTitle.client.test.js` |
 | e2e | `e2e/admin.spec.js`, `admin-home.spec.js`, `admin-surface.spec.js`, `admin-list-kit.spec.js`, `admin-sidebar-scroll.spec.js`, `admin-nav-colors.spec.js`, `admin-page-width.spec.js`, `admin-combobox.spec.js` |
 | Migrations | 053 (nav config), 111 (per-account page width, Mjúk hreyfing, side-column width, cookie choice) |
-| Features | [admin-shell](../features/admin-shell.md), [admin-ui-kit](../features/admin-ui-kit.md) |
+| Features | [admin-shell](../features/admin-shell.md), [admin-home](../features/admin-home.md), [admin-ui-kit](../features/admin-ui-kit.md) |
 | Feature doc | — (this section) |
 
 **Rules that must hold**
@@ -433,6 +433,22 @@ company/                  gitignored: plans, decisions, logs, market-research st
   Till sales are aggregated, never listed in the feed. Change requests have
   only open/resolved: the home says "N opnar", never "waiting on you"
   ([admin-home-idag-2026-09-26](history.d/2026-09-26-feat-admin-home-idag.md#admin-home-idag-2026-09-26)).
+- **"Í dag" is its own feature, `admin-home`, so a product can fork it alone**
+  ([engine-sync-gaps-2026-09-26](history.d/2026-09-26-fix-engine-sync-gaps-2026-09-26.md#engine-sync-gaps-2026-09-26)):
+  a product whose `/admin` is its own overview (LedgerLink) records
+  `"admin-home": { "status": "forked", "note": "…" }` in `features/local.json`
+  and `e2e/admin-home.spec.js` skips there with the note — never
+  `"admin-shell"`, which would silence the sidebar's specs too. The endpoint
+  and its Jest suites keep running everywhere, and read the seam: a product
+  that hides `orders`, `pos` AND `invoices` from a `'*'` holder has no sales
+  channel, so no `salesToday` and no payments in the feed.
+- **On a phone the nav's brand column gives way, never its controls**
+  ([engine-sync-gaps-2026-09-26](history.d/2026-09-26-fix-engine-sync-gaps-2026-09-26.md#engine-sync-gaps-2026-09-26)):
+  at ≤ 1024px `.lol-nav__brand` shrinks and the wordmark ellipsises while
+  `.lol-nav__right` keeps its size. The brand used to be `flex: 0 0 auto`, so
+  the account button shrank below its content and its caret scrolled every
+  signed-in page sideways (1px at 375 on CI's Linux fonts with the TEST pill;
+  53px at 320 anywhere). `e2e/admin-roles-grid.spec.js` checks 375 and 320.
 - Kit contract: `listState` uses `replaceState` only, never `pushState`; page
   size is NOT in the URL; `adminPager.PAGE_SIZES` tops out at 200 because
   `leadsController` clamps `limit` to [1,200]; `sortableTh` emits a real
@@ -1986,6 +2002,23 @@ company/                  gitignored: plans, decisions, logs, market-research st
   so the real sweep cannot meet it), drops dead-pid leftovers of itself on
   the way in. The inventory is in `docs/TESTING.md`. `.wt/` (engine-sync
   worktrees) is gitignored engine-wide.
+- **A suite never depends on the order the suites share a worker in**
+  ([engine-sync-gaps-2026-09-26](history.d/2026-09-26-fix-engine-sync-gaps-2026-09-26.md#engine-sync-gaps-2026-09-26)):
+  a worker's DB outlives each file, and `cleanTables()` empties only the
+  users FK closure — `products` and `roles` (among others) survive it. So a
+  suite (1) leaves what it wrote outside a `cleanTables()` it runs last, or
+  cleans it in `afterAll` (adminHome); (2) never deletes rows the migrations
+  seeded without putting them back (adminRoles snapshots `roles` and restores
+  it); (3) asserts whole-table counts only relative to what the same table
+  answers elsewhere, or scoped to its own rows or dates (booksPos's receipt
+  list, adminHomeAttention's sold-out card); (4) keys shared FILESYSTEM paths
+  by something unique across workers — upload dirs under
+  `public/assets/projects/<id>` take `workerScopedProjectIds()` after
+  `cleanTables()`, because every worker restarts the serial at 1. A suite in
+  the engine names no product: what a product hides comes from the seam
+  (`identity.surface.*`, `publicSurface`, `disabledAdminViews()`). Prove a fix
+  by running the pair in one worker in both orders (`--runInBand` with a
+  test sequencer that honours the given order).
 - **A demo instance throws its data away, never a real database** ([demo-instance-2026-09-26](history.d/2026-09-26-feat-demo-mode.md#demo-instance-2026-09-26)):
   `DEMO_INSTANCE=true` is accepted only with `APP_ENV=demo` and `DEMO_DATABASE_NAME`
   equal to the connected database (whose name carries "demo"); `server.js` exits at
@@ -2007,7 +2040,10 @@ company/                  gitignored: plans, decisions, logs, market-research st
   `docs/history.d/<file>.md#slug` from `PLAN.md`) and must resolve there —
   checked in every doc under docs/ and features/ plus the root PLAN, README
   and CLAUDE files.
-  `historyFragments.test.js` + `architectureIndex.test.js` enforce both.
+  `historyFragments.test.js` + `architectureIndex.test.js` enforce both. The
+  guard that `PLAN.md` links a fragment at all binds the engine always, and a
+  downstream only once its own (product-owned) `PLAN.md` mentions
+  `history.d/` ([engine-sync-gaps-2026-09-26](history.d/2026-09-26-fix-engine-sync-gaps-2026-09-26.md#engine-sync-gaps-2026-09-26)).
 - **Every chunk is reviewed before it merges** ([harvest2-lane0](history.d/2026-09-26-harvest2-lane0-history.md#harvest2-lane0-2026-09-26)):
   `/code-review` or the `invariant-reviewer` agent on the branch diff;
   findings are fixed on the branch first (CLAUDE.md, Project rules).
