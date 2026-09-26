@@ -9,7 +9,8 @@ const Order   = require('../models/Order');
 const Collection = require('../models/Collection');
 const Setting = require('../models/Setting');
 const { streamDeliveryNote, streamBulkDeliveryNotes } = require('../services/pdfService');
-// Harvest 2 lane 6c (ported from icelandicstore #432).
+// Harvest 2 lane 6c (ported from icelandicstore #334 / #432).
+const { loadDeliveryNoteItems, loadDeliveryNoteItemsForOrders } = require('../services/deliveryNote');
 const variantAdd = require('../services/variantAdd');
 const { UPLOAD_ROOT } = require('../config/paths');
 const { normaliseUpload, thumbPathFor } = require('../services/productImages');
@@ -906,8 +907,9 @@ const adminShopController = {
     try {
       const order = await Order.findById(req.params.id);
       if (!order) return res.status(404).json({ error: t(req.locale, 'errors.admin.orderNotFound'), code: 404 });
+      // Lines with the live SKU/bin, the size label and a picture (ice #334).
       const [items, store] = await Promise.all([
-        Order.listItems(order.id),
+        loadDeliveryNoteItems(order.id),
         Setting.getGeneralSettings(),
       ]);
       return streamDeliveryNote({ res, order, items, store });
@@ -924,16 +926,13 @@ const adminShopController = {
         return res.status(400).json({ error: t(req.locale, 'errors.admin.bulkIdsInvalid'), code: 400 });
       }
       const store  = await Setting.getGeneralSettings();
-      const found  = await Promise.all(ids.map(async (id) => {
-        const order = await Order.findById(id);
-        if (!order) return null;
-        const items = await Order.listItems(order.id);
-        return { order, items };
-      }));
-      const orders = found.filter(Boolean);
-      if (!orders.length) {
+      const found  = (await Promise.all(ids.map(id => Order.findById(id)))).filter(Boolean);
+      if (!found.length) {
         return res.status(404).json({ error: t(req.locale, 'errors.admin.orderNotFound'), code: 404 });
       }
+      // One pass for the whole batch: each photo decoded once (ice #334).
+      const lists  = await loadDeliveryNoteItemsForOrders(found.map(o => o.id));
+      const orders = found.map((order, i) => ({ order, items: lists[i] }));
       return streamBulkDeliveryNotes({ res, orders, store });
     } catch (err) { next(err); }
   },

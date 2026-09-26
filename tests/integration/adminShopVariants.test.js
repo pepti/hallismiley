@@ -231,3 +231,19 @@ describe('the per-photo colour', () => {
   });
 });
 
+describe('the delivery note', () => {
+  test('streams a PDF with the lines loaded through the pick-list loader', async () => {
+    const order = await Order.createWithItems({
+      guestEmail: 'l6c-var@example.com', guestName: 'L6c', currency: 'ISK',
+      shippingMethod: 'local_pickup', shippingAddress: null, shipping: 0,
+      items: [{ productId: tee.id, variantId: blk.id, quantity: 2, price: 1590, name: 'L6c Tee' }],
+    });
+    const res = await request(app).get(`/api/v1/admin/shop/orders/${order.id}/delivery-note`).set('Cookie', adminCookie)
+      .buffer(true).parse((r, cb) => { const chunks = []; r.on('data', c => chunks.push(c)); r.on('end', () => cb(null, Buffer.concat(chunks))); });
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/application\/pdf/);
+    expect(res.body.slice(0, 4).toString()).toBe('%PDF');
+    const [line] = await Order.listItemsWithSku(order.id);
+    expect(line).toMatchObject({ sku: 'L6C-BLK-M', variant_axes: ['color', 'size'] });
+  });
+});
