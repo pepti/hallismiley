@@ -25,13 +25,21 @@ function walk(dir) {
 // A Windows working tree is CRLF; the committed blob (and CI) is LF.
 const readLf = (f) => fs.readFileSync(f, 'utf8').replace(/\r\n/g, '\n');
 
+const ORDER_STARTS = [
+  /Order\.createWithItems\s*\(/,
+  /INSERT\s+INTO\s+orders\b/i,
+  /stripeService\.createCheckoutSession\s*\(/,
+];
+
 const callers = walk(ROOT)
   .filter(f => !f.endsWith(path.join('models', 'Order.js')))
   .filter(f => !f.includes(`${path.sep}scripts${path.sep}`)) // one-off seeds write orders directly, never a customer
+  .filter(f => !f.endsWith(path.join('services', 'stripeService.js'))) // defines the session call
   .map(f => ({ file: f, src: readLf(f) }))
   // A call, not a mention: whole-line // comments are dropped first
-  // (config/schema.js names the method in migration 115's comment).
-  .filter(({ src }) => /Order\.createWithItems\s*\(/.test(src.replace(/^\s*\/\/.*$/gm, '')));
+  // (config/schema.js names the method in migration 115's comment). Three
+  // ways to start an order: the model, a raw INSERT, or a Stripe session.
+  .filter(({ src }) => ORDER_STARTS.some(re => re.test(src.replace(/^\s*\/\/.*$/gm, ''))));
 
 test('the order-create callers are the ones this suite knows about', () => {
   expect(callers.map(c => path.relative(ROOT, c.file).replace(/\\/g, '/'))).toEqual(['controllers/shopController.js']);

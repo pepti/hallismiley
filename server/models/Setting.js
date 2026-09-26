@@ -114,6 +114,8 @@ const KEYS = {
 // ── Checkout / shipping / announcement bounds (harvest2-lane7a) ─────────────
 const LOCALES = ['en', 'is'];
 const FIELD_RULES = ['optional', 'required', 'hidden'];
+// Checkout fields with no column on the order yet (the write-side refuses `required`).
+const NOT_STORED_FIELDS = ['company', 'kennitala'];
 const PAUSED_MSG_MAX_LEN = 300;
 const ANNOUNCE_TITLE_MAX = 120;
 const ANNOUNCE_MESSAGE_MAX = 600;
@@ -641,6 +643,8 @@ class Setting {
       throw new SettingValidationError('Invalid settings payload');
     }
     const has = k => Object.prototype.hasOwnProperty.call(patch, k);
+    // A typo ('min_order_value') must not save as a silent 200 that changed nothing.
+    refuseUnknown(patch, ['ordering_paused', 'ordering_paused_message', 'min_order_value_isk', 'order_notify_emails', 'fields']);
     const writes = [];
     if (has('ordering_paused')) {
       if (typeof patch.ordering_paused !== 'boolean') throw new SettingValidationError('ordering_paused must be true or false');
@@ -669,6 +673,14 @@ class Setting {
         if (!FIELD_RULES.includes(f[name])) {
           throw new SettingValidationError(`fields.${name} must be one of ${FIELD_RULES.join(', ')}`);
         }
+        // Company and kennitala are validated at checkout but NOT stored on the
+        // order yet (no column — owed, harvest2-lane7a). Requiring a buyer to
+        // type a national id that is then dropped is data collection with no
+        // purpose, so `required` is refused until the storage lands; optional
+        // stays (the brief), with the admin page saying it is not stored.
+        if (NOT_STORED_FIELDS.includes(name) && f[name] === 'required') {
+          throw new SettingValidationError(`fields.${name} cannot be required until it is stored on the order`);
+        }
         writes.push([byField[name], f[name]]);
       }
     }
@@ -689,6 +701,7 @@ class Setting {
       throw new SettingValidationError('shipping must be an object');
     }
     const has = k => Object.prototype.hasOwnProperty.call(patch, k);
+    refuseUnknown(patch, ['flat_rate_isk', 'free_over_isk'], 'shipping.');
     const writes = [];
     if (has('flat_rate_isk')) writes.push([KEYS.shippingFlatRateIsk, amountOrThrow('shipping.flat_rate_isk', patch.flat_rate_isk)]);
     if (has('free_over_isk')) writes.push([KEYS.shippingFreeOverIsk, amountOrThrow('shipping.free_over_isk', patch.free_over_isk)]);
@@ -719,6 +732,7 @@ class Setting {
     }
     const { parseLocalDateTime } = require('../utils/announcementWindow');
     const has = k => Object.prototype.hasOwnProperty.call(patch, k);
+    refuseUnknown(patch, ['enabled', 'starts_at', 'ends_at', 'title', 'message', 'link_path', 'link_label']);
     const current = await this.getAnnouncementSettings();
     const next = { ...current };
     const writes = [];
@@ -850,6 +864,13 @@ function mergePerLocale(current, incoming, field, maxLen) {
     merged[loc] = val.trim();
   }
   return merged;
+}
+
+// A patch key the group does not know is a 400, never a silent no-op.
+function refuseUnknown(patch, allowed, prefix = '') {
+  for (const k of Object.keys(patch)) {
+    if (!allowed.includes(k)) throw new SettingValidationError(`${prefix}${k} is not a setting here`);
+  }
 }
 
 // Read side: a whole ISK amount in range, else the fallback.

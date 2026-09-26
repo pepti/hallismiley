@@ -13,7 +13,7 @@ const { SHIPPING_METHODS, shippingRates, computeShippingPrice } = require('../co
 const { isConfigured: stripeIsConfigured } = require('../config/stripe');
 const stripeService = require('../services/stripeService');
 const emailService = require('../services/emailService');
-const { sendOrderReceipt, sendBookingNotification } = emailService;
+const { sendBookingNotification } = emailService;
 const Setting = require('../models/Setting');
 const checkoutRules = require('../services/checkoutRules');
 const { t }                = require('../i18n');
@@ -117,7 +117,9 @@ const shopController = {
         },
         checkout: {
           ordering_paused:         checkout.ordering_paused,
-          ordering_paused_message: checkout.ordering_paused_message, // { en, is }; '' → i18n default
+          // Only while paused: a drafted message is not public before it is used.
+          ordering_paused_message: checkout.ordering_paused
+            ? checkout.ordering_paused_message : { en: '', is: '' }, // '' → i18n default
           min_order_value_isk:     checkout.min_order_value_isk,
           fields:                  checkout.fields,
         },
@@ -666,7 +668,11 @@ async function handleCheckoutCompleted(session) {
   // best-effort; failures log but never poison the webhook response.
   try {
     const items = await Order.listItems(order.id);
-    const finalOrder = await Order.findById(order.id);
+    // findDetailById, not findById: the receipt goes to `guest_email ||
+    // user_email`, and only the detail row joins the signed-in buyer's email —
+    // with findById a signed-in buyer never got a receipt (review pass,
+    // harvest2-lane7a).
+    const finalOrder = await Order.findDetailById(order.id);
     let locale = 'en';
     if (finalOrder.user_id) {
       const { rows: uRows } = await db.query(
@@ -676,7 +682,7 @@ async function handleCheckoutCompleted(session) {
       if (uRows[0]?.preferred_locale) locale = uRows[0].preferred_locale;
     }
     const bookableItems = items.filter(it => it.is_bookable);
-    const sends = [sendOrderReceipt(finalOrder, items, locale, { hasBookableItems: bookableItems.length > 0 })];
+    const sends = [emailService.sendOrderReceipt(finalOrder, items, locale, { hasBookableItems: bookableItems.length > 0 })];
 
     if (bookableItems.length > 0) {
       // Admin recipients — same query shape used by the party notification
@@ -726,7 +732,8 @@ async function alertOwnerOfPaidOrder(orderId, orderNumber) {
   try {
     const to = checkoutRules.ownerAlertRecipients(await Setting.getCheckoutSettings());
     if (!to.length) return;
-    const [finalOrder, items] = await Promise.all([Order.findById(orderId), Order.listItems(orderId)]);
+    // The detail row carries the signed-in buyer's email (user_email).
+    const [finalOrder, items] = await Promise.all([Order.findDetailById(orderId), Order.listItems(orderId)]);
     if (!finalOrder) return;
     Promise.resolve()
       .then(() => emailService.sendOrderOwnerAlert({ order: finalOrder, items, to }))

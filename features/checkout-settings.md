@@ -29,5 +29,5 @@ Admin → Greiðsla (`/admin/checkout`, admin view `checkout`, ported from icela
 - Every order-create path runs, in order: the pause (503 `ORDERING_PAUSED`, before any order work), the field rules (hidden values dropped, required ones present, a kennitala shape- and check-digit-valid), the minimum on the DB-trusted subtotal AFTER the order discount, measured in ISK (400 `MIN_ORDER_VALUE` with the amount). `tests/unit/checkoutRulesCoverage.test.js` fails when a caller of `Order.createWithItems` appears without them.
 - The owner alert is sent where the order becomes paid (the Stripe webhook), best-effort and NOT awaited: it can never fail or hold up the webhook's 200. It goes through `emailService.deliver` (EMAIL_ALLOWLIST, the demo no-send rule). The list is admin-only, never in `/shop/config`.
 - A save validates every group before it writes any, then writes them in one transaction.
-- Company and kennitala are validated but not stored on the order (no column; owed).
+- Company and kennitala are validated but not stored on the order (no column; owed), so the admin API refuses `required` for them until the storage lands.
 - Full rules: [../docs/ARCHITECTURE.md#11-shop--cart-checkout-orders-products-collections-bins-discounts-hidden-surface](../docs/ARCHITECTURE.md#11-shop--cart-checkout-orders-products-collections-bins-discounts-hidden-surface).

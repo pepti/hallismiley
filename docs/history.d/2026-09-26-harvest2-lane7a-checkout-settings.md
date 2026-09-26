@@ -115,6 +115,36 @@ note, the order-flow card; the notify address on contact enquiries (`LEAD_NOTIFY
 here); ice's fixed password-reset / sign-up CTAs (an admin-set link instead); the suite-wide
 pre-seeded dismissal keys in `playwright.config.js` (stubs instead).
 
+**Review pass** (the invariant-reviewer agent on the branch diff against master, asked specifically
+about enforcement on every order path and the webhook). No blockers: one order-create path, the
+pause first, the minimum not dodgeable (DB prices, ISK basis, discount share), hidden fields
+dropped, the alert isolated from the webhook. Fixed on the branch:
+- **Company / kennitala collected and dropped** (should-fix): the admin API now refuses `required`
+  for both until they are stored (`Setting.NOT_STORED_FIELDS`; the page offers optional / hidden
+  only and says why). The enforcement of a stored `required` rule stays tested.
+- **A signed-in buyer's email** (should-fix): the owner alert read `Order.findById`, which has no
+  `user_email`. It and the customer RECEIPT now read `Order.findDetailById` — the receipt half is a
+  pre-existing bug the review surfaced: a signed-in buyer never got a receipt (`guest_email ||
+  user_email` was undefined). Tested.
+- **Focus lost** closing the dialog opened from the banner (should-fix): the filled banner is no
+  longer rebuilt, so focus returns to "Lesa meira".
+- Nits taken: the pause also runs as route middleware before `validateCheckoutContact` (a paused
+  shop answers 503 even to a malformed postcode); `/shop/config` sends the pause message only while
+  paused; an unknown PATCH key is a 400 in all three groups; the reserved banner slot is
+  `aria-hidden` with its content hidden until filled; the coverage test also catches a raw
+  `INSERT INTO orders` and a direct `stripeService.createCheckoutSession`.
+- **Won't fix (recorded):** the owner alert's DB reads stay awaited inside the webhook (local and
+  bounded; only the send is detached — detached reads would outlive the request); the phone shape
+  check still runs for a hidden phone (only a non-browser client sends one; the value is dropped
+  anyway); the `writeLimiter` block's position in `app.js` (cosmetic; every lane edits that
+  region); the alert's fixed Icelandic locale and `/is/admin` link (the whole email shell is still
+  engine-branded — an identity-seam pass over `emailService` belongs with lane 2 or later); free
+  delivery measured before discounts while the minimum is after (documented: the discount engine
+  needs the shipping first); open Stripe sessions stay payable up to Stripe's default 24 h after a
+  pause (a shorter `expires_at` is a stripeService change for Halli to want); `getShippingPrice`
+  kept as the env-frozen boot default (no caller now, documented); the 503-vs-403 pause status
+  (Halli's call, below).
+
 **Open / owed.**
 - **The pause status (Halli):** 503 per the brief. ice answers 403 on purpose — `docs/SLO.md`
   counts only 5xx against the error budget, so an intentional pause with customers trying to buy

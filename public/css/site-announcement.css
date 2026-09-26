@@ -31,6 +31,9 @@
   font-size: 0.85rem;
   overflow: hidden;
 }
+/* The reserved slot on a return visit, before the fetch answers: its height
+   is held (no shift when it fills), its content not yet shown. */
+.announce-banner--pending > * { visibility: hidden; }
 .announce-banner__text {
   margin: 0; flex: 1 1 auto; min-width: 0;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;

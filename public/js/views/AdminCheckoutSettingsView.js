@@ -111,6 +111,9 @@ export class AdminCheckoutSettingsView {
       { value: 'required', label: t('adminCheckout.optRequired') },
       { value: 'hidden',   label: t('adminCheckout.optHidden') },
     ];
+    // Company and kennitala are not stored on the order yet, so the server
+    // refuses `required` for them (Setting.NOT_STORED_FIELDS) — not offered.
+    const notStoredRules = rules.filter(r => r.value !== 'required');
 
     this._el.querySelector('#co-body').innerHTML = `
       <div class="co-banner" role="note">
@@ -154,9 +157,9 @@ export class AdminCheckoutSettingsView {
         ${this._row({ title: t('adminCheckout.fieldPhone'), help: t('adminCheckout.fieldPhoneHelp'),
           control: this._select('fields.phone', rules, t('adminCheckout.fieldPhone')) })}
         ${this._row({ title: t('adminCheckout.fieldCompany'), help: t('adminCheckout.fieldCompanyHelp'),
-          control: this._select('fields.company', rules, t('adminCheckout.fieldCompany')) })}
+          control: this._select('fields.company', notStoredRules, t('adminCheckout.fieldCompany')) })}
         ${this._row({ title: t('adminCheckout.fieldKennitala'), help: t('adminCheckout.fieldKennitalaHelp'),
-          control: this._select('fields.kennitala', rules, t('adminCheckout.fieldKennitala')) })}
+          control: this._select('fields.kennitala', notStoredRules, t('adminCheckout.fieldKennitala')) })}
         ${this._row({ title: t('adminCheckout.fieldNote'), help: t('adminCheckout.fieldNoteHelp'),
           control: this._select('fields.note', rules, t('adminCheckout.fieldNote')) })}
       `)}

@@ -65,6 +65,14 @@ async function save({ shipping, ...checkoutPatch }) {
   ]);
 }
 
+// A stored rule the admin API refuses today (company/kennitala 'required' —
+// not stored on the order yet): written straight to the table, as a release
+// that stores them would allow. The ENFORCEMENT must already hold.
+async function forceFieldRule(name, rule) {
+  const key = { company: Setting.KEYS.checkoutFieldCompany, kennitala: Setting.KEYS.checkoutFieldKennitala }[name];
+  await Setting.applyWrites([[key, rule]]);
+}
+
 async function ordersFor(email = GUEST) {
   const { rows } = await db.query(
     `SELECT order_number, subtotal, shipping, total, discount_amount, shipping_address, notes, currency
@@ -170,6 +178,10 @@ describe('PATCH /api/v1/admin/checkout-settings — validation', () => {
     [{ fields: { phone: 'maybe' } }, /fields\.phone/],
     [{ fields: { fax: 'optional' } }, /fields\.fax/],
     [{ fields: 'required' }, /fields/],
+    [{ fields: { company: 'required' } }, /fields\.company cannot be required/],
+    [{ fields: { kennitala: 'required' } }, /fields\.kennitala cannot be required/],
+    [{ min_order_value: 5000 }, /min_order_value is not a setting/],
+    [{ shipping: { flat_rate: 1500 } }, /shipping\.flat_rate is not a setting/],
     [{ order_notify_emails: 'owner@l7a.test, not-an-address' }, /not-an-address/],
     [{ order_notify_emails: 42 }, /order_notify_emails/],
     [{ order_notify_emails: ['a@x.is', 'b@x.is', 'c@x.is', 'd@x.is', 'e@x.is', 'f@x.is'] }, /at most 5/],
@@ -222,7 +234,7 @@ describe('PATCH /api/v1/admin/checkout-settings — validation', () => {
 describe('GET /api/v1/shop/config — what the storefront may see', () => {
   test('the pause, the minimum, the field rules and the live rates — never the alert list', async () => {
     await save({ ordering_paused: true, ordering_paused_message: { is: 'Lokað' }, min_order_value_isk: 4000,
-      order_notify_emails: ['secret-owner@l7a.test'], fields: { company: 'required' },
+      order_notify_emails: ['secret-owner@l7a.test'], fields: { company: 'optional' },
       shipping: { flat_rate_isk: 990, free_over_isk: 15000 } });
     const res = await request(app).get('/api/v1/shop/config');
     expect(res.status).toBe(200);
@@ -230,12 +242,18 @@ describe('GET /api/v1/shop/config — what the storefront may see', () => {
       ordering_paused: true,
       ordering_paused_message: { en: '', is: 'Lokað' },
       min_order_value_isk: 4000,
-      fields: { phone: 'optional', company: 'required', kennitala: 'hidden', note: 'optional' },
+      fields: { phone: 'optional', company: 'optional', kennitala: 'hidden', note: 'optional' },
     });
     expect(res.body.shipping).toEqual(expect.objectContaining({
       flat_rate: expect.objectContaining({ priceIsk: 990 }), free_over_isk: 15000,
     }));
     expect(JSON.stringify(res.body)).not.toContain('secret-owner');
+  });
+
+  test('a drafted pause message is not public while the shop is open', async () => {
+    await save({ ordering_paused: false, ordering_paused_message: { is: 'Leyndur texti' } });
+    const res = await request(app).get('/api/v1/shop/config');
+    expect(res.body.checkout.ordering_paused_message).toEqual({ en: '', is: '' });
   });
 });
 
@@ -248,7 +266,10 @@ describe('the ordering pause', () => {
     const res = await checkout();
     expect(res.status).toBe(503);
     expect(res.body).toEqual({ error: tx('errors.shop.orderingPaused'), code: 503, reason: 'ORDERING_PAUSED' });
-    // A malformed body and a missing Stripe key still get the pause, not their own error.
+    // A malformed body, a malformed postcode (the route validator) and a
+    // missing Stripe key still get the pause, not their own error.
+    const badPostcode = await checkout({ shipping_method: 'flat_rate', shipping_address: address({ postal: '1' }) });
+    expect(badPostcode.status).toBe(503);
     const junk = await request(app).post('/api/v1/shop/checkout').send({ items: 'nope' });
     expect(junk.status).toBe(503);
     delete process.env.STRIPE_SECRET_KEY;
@@ -388,7 +409,7 @@ describe('the field rules — hidden is ignored, required is enforced', () => {
   });
 
   test('company: required refuses a blank one; too long is refused', async () => {
-    await save({ fields: { company: 'required' } });
+    await forceFieldRule('company', 'required');
     const res = await checkout();
     expect(res.status).toBe(400);
     expect(res.body.error).toBe(tx('errors.shop.companyRequired'));
@@ -406,7 +427,7 @@ describe('the field rules — hidden is ignored, required is enforced', () => {
     expect((await checkout({ kennitala: '010130-3019' })).status).toBe(201);
     expect((await checkout()).status).toBe(201); // optional: blank is fine
 
-    await save({ fields: { kennitala: 'required' } });
+    await forceFieldRule('kennitala', 'required');
     expect((await checkout()).body.error).toBe(tx('errors.shop.kennitalaRequired'));
     expect((await checkout({ kennitala: '0101303019' })).status).toBe(201);
 
@@ -474,6 +495,25 @@ describe('the owner order alert (Stripe webhook)', () => {
     expect(res.text).toBe('OK');
     expect(Date.now() - started).toBeLessThan(5000);
     expect((await Order.findById(b.id)).status).toBe('paid');
+  });
+
+  test('a signed-in buyer: the alert and the receipt both carry the buyer email', async () => {
+    await save({ order_notify_emails: ['owner@l7a.test'] });
+    alertSpy = jest.spyOn(emailService, 'sendOrderOwnerAlert').mockResolvedValue(true);
+    const receiptSpy = jest.spyOn(emailService, 'sendOrderReceipt').mockResolvedValue(undefined);
+    try {
+      const buyerId = await createTestRegularUser();
+      const { rows } = await db.query('SELECT email FROM users WHERE id = $1', [buyerId]);
+      const order = await Order.createWithItems({
+        userId: buyerId, currency: 'ISK', shippingMethod: 'local_pickup',
+        items: [{ productId: mug.id, name: 'L7A Mug', price: 2000, quantity: 1 }], shipping: 0,
+      });
+      expect((await pay(order)).status).toBe(200);
+      expect(alertSpy.mock.calls[0][0].order.user_email).toBe(rows[0].email);
+      expect(receiptSpy).toHaveBeenCalledTimes(1);
+      expect(receiptSpy.mock.calls[0][0].user_email).toBe(rows[0].email);
+      await db.query('DELETE FROM orders WHERE id = $1', [order.id]);
+    } finally { receiptSpy.mockRestore(); }
   });
 
   test('no list and no ORDER_NOTIFY_EMAIL → no alert; the env value is the fallback', async () => {

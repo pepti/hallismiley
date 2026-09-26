@@ -1305,7 +1305,8 @@ company/                  gitignored: plans, decisions, logs, market-research st
   check), then the field rules (phone / company / kennitala / note: a hidden value is
   dropped — the phone cleared off the stored address, the note never written — a required
   one missing is a 400 `FIELD_REQUIRED`, a kennitala must be 10 digits with a valid check
-  digit), then the minimum order value on the DB-trusted subtotal AFTER the order
+  digit; company and kennitala are NOT stored on the order yet, so the admin API refuses
+  `required` for them — no buyer is made to type a national id that is dropped), then the minimum order value on the DB-trusted subtotal AFTER the order
   discount, in ISK whatever the charge currency (a EUR basket by its lines' ISK prices,
   scaled by the discount share; 400 `MIN_ORDER_VALUE` with `params.amount`).
   `tests/unit/checkoutRulesCoverage.test.js` fails when a second order-create path
@@ -1326,7 +1327,10 @@ company/                  gitignored: plans, decisions, logs, market-research st
   (`checkout.order_notify_emails`, at most 5) else `ORDER_NOTIFY_EMAIL`. The list is
   admin-only — `/shop/config` never carries it.
 - A checkout-settings save validates every group (checkout + shipping) before it writes
-  any, then writes them in ONE transaction (`Setting.applyWrites`).
+  any, then writes them in ONE transaction (`Setting.applyWrites`); an unknown key is a
+  400, never a silent 200. The ordering pause also runs as route middleware
+  (`checkoutRules.orderingPauseGate`) before the body validators, and `/shop/config`
+  sends the pause message only while paused.
 
 **History**: [harvest-2](HISTORY.md#harvest-2) · [ui-kit](HISTORY.md#ui-kit) · [ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23) · [harvest-ice-c-2026-09-24](HISTORY.md#harvest-ice-c-2026-09-24) · [harvest-ice-d-2026-09-24](HISTORY.md#harvest-ice-d-2026-09-24) · [harvest2-lane6a-2026-09-26](history.d/2026-09-26-harvest2-lane6a-stock.md#harvest2-lane6a-2026-09-26) · [harvest2-lane6b](history.d/2026-09-26-harvest2-lane6b-merge-ai.md#harvest2-lane6b-2026-09-26) · [harvest2-lane7a-2026-09-26](history.d/2026-09-26-harvest2-lane7a-checkout-settings.md#harvest2-lane7a-2026-09-26)
 

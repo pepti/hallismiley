@@ -44,6 +44,22 @@ function orderingPausedResponse(checkout, locale) {
   return { status: ORDERING_PAUSED_STATUS, body: { error: msg, code: ORDERING_PAUSED_STATUS, reason: 'ORDERING_PAUSED' } };
 }
 
+/**
+ * Route middleware: the same pause, answered before the body validators
+ * (shopRoutes POST /checkout), so a paused shop says "paused" to every
+ * request, not a 400 about its postcode. The controller checks again — the
+ * route guard is a convenience, the controller's check is the one the
+ * coverage test pins.
+ */
+async function orderingPauseGate(req, res, next) {
+  try {
+    const Setting = require('../models/Setting'); // late: keeps the unit tier DB-free
+    const paused = orderingPausedResponse(await Setting.getCheckoutSettings(), req.locale);
+    if (paused) return res.status(paused.status).json(paused.body);
+    return next();
+  } catch (err) { return next(err); }
+}
+
 /** Digits only; '' when nothing was typed. */
 function kennitalaDigits(raw) {
   return typeof raw === 'string' ? raw.replace(/[\s-]/g, '') : '';
@@ -142,6 +158,7 @@ function ownerAlertRecipients(checkout) {
 module.exports = {
   ORDERING_PAUSED_STATUS,
   orderingPausedResponse,
+  orderingPauseGate,
   applyFieldRules,
   iskNetAfterDiscount,
   minimumOrderResponse,

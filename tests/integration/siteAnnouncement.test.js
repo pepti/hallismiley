@@ -96,6 +96,7 @@ describe('the admin API', () => {
     [{ link_path: '//evil.example' }, /link_path/],
     [{ link_path: '/\\evil' }, /link_path/],
     [{ link_path: 'javascript:alert(1)' }, /link_path/],
+    [{ body: { is: 'x' } }, /body is not a setting/],
   ])('%j → 400 in the error envelope', async (body, msg) => {
     const res = await patch(body);
     expect(res.status).toBe(400);

@@ -143,8 +143,12 @@ export class CutoverNotice {
   _closeModal() {
     const st = { ...(readState() || {}), id: this._data.id, modalSeen: true };
     writeState(st);
+    // Opened from the banner's "Lesa meira": the banner is already filled, so
+    // leave it alone — rebuilding it would delete the button trapFocus is
+    // about to hand focus back to (review pass, harvest2-lane7a).
+    const filled = this._banner && this._banner.querySelector('[data-more]');
     this._teardownModal();
-    if (!st.bannerHidden) this._fillBanner();
+    if (!st.bannerHidden && !filled) this._fillBanner();
   }
 
   // Following the link is itself an acknowledgement: neither shape comes back.
@@ -160,6 +164,8 @@ export class CutoverNotice {
     const bar = document.createElement('div');
     bar.className = 'announce-banner' + (pending ? ' announce-banner--pending' : '');
     bar.setAttribute('role', 'region');
+    // A reserved, still-empty slot is not a landmark yet.
+    if (pending) bar.setAttribute('aria-hidden', 'true');
     bar.dataset.testid = 'announcement-banner';
     const anchor = this._anchor && this._anchor.parentNode ? this._anchor : document.body.firstChild;
     document.body.insertBefore(bar, anchor);
@@ -170,6 +176,7 @@ export class CutoverNotice {
   _fillBanner() {
     const bar = this._ensureBanner();
     bar.classList.remove('announce-banner--pending');
+    bar.removeAttribute('aria-hidden');
     bar.setAttribute('aria-label', t('announcement.region'));
     bar.innerHTML = `
       <p class="announce-banner__text">${escHtml(pick(this._data.title))}</p>
