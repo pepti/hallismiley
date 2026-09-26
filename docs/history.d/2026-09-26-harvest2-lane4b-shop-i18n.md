@@ -3,8 +3,8 @@
 
 Lane 4b of Harvest 2 (generic icelandicstore work up to `ice@941cf51d`, scope approved by Halli on
 2026-09-26). Branch `harvest2/lane4b-shop-i18n`. Ported from ice `6f5b37e` (#399), `6c0f99fc`
-(#400), `0faa32c2` (#51), `e1f75e0e` (#343, the cart half) and `fa8de049` (#213, the autofill
-half). No migration.
+(#400), `0faa32c2` (#51), `e1f75e0e` (#343, the cart half) and `fa8de049` (#213, the order note
+and the autofill). One engine migration: `115_order_notes`.
 
 **Why.** The shop surfaces (hidden on this instance, live on every shop downstream) still had the
 base's English literals on Icelandic pages, a fixed "Price includes 24% VAT" sentence although a
@@ -55,8 +55,21 @@ lane brings the generic part up.
    (variant before product, a payload without prices never wipes one, a vanished variant is left
    to the stock check), fills in the VSK rate on older lines, and returns the lines whose price
    moved — the page then says "Verð hefur breyst síðan þetta fór í körfuna: …".
-7. **Checkout autofill** (#213, part). A signed-in buyer's delivery name starts as the account's
-   display name (else username) and the phone as the account's phone; both stay editable.
+7. **Checkout autofill and order note** (#213). A signed-in buyer's delivery name starts as the
+   account's display name (else username) and the phone as the account's phone; both stay
+   editable. The checkout has an optional note ("Athugasemd með pöntuninni"), stored in
+   `orders.notes` — engine migration **`115_order_notes`** (`ALTER TABLE orders ADD COLUMN IF NOT
+   EXISTS notes TEXT`, expand-only; a no-op on icelandicstore, whose orders table already has the
+   column). Added after the first review, when the coordinator approved the migration: the lane
+   branch had first merged master (lanes 0, 1b, 4a and the login-expiry migration 114), so 115 is
+   the next engine number, and `migrate.js --plan` on a database at master's state shows 115 as
+   the only RUN. `Order.createWithItems` takes `notes` and normalises it (`Order.normaliseNote`:
+   non-text or blank → NULL, trimmed, cut at 1000 characters — cut, never refused, so a long
+   paste cannot lose the order); `createCheckoutSession` passes `req.body.note`, one line in the
+   order-create call. Staff read it in a "Athugasemd viðskiptavinar" card on the admin order page
+   (escaped, line breaks kept). It is deliberately not in `Order`'s `COLUMNS`, so the public
+   by-session and "my orders" payloads never carry it — a test pins both that and the
+   allow-listed by-session shape.
 
 **Measured.** Unit tier 2 065 passed / 1 skipped; new suites
 `colorLabels.client` (27), `contactFormat` (29), `duplicateNames.client` (7),
@@ -66,14 +79,15 @@ on `listItems`, the postcode/phone 400s in the envelope, foreign postcodes and p
 — the two suites 43/43. e2e `cart-sold-out.spec.js` (+1, 3/3 on `E2E_PORT=3022`): the re-price
 notice, VAT rows at 11 % plus 24 % shipping, export 0 %, the IS postcode stop. Checked by eye at
 375 px on Glóð, Bjart and Miðnætti (cart, checkout summary, the SKU chip).
+After the master merge and the order note: unit tier 2 182 passed / 1 skipped / 1 todo; `shop.test.js`
++3 for the note (stored trimmed; blank, missing and non-text are NULL; cut at 1000; staff see it
+on `GET /admin/shop/orders/:id`, the by-session payload and `COLUMNS` do not — Stripe stubbed at
+`stripeService.createCheckoutSession`, Postgres real); shop, contact, adminOrderBulk,
+adminOrderExport, inventoryThreeNumbers, eventLog and discounts 119/119; the cart e2e 3/3.
 
 **Not done / chosen differently.**
-- **The checkout order note (#213) is NOT ported: `orders.notes` does not exist in the engine
-  schema.** It needs an engine migration (`ALTER TABLE orders ADD COLUMN IF NOT EXISTS notes
-  TEXT`, expand-only, safe for invariant 14) — left for the lane owner / Halli to schedule rather
-  than taking an engine migration number inside a parallel lane. Once the column exists: trim,
-  1000-char cap, write in the order-create path of `shopController.createCheckoutSession` (the
-  engine has one order path, not ice's two), show on the admin order page.
+- The order note has one writer, not ice's two: the engine has a single order path
+  (`createCheckoutSession`).
 - **The phone rule is ice's, not a stricter one**: `PHONE_RE` (7–20 of digits, spaces, `-().`, an
   optional leading +) is what ice shares; an Icelandic-only "7 digits, optional +354" rule would
   refuse a buyer abroad. Its only tightening is on the contact form, which checked length only.
@@ -107,6 +121,15 @@ still the server's, and a catalogue that size is a later concern (an `?ids=` fil
 catalogue would close it); (nit) a malformed postcode on an instance without Stripe now answers 400
 before the controller's 503 — harmless.
 
+**Second review pass** (`invariant-reviewer` on the migration + note delta): no failures. Fixed:
+the 1000-character cut is by code point (`Array.from`), so an emoji at the cut is not split into a
+lone surrogate (test added). Noted: ice's column comes from its `072_order_notes_attachments`,
+which also creates `order_attachments` — so on ice `115_order_notes` is an `IF NOT EXISTS` no-op
+and ice's product file needs NO `aliases` entry for it (docs/MIGRATIONS.md); the `engine.json`
+note keeps the coordinator's wording ("ice alias: …") but means exactly that. Won't-fix: the
+staff-only admin orders LIST (`Order.listAll`, `o.*`) now also carries the note on each row —
+staff-gated, and the xlsx export uses fixed columns.
+
 **New strings (all DRAFT, Halli approves).** Public table, IS / EN:
 `nav.mainNavigation` Aðalvalmynd / Main navigation ·
 `adminSales.loadFailed` Ekki tókst að sækja söluskýrsluna. / Could not load the sales report. ·
@@ -127,7 +150,10 @@ before the controller's 503 — harmless.
 `cart.pricesUpdated` Verð hefur breyst síðan þetta fór í körfuna: {names}. Karfan sýnir nú núgildandi verð. / Prices have changed since you added: {names}. The cart now shows today's price. ·
 `checkout.postcodeInvalid` Íslenskt póstnúmer er þrír tölustafir, t.d. 101. / An Icelandic postcode is three digits, e.g. 101. ·
 `checkout.phoneInvalid` Sláðu inn símanúmer, t.d. 555 1234. / Enter a phone number, e.g. +354 555 1234. ·
-`contact.phoneInvalid` Athugaðu símanúmerið, t.d. 555 1234. / Check the phone number, e.g. +354 555 1234.
+`contact.phoneInvalid` Athugaðu símanúmerið, t.d. 555 1234. / Check the phone number, e.g. +354 555 1234. ·
+`checkout.noteLegend` Athugasemd / Note ·
+`checkout.noteLabel` Athugasemd með pöntuninni (valfrjálst) / A note with your order (optional) ·
+`adminOrders.orderNote` Athugasemd viðskiptavinar / Customer's note.
 Server table: `validation.checkout.postcodeInvalid` Íslenskt póstnúmer verður að vera þrír tölustafir /
 An Icelandic postcode must be three digits · `errors.contact.phoneInvalid` Athugaðu símanúmerið, t.d.
 555 1234. / Check the phone number, e.g. +354 555 1234. The colour names and picker sentences are

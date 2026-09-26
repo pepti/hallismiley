@@ -176,6 +176,13 @@ export class CheckoutView {
               </label>
             </fieldset>
 
+            <fieldset class="shop-checkout__fieldset">
+              <legend>${t('checkout.noteLegend')}</legend>
+              <label>${t('checkout.noteLabel')}
+                <textarea name="note" rows="3" maxlength="1000" data-testid="checkout-note"></textarea>
+              </label>
+            </fieldset>
+
             <p class="shop-checkout__error" id="shop-checkout-error" role="alert"></p>
 
             <button type="submit" class="shop-checkout__submit" id="shop-checkout-submit"
@@ -274,6 +281,10 @@ export class CheckoutView {
         currency: cur,
         shipping_method,
       };
+      // Optional order note (ice #213, migration 115) — staff read it on the
+      // admin order page; the server trims and caps it at 1000 characters.
+      const note = String(fd.get('note') || '').trim();
+      if (note) body.note = note;
       if (!user) {
         body.guest_email = String(fd.get('guest_email') || '').trim();
         body.guest_name  = String(fd.get('guest_name') || '').trim();

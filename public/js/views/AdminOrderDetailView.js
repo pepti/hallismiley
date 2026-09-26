@@ -129,6 +129,11 @@ export class AdminOrderDetailView {
             ${o.user_email ? `<p class="ord-detail__muted">${t('adminOrders.ordersCount', { n: o.user_order_count })}</p>` : `<p class="ord-detail__muted">${t('adminOrders.guest')}</p>`}
           </section>
 
+          ${o.notes ? `<section class="ord-detail__card" data-testid="order-note">
+            <h2>${t('adminOrders.orderNote')}</h2>
+            <p class="ord-detail__note">${escHtml(o.notes)}</p>
+          </section>` : ''}
+
           ${o.user_id ? `<section class="ord-detail__card">
             <h2>${t('customerNotes.title')}</h2>
             <div id="ord-notes-host"></div>

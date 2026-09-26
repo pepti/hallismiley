@@ -994,7 +994,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | CSS | `public/css/shop.css`, `admin-products.css`, `admin-orders.css`, `admin-collections.css`, `admin-discounts.css`, `admin-bins.css`, `admin-sales.css`, `barcode-scanner.css` |
 | Jest | `tests/integration/shop.test.js`, `discounts.test.js`, `adminOrderBulk.test.js`, `adminProductImportExport.test.js`, `sections.test.js`, `inventoryThreeNumbers.test.js`, `adminProductImportFile.test.js`, `adminOrderExport.test.js`; `tests/unit/discountEngine.test.js`, `shopFilters.test.js`, `bins-grid.test.js`, `qr.test.js`, `availability.client.test.js`, `productImportParseFile.test.js`, `productImportVariantCell.test.js`, `productImportVariantGroups.test.js`, `parsePdfWorker.test.js`, `imageUrl.test.js` (fixture `tests/fixtures/pdfFixture.js`), `colorLabels.client.test.js`, `duplicateNames.client.test.js`, `vatDisplay.client.test.js`, `cartPriceSync.client.test.js` |
 | e2e | `e2e/admin-product-group.spec.js`, `cart-sold-out.spec.js` |
-| Migrations | 022–025, 045, 048, 049, 050, 054, 055, 057, 074, 112, 113 |
+| Migrations | 022–025, 045, 048, 049, 050, 054, 055, 057, 074, 112, 113, 115 (`orders.notes`, the checkout note) |
 | Features | [cart-checkout](../features/cart-checkout.md), [discounts](../features/discounts.md), [orders](../features/orders.md), [shop-catalog](../features/shop-catalog.md) |
 | Feature doc | — (retail is hidden here; ENHANCEMENTS #22, #23, #25 landed by the 2026-09-24 ice harvest, #24 in part; #26 remains) |
 
@@ -1045,6 +1045,11 @@ company/                  gitignored: plans, decisions, logs, market-research st
   postcode is free text**; a phone, when given, matches the shared `PHONE_RE`
   (`validate.validateCheckoutContact` on `POST /shop/checkout`, the client
   twin in `CheckoutView`; `utils/contactFormat.js`).
+- **The buyer's order note is staff-only** ([harvest2-lane4b](history.d/2026-09-26-harvest2-lane4b-shop-i18n.md#harvest2-lane4b-2026-09-26)):
+  `orders.notes` (migration 115) is written once, by `createCheckoutSession`
+  through `Order.createWithItems` (`Order.normaliseNote`: trimmed, cut at 1000
+  characters, blank → NULL), and read on the admin order page. It stays OUT
+  of `Order`'s `COLUMNS`, which back every customer-facing order payload.
 - A name two different products share gets the SKU chip on the card
   (`utils/duplicateNames.js`); rows of one product never collide.
 - "Needs action" order pills (not paid, not sent, partly sent) are the

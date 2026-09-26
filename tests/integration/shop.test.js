@@ -366,3 +366,78 @@ describe('POST /api/v1/shop/checkout — postcode + phone shape', () => {
     expect(pickup.body.error).not.toBe(tx('validation.checkout.postcodeInvalid'));
   });
 });
+
+// ─── Checkout order note (migration 115, ported from icelandicstore #213) ───
+// The buyer's note is written by createCheckoutSession (trimmed, capped at
+// 1000), shown to staff on the admin order page, and never carried by the
+// public order payloads. Stripe itself is stubbed at the service boundary (no
+// network); Postgres is real.
+describe('POST /api/v1/shop/checkout — the order note', () => {
+  const helpers = require('../helpers');
+  const stripeService = require('../../server/services/stripeService');
+  const SLUG = 'order-note-test-mug';
+  let productId, adminCookie, savedKey, spy;
+
+  beforeAll(async () => {
+    await db.query(`DELETE FROM products WHERE slug = $1`, [SLUG]);
+    const p = await Product.create({ slug: SLUG, name: 'Note Test Mug', price_isk: 2000, price_eur: 1400, category: 'product', stock: 50 });
+    productId = p.id;
+    adminCookie = await helpers.getTestSessionCookie();
+  });
+  beforeEach(() => {
+    savedKey = process.env.STRIPE_SECRET_KEY;
+    process.env.STRIPE_SECRET_KEY = 'sk_test_order_note_stub';
+    let n = 0;
+    spy = jest.spyOn(stripeService, 'createCheckoutSession')
+      .mockImplementation(async () => ({ id: `cs_test_note_${Date.now()}_${n++}`, url: 'https://checkout.stripe.test/x' }));
+  });
+  afterEach(() => {
+    spy.mockRestore();
+    if (savedKey === undefined) delete process.env.STRIPE_SECRET_KEY; else process.env.STRIPE_SECRET_KEY = savedKey;
+  });
+  afterAll(async () => {
+    await db.query(`DELETE FROM orders WHERE guest_email = 'note@example.com'`);
+    await db.query(`DELETE FROM products WHERE slug = $1`, [SLUG]);
+  });
+
+  const checkout = (extra) => request(app).post('/api/v1/shop/checkout').send({
+    items: [{ productId, quantity: 1 }], currency: 'ISK', shipping_method: 'local_pickup',
+    guest_email: 'note@example.com', guest_name: 'Note Test', ...extra,
+  });
+  const noteOf = async (orderNumber) =>
+    (await db.query(`SELECT notes FROM orders WHERE order_number = $1`, [orderNumber])).rows[0].notes;
+
+  test('the note is stored trimmed; blank, missing or non-text is no note', async () => {
+    const a = await checkout({ note: '  Please ring the bell.\nThanks  ' });
+    expect(a.status).toBe(201);
+    expect(await noteOf(a.body.orderNumber)).toBe('Please ring the bell.\nThanks');
+    for (const note of ['   ', undefined, 42, ['x']]) {
+      const r = await checkout(note === undefined ? {} : { note });
+      expect(r.status).toBe(201);
+      expect(await noteOf(r.body.orderNumber)).toBeNull();
+    }
+  });
+
+  test('a long note is cut at 1000 characters, never refused', async () => {
+    const r = await checkout({ note: 'x'.repeat(1500) });
+    expect(r.status).toBe(201);
+    expect((await noteOf(r.body.orderNumber))).toHaveLength(1000);
+    // Cut by code point: an emoji at the cut stays whole.
+    expect(Array.from(Order.normaliseNote('😀'.repeat(1200)))).toHaveLength(1000);
+  });
+
+  test('staff see it on the admin order; the public by-session payload does not carry it', async () => {
+    const r = await checkout({ note: 'Gift wrap, please' });
+    const { rows } = await db.query(`SELECT id FROM orders WHERE order_number = $1`, [r.body.orderNumber]);
+    const admin = await request(app).get(`/api/v1/admin/shop/orders/${rows[0].id}`).set('Cookie', adminCookie);
+    expect(admin.status).toBe(200);
+    expect(admin.body.order.notes).toBe('Gift wrap, please');
+    const pub = await request(app).get(`/api/v1/shop/orders/by-session/${r.body.sessionId}`);
+    expect(pub.status).toBe(200);
+    expect(JSON.stringify(pub.body)).not.toContain('Gift wrap');
+    // The model's own column list (behind "my orders" and by-session) omits it,
+    // so a future public shaper that spreads the row still cannot leak it.
+    const viaColumns = await Order.findByStripeSessionId(r.body.sessionId);
+    expect(viaColumns).not.toHaveProperty('notes');
+  });
+});

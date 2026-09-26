@@ -403,7 +403,7 @@
         "6c0f99fc (#400 colour names, Veldu lit / Veldu stærð, badges may wrap)",
         "0faa32c2 (#51 VAT amount on price-bearing surfaces)",
         "e1f75e0e (#343 cart.syncPrices — the cart half)",
-        "fa8de049 (#213 signed-in checkout autofill — the note is not ported)"
+        "fa8de049 (#213 checkout order note → orders.notes, migration 115; signed-in autofill)"
       ],
       "branch": "harvest2/lane4b-shop-i18n",
       "features": [
@@ -412,9 +412,11 @@
         "public-site",
         "i18n"
       ],
-      "migrations": {},
+      "migrations": {
+        "115_order_notes": "ice alias: ice's orders.notes column (#213) — same DDL, IF NOT EXISTS"
+      },
       "trimmed": [
-        "ice #213 checkout order note → orders.notes (no such column in the engine schema; needs an engine migration)",
+        "ice #213 second order path (the engine has one: createCheckoutSession)",
         "ice #213 store radio cards + admin \"change store\" (no store locations in the engine)",
         "ice #343 staff customer-price surfaces (no customer prices in the engine)",
         "ice #399 /catalog back link, quick-order SKU chip, zipChangeRefused + company/store forms, plurals (already harvested), SSR 404s, invoice units, Pressan",

@@ -209,9 +209,9 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
   [harvest2-lane4b-2026-09-26](docs/history.d/2026-09-26-harvest2-lane4b-shop-i18n.md#harvest2-lane4b-2026-09-26)):
   shop VAT per rate, re-priced basket, postcode/phone rules, colour names, no
   English on Icelandic shop pages. Open: (a) **the new shop/checkout/contact
-  strings are DRAFT** (Halli; listed in the fragment); (b) **the checkout order
-  note (ice #213) needs an engine migration** — `orders.notes` does not exist;
-  (c) `CheckoutSuccessView` still prints the fixed "24% VSK" note and the
+  strings are DRAFT** (Halli; listed in the fragment); (b) the checkout order
+  note (ice #213) landed with engine migration `115_order_notes` (expand-only;
+  a no-op on icelandicstore, which has the column); (c) `CheckoutSuccessView` still prints the fixed "24% VSK" note and the
   product page's editable `vat_note` chrome still says 24 %; (d) the contact
   form now refuses a malformed phone (ice's shared rule) — Halli may prefer it
   looser there.

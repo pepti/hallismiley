@@ -96,6 +96,9 @@
 .ord-detail__vat dt, .ord-detail__vat dd { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .ord-detail__pdf { color: var(--gold); font-weight: 600; font-size: 14px; }
 .ord-detail__muted { color: var(--text-muted); font-size: 13px; }
+/* The buyer's checkout note (migration 115): their line breaks kept, a long
+   unbroken word wrapped. */
+.ord-detail__note { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text-primary); }
 .ord-detail__actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
 .ord-detail__tags { margin-bottom: 8px; }
 .ord-detail__tag-form { display: flex; gap: 6px; }
