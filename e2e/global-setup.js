@@ -2,6 +2,9 @@ const { execSync } = require('child_process');
 const { Pool }     = require('pg');
 const { e2eDatabaseUrl } = require('./lib/dbUrl');
 const { checkTarget } = require('../server/scripts/targetGuard');
+const sweep = require('../tests/lib/testDbSweep');
+const { ensureTestServer, assertNotSharedPort } = require('../tests/lib/testPg');
+const { fileEnvValue } = require('../tests/workerDb');
 
 // Provisions a deterministic, ISOLATED test database for the e2e suite:
 // ensure the _test DB exists → migrate → admin → project fixture. Each step
@@ -27,6 +30,14 @@ module.exports = async function globalSetup() {
   if (!target.ok) {
     throw new Error(`[e2e provision] refusing to provision: ${target.reason}.`);
   }
+  // The local test cluster may be down: with TEST_PG_DATA known and the
+  // database on the TEST_PG_URL server, start it (tests/lib/testPg.js).
+  // TEST_PG_URL names the throwaway test server — never the shared :5432 one.
+  const dataDir = process.env.TEST_PG_DATA || fileEnvValue('TEST_PG_DATA');
+  if (process.env.TEST_PG_URL && sameServer(dbUrl, process.env.TEST_PG_URL)) {
+    assertNotSharedPort(process.env.TEST_PG_URL);
+    if (dataDir) await ensureTestServer(dbUrl, { dataDir, log: (m) => console.log(`[e2e] ${m}`) });
+  }
   await ensureDatabase(dbUrl);
 
   const env  = { ...process.env, DATABASE_URL: dbUrl, NODE_ENV: 'test', DB_SSL: 'false' };
@@ -44,9 +55,20 @@ if (require.main === module) {
     .catch(err => { console.error('[e2e provision] failed:', err); process.exit(1); });
 }
 
+function sameServer(a, b) {
+  const x = new URL(a);
+  const y = new URL(b);
+  return x.hostname === y.hostname && (x.port || '5432') === (y.port || '5432');
+}
+
 // Create the isolated DB if it does not exist yet (non-destructive — never
 // drops; idempotent migrate/seed converge on re-run). Refuses any name not
 // ending in _test as a safety guard against pointing at the dev DB.
+//
+// Labels it on every run (tests/lib/testDbSweep.js): kind e2e, branch,
+// worktree, pid, host, createdAt kept from the first run, lastUsedAt = now.
+// The Jest sweep drops an e2e database only when its branch AND worktree are
+// gone, or when lastUsedAt is 14 days old.
 async function ensureDatabase(dbUrl) {
   const name = new URL(dbUrl).pathname.replace(/^\//, '');
   if (!/_test$/.test(name)) {
@@ -57,10 +79,22 @@ async function ensureDatabase(dbUrl) {
   const pool = new Pool({ connectionString: adminUrl.toString(), ssl: false });
   try {
     const { rows } = await pool.query('SELECT 1 FROM pg_database WHERE datname = $1', [name]);
+    let previous = null;
     if (rows.length === 0) {
       await pool.query(`CREATE DATABASE "${name}"`);
       console.log(`[e2e] Created isolated test database "${name}".`);
+    } else {
+      previous = await sweep.readLabel(pool, name);
     }
+    const now = new Date().toISOString();
+    const label = sweep.buildLabel('e2e', {
+      pid: process.pid,
+      createdAt: (previous && previous.createdAt) || now,
+      lastUsedAt: now,
+    });
+    await sweep.labelDatabase(pool, name, label).catch((err) => {
+      console.warn(`[e2e] could not label "${name}": ${err.message}`);
+    });
   } finally {
     await pool.end();
   }

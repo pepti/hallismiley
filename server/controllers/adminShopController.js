@@ -232,6 +232,10 @@ async function classifyImportRows(rows, { create = false } = {}) {
       const name = r?.name == null ? '' : String(r.name).trim();
       return defer(null, { ...norm.values, ...(name ? { name } : {}), ...(barcode ? { barcode } : {}) });
     }
+    // A row read from a PDF by AI (aiExtract marks it __ai) may only CREATE:
+    // its codes were checked when the PDF was read, but a code can become ours
+    // before Apply, and Apply re-runs this. Never an update (ice #306).
+    if (r && r.__ai === true) return { sku: label, status: 'error', reason: 'aiCreateOnly', kind: match.kind };
     const norm = normalizeImportRow(r);
     if (norm.error) return { sku: label, status: 'error', reason: norm.error, errorField: norm.errorField, kind: match.kind };
     const changes = importChanges(norm.values, match.current);

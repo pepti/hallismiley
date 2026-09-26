@@ -22,6 +22,41 @@ export async function adminCreateCustomer(payload) {
   return data; // { customer, invited, resetUrl }
 }
 
+// ── One customer (harvest 2 lane 3, ported from icelandicstore #336) ─────────
+
+async function _csrfJson() {
+  const token = await getCSRFToken();
+  return { 'Content-Type': 'application/json', ...(token ? { 'X-CSRF-Token': token } : {}) };
+}
+
+export async function adminGetCustomer(id) {
+  const res  = await fetch('/api/v1/admin/customers/' + encodeURIComponent(id), { credentials: 'include' });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to load customer');
+  return data.customer; // { id, email, display_name, phone, address1…country, has_password, … }
+}
+
+// Only the keys present in `fields` are changed; '' clears a field.
+export async function adminUpdateCustomer(id, fields) {
+  const res = await fetch('/api/v1/admin/customers/' + encodeURIComponent(id), {
+    method: 'PATCH', credentials: 'include', headers: await _csrfJson(), body: JSON.stringify(fields),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Save failed');
+  return data.customer;
+}
+
+// Send (or re-send) the welcome invite. The answer says what happened — it
+// never carries the set-password link.
+export async function adminInviteCustomer(id) {
+  const res = await fetch('/api/v1/admin/customers/' + encodeURIComponent(id) + '/invite', {
+    method: 'POST', credentials: 'include', headers: await _csrfJson(), body: '{}',
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Invite failed');
+  return data; // { invited, emailed, redirected?, emailError? }
+}
+
 export async function adminPreviewCustomerImport(rows) {
   const res = await fetch('/api/v1/admin/customers/import/preview', {
     method:      'POST',

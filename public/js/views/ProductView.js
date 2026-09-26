@@ -11,20 +11,28 @@ import * as cart from '../services/cart.js';
 import { CurrencySelector } from '../components/CurrencySelector.js';
 import { LOW_STOCK_THRESHOLD } from '../components/ProductCard.js';
 import { isAdmin, getCSRFToken } from '../services/auth.js';
-import { t, href, adminLocaleBadgeHtml, checkUntranslated } from '../i18n/i18n.js';
+import { t, href, getLocale, adminLocaleBadgeHtml, checkUntranslated } from '../i18n/i18n.js';
+import { colorLabelKey, chooseAxisKey } from '../utils/colorLabels.js';
 
 // Default chrome — rendered when shop_product_chrome is missing or network fails.
 // Templates use {n} (stock count) — substituted client-side.
-const DEFAULT_CHROME = {
-  back_label:          '← Back to shop',
-  vat_note:            'Price includes 24% VAT',
-  qty_label:           'Quantity',
-  add_to_cart_label:   'Add to cart',
-  out_of_stock_label:  'Out of stock',
-  low_stock_template:  'Only {n} left — ships within 24 h',
-  in_stock_template:   '{n} in stock',
-  select_options_hint: 'Select options to see availability',
-};
+//
+// Built on each use, not at module load (ported from icelandicstore #399): the
+// locale file is not loaded yet when this module is first evaluated, and a
+// module-level object of English literals froze "← Back to shop" into the
+// Icelandic page whenever shop_product_chrome was missing.
+function defaultChrome() {
+  return {
+    back_label:          t('shop.backToShop'),
+    vat_note:            t('shop.vatNote'),
+    qty_label:           t('shop.quantity'),
+    add_to_cart_label:   t('shop.addToCart'),
+    out_of_stock_label:  t('shop.outOfStock'),
+    low_stock_template:  t('shop.lowStock'),
+    in_stock_template:   t('shop.inStock'),
+    select_options_hint: t('shop.selectOptionsHint'),
+  };
+}
 
 function _tpl(template, vars) {
   return String(template).replace(/\{(\w+)\}/g, (_, k) => vars[k] != null ? String(vars[k]) : '');
@@ -36,9 +44,24 @@ function _esc(s) {
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-// Label map for nicer chip text.
-const AXIS_LABELS = { size: 'Size', color: 'Colour' };
-const COLOR_LABELS = { black: 'Black', white: 'White' };
+// Label KEYS for nicer chip text, resolved through t() at render time (the maps
+// used to hold English literals, which leaked onto the Icelandic page — ported
+// from icelandicstore #399). The colour names live in ../utils/colorLabels.js.
+const AXIS_LABEL_KEYS = { size: 'shop.size', color: 'shop.color' };
+
+// A colour value's shopper name: the translated label for a known colour,
+// otherwise the value as the catalogue spells it.
+function colorLabel(value) {
+  const key = colorLabelKey(value);
+  return key ? t(key) : String(value ?? '');
+}
+
+// The picker's accessible name. Known axes have a whole sentence each ("Veldu
+// lit", "Veldu stærð") — the {axis} template put the noun in the nominative.
+function chooseAxisLabel(axis) {
+  const key = chooseAxisKey(axis);
+  return key ? t(key) : t('shop.chooseAxis', { axis: axisLabel(axis).toLocaleLowerCase(getLocale()) });
+}
 
 // Natural ordering for known axes. Any value not in the list gets a high index
 // so it falls to the end (but alphabetically among its peers).
@@ -48,7 +71,8 @@ const AXIS_ORDER = {
 };
 
 function axisLabel(axis) {
-  return AXIS_LABELS[axis] || (axis.charAt(0).toUpperCase() + axis.slice(1));
+  const key = AXIS_LABEL_KEYS[String(axis).trim().toLowerCase()];
+  return key ? t(key) : (axis.charAt(0).toUpperCase() + axis.slice(1));
 }
 
 function axisValues(product, axis) {
@@ -97,7 +121,7 @@ export class ProductView {
     this._selection = {};
 
     // Shared chrome labels — loaded from site_content/shop_product_chrome.
-    this._chrome = { ...DEFAULT_CHROME };
+    this._chrome = defaultChrome();
 
     // Edit-mode snapshots for Cancel.
     this._productSnapshot = null;
@@ -148,11 +172,11 @@ export class ProductView {
       const res = await fetch(`/api/v1/content/shop_product_chrome?locale=${encodeURIComponent(window.__locale || 'en')}`);
       if (res.ok) {
         const data = await res.json();
-        this._chrome = this._mergeWithDefaults(DEFAULT_CHROME, data);
+        this._chrome = this._mergeWithDefaults(defaultChrome(), data);
         return;
       }
     } catch { /* fall through */ }
-    this._chrome = { ...DEFAULT_CHROME };
+    this._chrome = defaultChrome();
   }
 
   _mergeWithDefaults(defaults, data) {
@@ -207,13 +231,13 @@ export class ProductView {
             <div class="shop-product__cover" id="shop-cover">
               ${cover
                 ? `<img src="${_esc(cover)}" alt="${_esc(p.name)}"/>`
-                : `<div class="shop-product__placeholder">No image</div>`}
+                : `<div class="shop-product__placeholder">${_esc(t('shop.noImage'))}</div>`}
             </div>
             ${(p.images || []).length > 1 ? `
               <div class="shop-product__thumbs" id="shop-thumbs">
                 ${p.images.map((img, i) => `
                   <button type="button" class="shop-product__thumb ${i === this._activeImageIdx ? 'active' : ''}"
-                          data-idx="${i}" aria-label="Image ${i + 1}">
+                          data-idx="${i}" aria-label="${_esc(t('shop.imageN', { n: i + 1 }))}">
                     <img src="${_esc(img.url)}" alt=""/>
                   </button>
                 `).join('')}
@@ -230,7 +254,7 @@ export class ProductView {
             ${hasVariants ? axes.map(axis => `
               <div class="shop-product__variant" data-axis="${_esc(axis)}">
                 <p class="shop-product__variant-label">${_esc(axisLabel(axis))}</p>
-                <div class="shop-product__variant-chips" role="group" aria-label="Select ${_esc(axisLabel(axis))}">
+                <div class="shop-product__variant-chips" role="group" aria-label="${_esc(chooseAxisLabel(axis))}">
                   ${axisValues(p, axis).map(val => this._variantChipHtml(axis, val)).join('')}
                 </div>
               </div>
@@ -321,7 +345,7 @@ export class ProductView {
       const qty = Math.max(1, Math.min(stock, Math.floor(Number(qtyInput.value) || 1)));
       cart.add(p, variant, qty);
       const confirm = this._view.querySelector('#shop-add-confirm');
-      const label = variant ? `${p.name} — ${variant.attributes.color ? (COLOR_LABELS[variant.attributes.color] || variant.attributes.color) : ''}${variant.attributes.size ? ' / ' + variant.attributes.size : ''}` : p.name;
+      const label = variant ? `${p.name} — ${variant.attributes.color ? colorLabel(variant.attributes.color) : ''}${variant.attributes.size ? ' / ' + variant.attributes.size : ''}` : p.name;
       confirm.textContent = t('shop.addedToCart', { qty, label });
     });
 
@@ -337,7 +361,7 @@ export class ProductView {
       v.active && Object.entries(probe).every(([k, val]) => v.attributes?.[k] === val)
     );
     const disabled = !hasMatch;
-    const label = axis === 'color' ? (COLOR_LABELS[value] || value) : String(value).toUpperCase();
+    const label = axis === 'color' ? colorLabel(value) : String(value).toUpperCase();
     const classes = [
       'shop-product__variant-chip',
       active ? 'active' : '',
@@ -495,11 +519,12 @@ export class ProductView {
     const nextDesc = ((descEl?.innerText || '').trim() || this._product.description).replace(/\r\n?/g, '\n');
 
     const chromePayload = { ...this._chrome };
-    for (const key of Object.keys(DEFAULT_CHROME)) {
+    const defaults = defaultChrome();
+    for (const key of Object.keys(defaults)) {
       const el = view.querySelector(`[data-chrome-field="${key}"]`);
       if (!el) continue;
       const v = (el.textContent || '').trim();
-      chromePayload[key] = v || DEFAULT_CHROME[key];
+      chromePayload[key] = v || defaults[key];
     }
 
     let token = null;
@@ -542,7 +567,7 @@ export class ProductView {
       errs.push(prodRes.reason.message);
     }
     if (chromeRes.status === 'fulfilled') {
-      this._chrome = this._mergeWithDefaults(DEFAULT_CHROME, chromeRes.value);
+      this._chrome = this._mergeWithDefaults(defaultChrome(), chromeRes.value);
     } else {
       errs.push(chromeRes.reason.message);
     }

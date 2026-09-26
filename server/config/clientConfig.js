@@ -154,7 +154,7 @@ const SCHEMA = {
       // the resolved list, so a typo cannot silently hide nothing.
       hiddenAdminViews: {
         type: 'string[]',
-        default: ['products', 'collections', 'bins', 'orders', 'discounts', 'sales', 'pos', 'background'],
+        default: ['products', 'collections', 'bins', 'inventory', 'receiving', 'orders', 'discounts', 'sales', 'pos', 'background', 'projects'],
         validate: validateViewIds,
       },
     },

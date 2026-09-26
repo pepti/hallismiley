@@ -53,11 +53,13 @@ function buildRobots({ hidden = HIDDEN_PUBLIC_ROUTES, noindex = NOINDEX_ROUTES, 
 
 const router = express.Router();
 
-// A non-production instance, or any instance reached on an infrastructure host
-// (*.azurewebsites.net, localhost, a bare IP), shuts crawlers out entirely —
+// A demo instance (config/demoInstance.js) is sample data: nothing on it is
+// for a crawler. Nor is a non-production instance, or any instance reached on
+// an infrastructure host (*.azurewebsites.net, localhost, a bare IP) —
 // utils/indexability.js, ported from icelandicstore #123 (harvest 2). The same
 // rule noindexes every page (ssrMeta) and empties the sitemap.
 const DISALLOW_ALL = 'User-agent: *\nDisallow: /\n';
+const DEMO_ROBOTS = DISALLOW_ALL;
 
 router.get('/robots.txt', (req, res) => {
   res.set('Content-Type', 'text/plain; charset=utf-8');
@@ -67,7 +69,8 @@ router.get('/robots.txt', (req, res) => {
   // Azure hostname (de-indexing the live site), or the reverse.
   res.set('Cache-Control', 'public, max-age=300');
   res.set('Vary', 'Host');
-  res.status(200).send(isIndexableRequest(req) ? buildRobots() : DISALLOW_ALL);
+  const shut = require('../config/demoInstance').isDemoInstance() || !isIndexableRequest(req);
+  res.status(200).send(shut ? DEMO_ROBOTS : buildRobots());
 });
 
 module.exports = { router, buildRobots, DISALLOW_ALL };

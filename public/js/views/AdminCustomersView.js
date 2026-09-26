@@ -9,10 +9,12 @@ import { navigateReplace } from '../navigate.js';
 import { renderAdminShell } from '../components/AdminSidebar.js';
 import { showToast } from '../components/Toast.js';
 import { downloadCsv } from '../utils/downloadCsv.js';
+import { formatDate, formatMoney } from '../utils/format.js';
 import {
   adminListCustomers, adminCreateCustomer,
   adminPreviewCustomerImport, adminApplyCustomerImport, adminDeleteCustomers,
   adminGetInvitePreview, adminRenderInvitePreview, adminSaveInviteTemplate, adminSendBulkInvites,
+  adminGetCustomer, adminUpdateCustomer, adminInviteCustomer,
 } from '../services/adminCustomers.js';
 import { parseCsvRecords } from '../utils/csv.js';
 import { CustomerNotes } from '../components/CustomerNotes.js';
@@ -110,8 +112,10 @@ export class AdminCustomersView {
     }
   }
 
+  // The kit formatter, which follows the app locale (was toLocaleDateString
+  // ('en-GB') — English in the Icelandic admin). Ported from icelandicstore #324.
   _date(iso) {
-    return iso ? new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+    return iso ? formatDate(iso, { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
   }
 
   // invited_at is stamped only on a confirmed send (ice #258), so "Invited
@@ -147,18 +151,149 @@ export class AdminCustomersView {
               <td>${escHtml(c.display_name || '—')}</td>
               <td>${escHtml(c.phone || '—')}</td>
               <td>${Number(c.order_count) || 0}</td>
-              <td>${Number(c.total_spent) ? Number(c.total_spent).toLocaleString('is-IS') + ' kr' : '—'}</td>
+              <td>${Number(c.total_spent) ? formatMoney(c.total_spent, 'ISK') : '—'}</td>
               <td>${this._date(c.created_at)}</td>
               <td>${escHtml(this._statusLabel(c))}</td>
-              <td>${c.role === 'user'
-                ? `<button type="button" class="cust-notes-btn" data-id="${escHtml(String(c.id))}" data-email="${escHtml(c.email || c.display_name || c.username || '')}">${t('customerNotes.title')}</button>`
+              <td class="cust-actions">${c.role === 'user'
+                ? `${!c.editable ? '' : `<button type="button" class="cust-notes-btn cust-edit-btn" data-edit-id="${escHtml(String(c.id))}"
+                     aria-label="${escHtml(t('adminCustomers.editRow', { name: c.display_name || c.email || c.username || '' }))}">${t('adminCustomers.edit')}</button>`}
+                   <button type="button" class="cust-notes-btn" data-id="${escHtml(String(c.id))}" data-email="${escHtml(c.email || c.display_name || c.username || '')}">${t('customerNotes.title')}</button>`
                 : ''}</td>
             </tr>`).join('')}
         </tbody>
       </table>`;
     if (admin) this._wireSelection(body);
-    body.querySelectorAll('.cust-notes-btn').forEach(btn => {
+    body.querySelectorAll('.cust-notes-btn[data-id]').forEach(btn => {
       btn.addEventListener('click', () => this._openNotesModal(btn.dataset.id, btn.dataset.email));
+    });
+    body.querySelectorAll('.cust-edit-btn[data-edit-id]').forEach(btn => {
+      btn.addEventListener('click', () => this._openEditModal(btn.dataset.editId, btn));
+    });
+  }
+
+  // ── Edit one customer (harvest 2 lane 3; ported from icelandicstore #336) ──
+  // Contact details + a postal address (migration 117_user_address), and the
+  // welcome invite for a customer who has no password yet. Any holder of the
+  // `customers` view may do this; the server holds the target to a plain
+  // customer (a staff account or party guest is 404) and never answers with the
+  // set-password link, so a failed send is reported, not worked around.
+  async _openEditModal(id, opener) {
+    const modal = document.createElement('div');
+    modal.className = 'admin-shop__modal';
+    modal.innerHTML = `
+      <div class="admin-shop__modal-card cust-edit" role="dialog" aria-modal="true" aria-labelledby="cust-edit-title">
+        <header>
+          <h2 id="cust-edit-title">${t('adminCustomers.editTitle')}</h2>
+          <button type="button" class="admin-shop__modal-close" aria-label="${t('common.close')}">✕</button>
+        </header>
+        <div class="cust-edit__body"><p>${t('form.loading')}</p></div>
+      </div>`;
+    document.body.appendChild(modal);
+    const close = () => { modal.remove(); document.removeEventListener('keydown', onKey); opener?.focus(); };
+    const onKey = (e) => { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', onKey);
+    modal.querySelector('.admin-shop__modal-close').addEventListener('click', close);
+    modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+    const bodyEl = modal.querySelector('.cust-edit__body');
+
+    let c;
+    try {
+      c = await adminGetCustomer(id);
+    } catch (err) {
+      bodyEl.innerHTML = `<p class="admin-shop__error" role="alert">${escHtml(err.message)}</p>`;
+      return;
+    }
+    if (!modal.isConnected) return;
+    const field = (name, label, attrs = '') => `
+      <label>${label}
+        <input type="text" name="${name}" value="${escHtml(c[name] || '')}" ${attrs}/>
+      </label>`;
+    const inviteState = !c.email ? t('adminCustomers.noEmailNoInvite')
+      : c.has_password ? t('adminCustomers.hasPasswordNote') : '';
+    // The email is the login's address: only an administrator may change it
+    // (the server answers 403 email_admin_only otherwise — this is UX).
+    const canEditEmail = isAdmin();
+    bodyEl.innerHTML = `
+      <form class="admin-shop__form" id="cust-edit-form" novalidate>
+        <label>${t('adminCustomers.email')}
+          <input type="email" name="email" value="${escHtml(c.email || '')}" maxlength="254" ${c.email ? 'required' : ''} autocomplete="off"
+                 ${canEditEmail ? '' : 'readonly aria-describedby="cust-email-hint"'}/>
+        </label>
+        ${canEditEmail ? '' : `<p class="admin-shop__hint" id="cust-email-hint">${t('adminCustomers.emailAdminOnly')}</p>`}
+        ${field('display_name', t('adminCustomers.name'), 'maxlength="200"')}
+        ${field('phone', t('adminCustomers.phone'), 'maxlength="20" inputmode="tel"')}
+        ${field('address1', t('adminCustomers.address1'), 'maxlength="200" autocomplete="off"')}
+        ${field('address2', t('adminCustomers.address2'), 'maxlength="200" autocomplete="off"')}
+        <div class="cust-edit__row">
+          ${field('zip', t('adminCustomers.zip'), 'maxlength="20" autocomplete="off"')}
+          ${field('city', t('adminCustomers.city'), 'maxlength="100" autocomplete="off"')}
+        </div>
+        ${field('country', t('adminCustomers.country'), 'maxlength="2" autocomplete="off"')}
+        <p class="admin-shop__error" id="cust-edit-error" role="alert"></p>
+        <div class="admin-shop__form-actions">
+          <button type="submit" class="admin-shop__primary-btn">${t('form.save')}</button>
+        </div>
+      </form>
+      <section class="cust-edit__invite" aria-labelledby="cust-invite-head">
+        <h3 class="cust-edit__subhead" id="cust-invite-head">${t('adminCustomers.inviteSection')}</h3>
+        <p class="admin-shop__hint">${inviteState || t('adminCustomers.inviteHint')}</p>
+        ${inviteState ? '' : `<button type="button" class="admin-shop__primary-btn" id="cust-edit-invite">${t('adminCustomers.sendInvite')}</button>`}
+        <p class="cust-edit__status" id="cust-invite-status" role="status" aria-live="polite"></p>
+      </section>`;
+    bodyEl.querySelector(canEditEmail ? '[name=email]' : '[name=display_name]')?.focus();
+
+    const form = bodyEl.querySelector('#cust-edit-form');
+    const errEl = bodyEl.querySelector('#cust-edit-error');
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errEl.textContent = '';
+      // Only what changed is sent — the server touches only the keys it gets.
+      const fd = new FormData(form);
+      const patch = {};
+      const keys = ['display_name', 'phone', 'address1', 'address2', 'zip', 'city', 'country'];
+      for (const k of canEditEmail ? ['email', ...keys] : keys) {
+        const v = String(fd.get(k) ?? '').trim();
+        if (v !== String(c[k] || '')) patch[k] = v;
+      }
+      // The postcode rule depends on the country (an Icelandic postnúmer is
+      // three digits), so the server checks them as a pair: send both.
+      if ('zip' in patch || 'country' in patch) {
+        patch.zip = String(fd.get('zip') ?? '').trim();
+        patch.country = String(fd.get('country') ?? '').trim();
+      }
+      if (!Object.keys(patch).length) { close(); return; }
+      const btn = form.querySelector('[type=submit]');
+      btn.disabled = true;
+      try {
+        c = { ...c, ...(await adminUpdateCustomer(id, patch)) };
+        showToast(t('adminCustomers.saved'), 'success');
+        close();
+        await this._load();
+      } catch (err) {
+        errEl.textContent = err.message;
+        btn.disabled = false;
+      }
+    });
+
+    bodyEl.querySelector('#cust-edit-invite')?.addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      const status = bodyEl.querySelector('#cust-invite-status');
+      btn.disabled = true;
+      status.textContent = '';
+      try {
+        const res = await adminInviteCustomer(id);
+        // "Invite sent" means sent (ice #258): say exactly what happened.
+        status.textContent = res.invited ? t('adminCustomers.inviteSentOk')
+          : res.redirected ? t('adminCustomers.inviteRedirectedNoLink')
+          : t('adminCustomers.inviteNotSent');
+        status.classList.toggle('cust-edit__status--ok', !!res.invited);
+        if (res.invited) showToast(t('adminCustomers.inviteSentOk'), 'success');
+        btn.disabled = false;
+      } catch (err) {
+        status.textContent = err.message;
+        status.classList.remove('cust-edit__status--ok');
+        btn.disabled = false;
+      }
     });
   }
 
@@ -583,6 +718,10 @@ export class AdminCustomersView {
             <input type="text" name="phone" maxlength="40"/>
           </label>
           ${expiryFieldHtml({ idPrefix: 'cust-add-expiry' })}
+          <label class="admin-shop__checkbox" id="cust-add-invite-row">
+            <input type="checkbox" name="send_invite" id="cust-add-send-invite"/>
+            <span>${t('adminCustomers.sendInviteNow')}</span>
+          </label>
           <p class="admin-shop__hint">${t('adminCustomers.addHint')}</p>
           <p class="admin-shop__error" id="cust-add-error" role="alert"></p>
           <div class="admin-shop__form-actions">
@@ -607,6 +746,8 @@ export class AdminCustomersView {
       emailInput.required = !noEmailBox.checked;
       nameInput.required  = noEmailBox.checked;
       if (noEmailBox.checked) emailInput.value = '';
+      // A name-only login has no mailbox: nothing to invite.
+      form.querySelector('#cust-add-invite-row').hidden = noEmailBox.checked;
     });
 
     // "Gildir til" (migration 114): a demo login for a prospect stops working
@@ -622,7 +763,13 @@ export class AdminCustomersView {
       if (!expiry.ok) { errorEl.textContent = expiry.message; return; }
       try {
         const res = await adminCreateCustomer({
-          ...(noEmail ? { no_email: true } : { email: String(fd.get('email') || '').trim() }),
+          // "Send the invite now" is OFF by default (ice #336): the account is
+          // made and nothing is mailed until the admin asks — here, or later
+          // from the customer's Edit dialog.
+          ...(noEmail ? { no_email: true } : {
+            email: String(fd.get('email') || '').trim(),
+            send_invite: form.querySelector('#cust-add-send-invite').checked,
+          }),
           display_name: String(fd.get('display_name') || '').trim() || null,
           phone:        String(fd.get('phone') || '').trim() || null,
           ...(expiry.value ? { expires_at: expiry.value } : {}),
@@ -636,6 +783,11 @@ export class AdminCustomersView {
           });
           wireCredentialsPanel(form);
           form.querySelector('[data-otc-done]').addEventListener('click', close);
+          return;
+        }
+        if (res.invite_sent === false) {
+          close();
+          showToast(t('adminCustomers.createdNotInvited'), 'success');
           return;
         }
         if (res.invited) {

@@ -6,6 +6,7 @@
 
 import { t } from '../i18n/i18n.js';
 import { escHtml } from '../utils/escHtml.js';
+import { formatDateTime } from '../utils/format.js';
 import { getToastLog } from '../services/toastLog.js';
 
 // Types that carry a translated badge + a colour. Anything else falls back to
@@ -16,9 +17,14 @@ function badgeText(type) {
   return KNOWN_TYPES.has(type) ? t('toast.type.' + type) : type;
 }
 
+// Time of day in the app locale through the kit formatter (was the browser's
+// own toLocaleTimeString; ice #324). hourCycle h23 so an Icelandic runtime
+// without is ICU data still prints 14:05:09, not 2:05:09 PM.
 function timeOf(ts) {
   const d = new Date(ts);
-  return isNaN(d.getTime()) ? '' : d.toLocaleTimeString();
+  return isNaN(d.getTime())
+    ? ''
+    : formatDateTime(ts, { hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' });
 }
 
 /** Render log entries (newest first) as a list. Shared by the modal + Monitoring. */

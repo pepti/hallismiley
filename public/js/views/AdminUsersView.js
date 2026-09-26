@@ -7,12 +7,15 @@ import { t, href }       from '../i18n/i18n.js';
 import { navigateReplace } from '../navigate.js';
 import { renderAdminShell } from '../components/AdminSidebar.js';
 import { listRoles } from '../services/adminRoles.js';
+// The role's display name (migration 116_role_label; harvest 2 G1), never the slug.
+import { roleLabel } from '../utils/roleLabel.js';
 import { sortableTh, cycleSort, bindSortable } from '../components/adminTable.js';
 import { pagerHtml, bindPager } from '../components/adminPager.js';
 import { readListState, syncListState, readPageSize, writePageSize } from '../utils/listState.js';
 import { debounce } from '../utils/debounce.js';
 import { expiryBadgeHtml, expiryFieldHtml, wireExpiryField, readExpiryField } from '../components/ExpiryPicker.js';
 import { moduleEnabled } from '../utils/modules.js';
+import { formatDate } from '../utils/format.js';
 
 // Was a fixed 20 — a size the picker does not offer. The list remembers the
 // admin's own choice now, defaulting to the nearest offered value.
@@ -28,10 +31,11 @@ function cancelled() {
   showToast(t('admin.actionCancelled'), 'info');
 }
 
-function formatDate(str) {
-  if (!str) return '—';
-  return new Date(str).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-}
+// The "joined" date comes from the kit formatter (utils/format.js): it follows
+// the app locale and builds Icelandic by hand. It replaced a local
+// toLocaleDateString(undefined, …) that answered in the browser's language
+// (ice #324 sweep, harvest 2 lane 4a). Its default shape and its '—' for an
+// empty value are what the local helper had.
 
 export class AdminUsersView {
   constructor() {
@@ -137,7 +141,7 @@ export class AdminUsersView {
     const known = roles.some(r => r.name === current);
     const list  = known ? roles : [...roles, { name: current }];
     return list.map(r =>
-      `<option value="${escHtml(r.name)}" ${current === r.name ? 'selected' : ''}>${escHtml(r.name)}</option>`
+      `<option value="${escHtml(r.name)}" ${current === r.name ? 'selected' : ''}>${escHtml(roleLabel(r))}</option>`
     ).join('');
   }
 

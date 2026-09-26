@@ -12,6 +12,16 @@ const ALL = '*';
 const ADMIN_VIEW_IDS = [
   'dashboard', 'products', 'orders', 'collections', 'bins', 'customers', 'discounts', 'sales',
   'analytics', 'background', 'feedback', 'general', 'users', 'roles',
+  // Verkefni: the projects board at /admin/projects (AdminProjectsView), listed
+  // under Vefur since the "Í dag" home replaced the overview it hung off
+  // (2026-09-26). The projects API keeps its own admin/moderator write gate;
+  // granting this view grants the SCREEN. Owned by the `projects` module.
+  'projects',
+  // Stock (harvest2-lane6a): Inventory Watch + the stock count, and goods
+  // receiving. Retail ids like 'bins' — owned by the shop module and hidden
+  // here by identity.surface.hiddenAdminViews. Both MOVE stock (through
+  // models/Inventory.js, audited), so granting one is granting that.
+  'inventory', 'receiving',
   // Software updates. Granting this is granting SIGHT of the release channel and
   // the update history — the apply/rollback/settings routes are hard admin-only
   // on top (server/routes/systemRoutes.js), so an ops role can watch a fleet

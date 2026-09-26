@@ -8,6 +8,7 @@ import { installSessionGuard } from './services/sessionGuard.js';
 import { initCookieConsent } from './services/cookieConsent.js';
 import { installBuildGuard } from './services/buildGuard.js';
 import { ThemeSwitcher } from './components/ThemeSwitcher.js';
+import { mountDemoBanner } from './components/DemoBanner.js';
 import { initTheme, getEffectiveEnv, getDemoMode } from './services/themePrefs.js';
 import { syncBodyClass as syncAmbienceClass } from './services/ambiencePrefs.js';
 import {
@@ -37,10 +38,16 @@ await loadLocale(initialLocale);
 
 // Translate the static chrome that ships in index.html (the skip link) — it
 // renders before any module runs, so its markup carries Icelandic defaults
-// and gets re-translated here once messages are in.
-for (const el of document.querySelectorAll('body > [data-i18n]')) {
-  el.textContent = t(el.dataset.i18n);
+// and gets re-translated here once messages are in — and again after every
+// language switch, which swaps the message table without a reload (ported from
+// icelandicstore #399: the skip link kept the first language's text).
+function translateStaticChrome() {
+  for (const el of document.querySelectorAll('body > [data-i18n]')) {
+    el.textContent = t(el.dataset.i18n);
+  }
 }
+translateStaticChrome();
+window.addEventListener('localechange', translateStaticChrome);
 
 // A time-limited login ran out since the last visit (migration 114): the
 // server has already signed it out — say why, now that messages are loaded.
@@ -50,6 +57,11 @@ if (restored?.expired) showToast(t('auth.errors.accountExpired'), 'error', 8000)
 const navBar = new NavBar();
 const navEl  = navBar.render();
 document.body.insertBefore(navEl, document.getElementById('app'));
+
+// The demo instance's banner (R2b): only where ssrMeta marked <html
+// data-demo-instance>. Above the nav, in the flow; re-worded on a locale switch.
+mountDemoBanner();
+window.addEventListener('localechange', () => mountDemoBanner());
 
 // ── Floating theme switcher — mounted outside #app so it survives SPA nav ──
 // theme-boot.js already applied the saved theme pre-paint; initTheme() re-syncs

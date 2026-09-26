@@ -66,7 +66,7 @@ function eventRowsHtml(events) {
   return `<ul class="toast-log">`
     + events.map(e => {
       const when = new Date(e.created_at);
-      const stamp = isNaN(when.getTime()) ? '' : when.toLocaleString();
+      const stamp = isNaN(when.getTime()) ? '' : formatDateTime(e.created_at);
       const who = e.username || t('toast.userAnonymous');
       // Meta line: where it happened, plus how we heard about it when the answer
       // isn't "the app showed the user a toast" — an uncaught exception is a
@@ -400,7 +400,7 @@ export class AdminMonitoringView {
 
     const h = this._health;
     const c = h.checks || {};
-    const checkedAt = h.timestamp ? new Date(h.timestamp).toLocaleString() : '';
+    const checkedAt = h.timestamp ? formatDateTime(h.timestamp) : '';
     const parts = [
       // The pill already carries the word — no value column for this one.
       row(t('adminMonitoring.status'), '', h.status),

@@ -65,6 +65,8 @@ async function postBatch(host, key, batch) {
 // Public: submit one or more URLs. Always returns immediately; the actual
 // HTTP POST runs on the next tick.
 function submitToIndexNow(urls) {
+  // A demo instance (config/demoInstance.js) is never indexed.
+  if (require('../config/demoInstance').isDemoInstance()) return;
   const key = process.env.INDEXNOW_KEY;
   if (!key) return;                                    // dev / preview — silent skip
   if (!urls) return;

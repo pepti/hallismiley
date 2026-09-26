@@ -26,7 +26,9 @@ const { requireRole } = require('../auth/roles');
 const { csrfProtect } = require('../middleware/csrf');
 
 function mcpOn(req, res, next) {
-  if (process.env.MCP_ENABLED !== 'true') return res.status(404).json({ error: 'Not found', code: 404 });
+  if (process.env.MCP_ENABLED !== 'true' || require('../config/demoInstance').isDemoInstance()) {
+    return res.status(404).json({ error: 'Not found', code: 404 }); // dark, or a demo instance
+  }
   return next();
 }
 
