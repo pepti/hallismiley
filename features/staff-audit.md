@@ -12,7 +12,7 @@ paths:
 migrations: []
 since: 2026-09-07
 origin: null
-history: [accounts-commission, review-099]
+history: [accounts-commission, review-099, harvest2-lane1b-2026-09-26]
 ---
 
 The immutable `staff_audit_log` (created by 098): account, commission and role writes append a row on the same DB client as the write; `/api/v1/admin/audit` reads it for the Monitoring screen.

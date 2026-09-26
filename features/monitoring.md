@@ -30,7 +30,7 @@ paths:
 migrations: [087_event_logs]
 since: 2026-08-22
 origin: null
-history: [harvest-1, harvest-2, review-099, harvest-ice-f-2026-09-24]
+history: [harvest-1, harvest-2, review-099, harvest-ice-f-2026-09-24, harvest2-lane1b-2026-09-26]
 ---
 
 Event logs (087) with the public error beacon, the `/health`, `/ready` and Prometheus `/metrics` endpoints, the DB circuit breaker, memory watch and error-rate alerts in `server/observability`, pino logging with secret scrubbing, and the `/admin/monitoring` screen (which also reads the staff audit log).

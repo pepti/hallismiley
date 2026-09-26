@@ -30,7 +30,13 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // The platform a prospect is moving off. Free text is accepted (the form
 // offers these as options but a lead is never rejected for typing something
 // else) — the list exists so analytics props stay a small, known set.
-const KNOWN_PLATFORMS = ['shopify', 'wix', 'wordpress', 'woocommerce', 'squarespace', 'dk', 'regla', 'payday', 'none', 'other'];
+// Since 2026-09-26 the form offers categories, not product names (Halli); the
+// product values stay so older leads, imports and API callers still map.
+const KNOWN_PLATFORMS = [
+  'webstore', 'website', 'accounting', 'custom', 'spreadsheets',
+  'shopify', 'wix', 'wordpress', 'woocommerce', 'squarespace', 'dk', 'regla', 'payday',
+  'none', 'other',
+];
 
 function normalizePlatform(raw) {
   if (typeof raw !== 'string' || !raw.trim()) return null;

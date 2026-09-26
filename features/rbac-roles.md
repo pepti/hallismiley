@@ -21,7 +21,7 @@ paths:
 migrations: [056_dynamic_roles, 061_user_roles]
 since: 2026-08-09
 origin: null
-history: [accounts-commission, review-099]
+history: [accounts-commission, review-099, harvest2-lane1b-2026-09-26]
 ---
 
 Dynamic roles (056) with per-user role sets (061) and per-view grants: `ADMIN_VIEW_IDS` in `adminViews.js` are the grantable admin screens, `requireView(id)` is the server gate, and `/admin/roles` edits them. Seeded roles: `solufolk`, `solumadur`, `verktaki`. `PERMISSION_VIEW_IDS` (`allaccounts`) are grantable without a sidebar line.

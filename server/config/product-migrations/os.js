@@ -156,6 +156,37 @@ const OS_001_EDITS = [
     to: '<li><strong>Uppsetningargjald</strong> er fast verð eftir þrepi (390 / 580 / 690 þ.kr., DRÖG) og <strong>þjónustusamningur</strong> fylgir öllum þrepum.</li>' },
 ];
 
+// os_002: the contact page's hero subtitle and "What we take on" cards, per
+// locale. Must equal DEFAULT_HERO.subtitle / DEFAULT_AVAILABILITY in
+// public/js/views/ContactView.js (contactContentOs002.test.js pins it).
+// DRAFT (2026-09-26, Efnishöfundur) — awaiting Halli.
+const OS_002_CONTACT = {
+  hero_subtitle: {
+    en: 'A new website, a system built around the way you work, a move off an old system, or just a question about what is possible. We read every message and reply within one business day.',
+    is: 'Nýr vefur, kerfi smíðað utan um verklagið, flutningur af gömlu kerfi eða bara spurning um hvað er hægt. Við lesum öll skilaboð og svörum innan eins virks dags.',
+  },
+  availability: {
+    en: {
+      eyebrow: 'Right now',
+      title: 'What we take on',
+      cards: [
+        { status: 'open',    label: 'Custom systems and integrations', body: 'Systems built around the way you work, links to accounting and payment gateways, and automation that takes repetitive manual work off the table.' },
+        { status: 'open',    label: 'Websites, stores and migrations', body: 'A new website or online store, or a move off an older system without the business stopping. We host it and keep it maintained.' },
+        { status: 'limited', label: 'Larger projects',                 body: 'Work that takes months to build. We take it on when it fits what we are building.' },
+      ],
+    },
+    is: {
+      eyebrow: 'Núna',
+      title: 'Hvað við tökum að okkur',
+      cards: [
+        { status: 'open',    label: 'Sérsmíðuð kerfi og tengingar',   body: 'Kerfi utan um verklagið, tengingar við bókhald og greiðslugáttir og sjálfvirkni sem tekur endurtekna handavinnu af borðinu.' },
+        { status: 'open',    label: 'Vefir, verslanir og flutningur', body: 'Nýr vefur eða vefverslun, eða flutningur af eldra kerfi án þess að reksturinn stöðvist. Við hýsum og höldum því við.' },
+        { status: 'limited', label: 'Stærri verkefni',                body: 'Verkefni sem taka marga mánuði í smíði. Við tökum þau að okkur þegar þau falla að því sem við erum að byggja.' },
+      ],
+    },
+  },
+};
+
 module.exports = {
   product: 'os',
   legacy: [
@@ -257,6 +288,27 @@ module.exports = {
     name: 'os_001_sales_guides_d001_pricing',
     edits: OS_001_EDITS,
     statements: OS_001_EDITS.map(guideEdit),
+  },
+  {
+    // The contact page speaks for the whole company, not Rekstrarkerfið alone,
+    // and names no software it replaces (Halli, 2026-09-26). 092 seeded the
+    // hero and availability rows with "Shopify, Wix or WordPress" and a
+    // migrate-onto-Rekstrarkerfið card, and seeded rows win over the
+    // ContactView defaults, so the new copy (OS_002_CONTACT, identical to the
+    // defaults) lands here. The 091/092 guard: updated_by IS NULL, so copy a
+    // person saved is kept. The hero keeps its other fields (subtitle only).
+    // The contact_built_with rows are left in place, inert: the view no longer
+    // reads them (the "Undir húddinu" section left the page). Pure data.
+    // DRAFT copy — Halli approves.
+    // Reference copy: server/migrations/product/os_002_contact_content_offering.sql
+    name: 'os_002_contact_content_offering',
+    content: OS_002_CONTACT,
+    statements: ['en', 'is'].flatMap(lang => [
+      `UPDATE site_content SET value = jsonb_set(value, '{subtitle}', to_jsonb(${sqlText(OS_002_CONTACT.hero_subtitle[lang])}::text)), updated_at = NOW()
+         WHERE key = 'contact_hero' AND locale = ${sqlText(lang)} AND updated_by IS NULL`,
+      `UPDATE site_content SET value = ${sqlText(JSON.stringify(OS_002_CONTACT.availability[lang]))}::jsonb, updated_at = NOW()
+         WHERE key = 'contact_availability' AND locale = ${sqlText(lang)} AND updated_by IS NULL`,
+    ]),
   },
   ],
   aliases: {},

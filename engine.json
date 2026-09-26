@@ -300,6 +300,32 @@
       "conflicts": 0,
       "note": "harvest",
       "harvestedFrom": "ice@941cf51d",
+      "chunk": "harvest2 lane 0",
+      "commits": [
+        "459dba6 (#355)",
+        "#363 (rule only)",
+        "#128 (doc)"
+      ],
+      "branch": "harvest2/lane0-history",
+      "features": [
+        "testing-infra"
+      ],
+      "migrations": {},
+      "trimmed": [
+        "ice #355 deploy.yml sanity job (already handled by chunk F: ice deploys TEST on green main, the engine deploys by dispatch)",
+        "ice #355 ci.yml main-gate tree-match removal (not applicable: the engine has no main-gate)",
+        "ice #355 migrationNames.test.js (migrationSet.test.js already pins the two-array names)",
+        "ice #355 per-PR CHANGELOG.md freeze (build-manifest.js reads the engine CHANGELOG at release)",
+        "ice #128 docs/PROD-VERIFICATION-PLAN.md and its PROD appendix (ice infra; the engine section is in docs/TESTING.md)"
+      ]
+    },
+    {
+      "rev": null,
+      "date": "2026-09-26",
+      "upstreamCommits": 0,
+      "conflicts": 0,
+      "note": "harvest",
+      "harvestedFrom": "ice@941cf51d",
       "chunk": "harvest2 lane 1b (defects, audit)",
       "commits": [
         "3be7b57 (#379 one document menu closer — the generic closer only)",

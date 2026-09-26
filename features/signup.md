@@ -14,7 +14,7 @@ paths:
 migrations: []
 since: 2026-09-24
 origin: null
-history: [signup-switch-2026-09-24]
+history: [signup-switch-2026-09-24, harvest2-lane1b-2026-09-26]
 ---
 
 Anyone may create an account: the `/signup` page, `POST /auth/signup`, the username/email availability checks, and a first social sign-in that creates an account. A switchable module (R4 catalogue, `modules.signup.enabled`; in the Verslun and Rekstur tiers): off means staff-only sign-in — the APIs 404 before auth, `/signup` is a 404, the nav's "Nýskrá" and the login modal's sign-up link are gone, and Google/Facebook sign in existing accounts only. Accounts are then created by an admin or the invite flow. rekstrarkerfi.is, the shop window, runs it off (D-020, R2b).

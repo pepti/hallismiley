@@ -82,13 +82,6 @@ role). Wiring them surfaced a quieter bug: `user.totp_reset` and
 missing from `staffAudit.ACTIONS`, so `record()` refused them and
 `recordSafe` swallowed the refusal — neither had ever reached the log.
 
-Found and NOT fixed (needs a migration, Halli's call): deleting a user who
-ever acted in `staff_audit_log` fails 500. The `actor_id` foreign key's
-`ON DELETE SET NULL` is an UPDATE, and the immutability trigger refuses every
-UPDATE (`books_forbid_any_mutation`). Options: drop the FK (keep `actor_id`
-as plain text, like `entity_id`), or let the trigger allow an update that
-only nulls `actor_id`.
-
 **7. The Users page's Party column follows the party module.** It rendered
 on every instance; it now shows only while `moduleEnabled('party')`
 (`tests/unit/adminUsersView.client.test.js`).
@@ -99,4 +92,21 @@ on every instance; it now shows only while `moduleEnabled('party')`
 ProcSignalBarrier — queued behind it; globalSetup runs from several sessions
 sat for 15+ minutes. The integration suites for this chunk ran against a
 freshly created, migrated database with a scratch config that skips the
-global DROP/CREATE. `npm run test:db:clean` would clear the backlog.
+global DROP/CREATE. The coordinator later dropped the 21 orphaned
+orangesmiley test DBs; the ~736 left belong to icelandicstore sessions.
+
+**Owed.**
+- **Decision for Halli — the `staff_audit_log` FK vs its immutability.**
+  Deleting a user who ever acted in the log fails 500 (pre-existing, found
+  while wiring `user.deleted`; reproduced on a migrated test DB). The
+  `actor_id` foreign key is `ON DELETE SET NULL`, which Postgres performs as
+  an UPDATE, and the append-only trigger (`books_forbid_any_mutation`)
+  refuses every UPDATE. Options, each a migration or a contract change: drop
+  the FK and keep `actor_id` as plain text (like `entity_id`, so the row
+  still names who acted); let the trigger allow an update that only nulls
+  `actor_id` (the row then forgets the actor); or refuse the delete up front
+  with a 409 and point to Disable. Not fixed here.
+- Halli approves the DRAFT strings `admin.actionCancelled` and
+  `errors.ai.busy` (EN + IS).
+- The 429 has no engine caller yet; ice's shutdown handshake comes with the
+  first request-path AI call that can outlive the 10 s grace.

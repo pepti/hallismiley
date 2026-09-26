@@ -4,7 +4,8 @@
 # ENGINE DIFFERENCE — READ FIRST. In icelandicstore a docs-only PR tests
 # nothing. Here the docs ARE tested: tests/unit/architectureIndex.test.js and
 # featureRegistry.test.js read docs/ARCHITECTURE.md, docs/HISTORY.md,
-# docs/API.md, PLAN.md, CLAUDE.md and features/*.md, and CHANGELOG.md feeds the
+# docs/history.d/*.md, docs/API.md, PLAN.md, CLAUDE.md and features/*.md
+# (historyFragments.test.js checks the fragments' shape), and CHANGELOG.md feeds the
 # release manifest. So the "Lint + Integration tests" entry below is not a bare
 # echo: it runs the unit tier (no database) and the manifest build. E2E and the
 # Docker build have nothing to prove for prose and report green. ci.yml's
@@ -27,8 +28,9 @@
 #
 # THE MIXED-PR TRAP (why there is a detector and a matrix)
 # `paths:` fires when ANY changed file matches, not when ALL do — so this
-# workflow also starts on a PR that touches docs AND code, which here is nearly
-# most PRs (they update HISTORY.md / PLAN.md with the code). Three plain jobs carrying the
+# workflow also starts on a PR that touches docs AND code, which here is
+# nearly every PR (they add a docs/history.d/ fragment and update PLAN.md with
+# the code). Three plain jobs carrying the
 # required names would then sit beside the real jobs under the same names, and a
 # fast green shim next to a slow or red real job is a false green waiting to
 # happen. Gating plain jobs with `if:` does not help either: a SKIPPED job still
