@@ -5609,6 +5609,85 @@ END; $$ LANGUAGE plpgsql`,
       `ALTER TABLE orders ADD COLUMN IF NOT EXISTS notes TEXT`,
     ],
   },
+  {
+    // The order's VAT, snapshotted at checkout (harvest 2 lane 5, 2026-09-26;
+    // net sales on the sales report, ported in spirit from icelandicstore
+    // #414 — ice already stores orders.vat_total). Two nullable columns:
+    //   order_items.vat_rate — the rate the line was sold at (0 for exported
+    //     goods, a service keeps its rate), the SAME rule as the invoice;
+    //   orders.vat_total — the VAT inside orders.total, in the order's own
+    //     currency's minor units, so total − vat_total is net sales.
+    // Order.createWithItems fills both, in the checkout transaction, through
+    // the pure helper utils/orderVat.js that bookkeeping/invoiceService
+    // .buildLines also uses — so for an ISK order the snapshot IS what the
+    // invoice later books (tests/integration/orderVatSnapshot.test.js).
+    //
+    // Backfill (WHERE vat_total IS NULL): orders placed before this release
+    // get the VAT computed HERE, in SQL, from each product's CURRENT vat_rate
+    // (the only rate history there is), the discount spread over the lines and
+    // the shipping in proportion, shipping at 24 % unless the address is
+    // abroad. It is APPROXIMATE: a rate changed since the sale, and the
+    // króna-level largest-remainder allocation the invoice does, are not
+    // reproduced. Backfilled history is never booked from — the books read
+    // their own invoice lines.
+    //
+    // On icelandicstore (whose 087 already added orders.vat_total, filled by
+    // its own checkout) the backfill finds no NULL rows and is a no-op, and no
+    // `aliases` entry is needed: its migration did more than this one
+    // (docs/MIGRATIONS.md).
+    //
+    // Additive (invariant 14): the previous release neither reads nor writes
+    // either column. An order the OLD code writes during the swap keeps NULL,
+    // and the report falls back to the same approximation for a NULL
+    // (Order.salesReport). Rollback of the schema: DROP both columns once no
+    // release reads them.
+    // Reference copy: server/migrations/121_order_vat_snapshot.sql
+    name: '121_order_vat_snapshot',
+    statements: [
+      `ALTER TABLE order_items ADD COLUMN IF NOT EXISTS vat_rate SMALLINT
+         CHECK (vat_rate IS NULL OR vat_rate IN (0, 11, 24))`,
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS vat_total INTEGER`,
+      // 1. The line rates of the orders about to be backfilled.
+      `UPDATE order_items oi
+          SET vat_rate = CASE
+                WHEN UPPER(TRIM(COALESCE(NULLIF(o.shipping_address->>'country_code', ''),
+                                         NULLIF(o.shipping_address->>'country', ''), 'IS')))
+                     NOT IN ('IS', 'ISL', 'ICELAND', 'ÍSLAND')
+                 AND NOT COALESCE(p.is_bookable, FALSE) THEN 0
+                ELSE COALESCE(p.vat_rate, 24) END
+         FROM orders o, products p
+        WHERE o.id = oi.order_id AND p.id = oi.product_id
+          AND o.vat_total IS NULL AND oi.vat_rate IS NULL`,
+      // 2. The order's VAT: each line and the shipping after its proportional
+      //    share of the discount, VAT extracted per rate. Approximate (above).
+      `WITH base AS (
+         SELECT o.id, o.total::numeric AS total,
+                GREATEST(o.shipping - COALESCE(o.shipping_discount, 0), 0)::numeric AS ship,
+                UPPER(TRIM(COALESCE(NULLIF(o.shipping_address->>'country_code', ''),
+                                    NULLIF(o.shipping_address->>'country', ''), 'IS')))
+                  NOT IN ('IS', 'ISL', 'ICELAND', 'ÍSLAND') AS export,
+                COALESCE((SELECT SUM(oi.product_price_snapshot::numeric * oi.quantity)
+                            FROM order_items oi WHERE oi.order_id = o.id), 0) AS goods
+           FROM orders o
+          WHERE o.vat_total IS NULL
+       ), shares AS (
+         SELECT b.id, b.ship, b.export,
+                COALESCE(GREATEST(b.goods + b.ship - b.total, 0) / NULLIF(b.goods + b.ship, 0), 0) AS f
+           FROM base b
+       ), vat AS (
+         SELECT s.id,
+                COALESCE((SELECT SUM(ROUND(oi.product_price_snapshot::numeric * oi.quantity * (1 - s.f)
+                                           * oi.vat_rate / (100 + oi.vat_rate)))
+                            FROM order_items oi
+                           WHERE oi.order_id = s.id AND oi.vat_rate IS NOT NULL), 0)
+                + CASE WHEN s.export THEN 0 ELSE ROUND(s.ship * (1 - s.f) * 24 / 124) END AS vat
+           FROM shares s
+       )
+       UPDATE orders o SET vat_total = v.vat::int
+         FROM vat v
+        WHERE v.id = o.id AND o.vat_total IS NULL`,
+    ],
+  },
 ];
 
 module.exports = { migrations };
