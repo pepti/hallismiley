@@ -5778,6 +5778,70 @@ END; $$ LANGUAGE plpgsql`,
          ON inventory_adjustments (goods_receipt_id) WHERE goods_receipt_id IS NOT NULL`,
     ],
   },
+  {
+    // Product merge (harvest 2 lane 6b, 2026-09-26; ported from icelandicstore
+    // #309/#311/#312/#315 — ice's 112_product_merges). A merged product is NOT
+    // deleted: it stays as an inactive row pointing at the product it was
+    // folded into (merged_into_id), so its URL can 301 and every history row
+    // that stays on it — inventory_adjustments, issued invoice lines, archived
+    // variants — keeps a parent. product_merges is the only record of what a
+    // merge moved; there is no un-merge (a wrong merge is a point-in-time
+    // restore, RUNBOOK).
+    //
+    // Names and DDL MIRROR ice's 112_product_merges statement for statement
+    // (the not-self CHECK in its guarded form, as ice edited it on 2026-09-14),
+    // so ice's product file aliases this entry to its 112 at graft time and
+    // every statement is a no-op there anyway (IF NOT EXISTS). Columns the
+    // engine's merge never fills (discard_qty / discard_value_isk — the engine
+    // always MOVES stock; added_axis / master_axis_value — no add-axis here)
+    // stay for that parity and hold their defaults.
+    //
+    // Additive (invariant 14): the previous release neither reads nor writes
+    // either object, and a NULL merged_into_id is exactly today's meaning.
+    // Rollback of the schema: DROP TABLE product_merges; ALTER TABLE products
+    // DROP COLUMN merged_into_id — once no release reads them.
+    // Reference copy: server/migrations/120_product_merge.sql
+    name: '120_product_merge',
+    statements: [
+      `SET LOCAL lock_timeout = '5s'`,
+      `ALTER TABLE products ADD COLUMN IF NOT EXISTS merged_into_id TEXT REFERENCES products(id) ON DELETE SET NULL`,
+      `DO $$ BEGIN
+         IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                         WHERE conname = 'products_merged_into_not_self'
+                           AND conrelid = 'products'::regclass) THEN
+           ALTER TABLE products ADD CONSTRAINT products_merged_into_not_self
+             CHECK (merged_into_id IS NULL OR merged_into_id <> id);
+         END IF;
+       END $$`,
+      `CREATE INDEX IF NOT EXISTS idx_products_merged_into ON products (merged_into_id) WHERE merged_into_id IS NOT NULL`,
+      `CREATE TABLE IF NOT EXISTS product_merges (
+        id                TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        master_id         TEXT        REFERENCES products(id) ON DELETE SET NULL,
+        merged_id         TEXT        REFERENCES products(id) ON DELETE SET NULL,
+        shape             TEXT        NOT NULL CHECK (shape IN ('variants', 'simple', 'add_axis')),
+        stock_mode        TEXT        NOT NULL CHECK (stock_mode IN ('move', 'discard')),
+        variant_map       JSONB       NOT NULL DEFAULT '[]'::jsonb,
+        added_axis        TEXT,
+        master_axis_value TEXT,
+        merged_name       TEXT        NOT NULL,
+        merged_slug       TEXT        NOT NULL,
+        merged_sku        TEXT,
+        merged_barcode    TEXT,
+        stock_moved       INTEGER     NOT NULL DEFAULT 0,
+        discard_qty       INTEGER     NOT NULL DEFAULT 0,
+        discard_value_isk INTEGER,
+        counts            JSONB       NOT NULL DEFAULT '{}'::jsonb,
+        warnings          JSONB       NOT NULL DEFAULT '[]'::jsonb,
+        lock_wait_ms      INTEGER,
+        ms                INTEGER,
+        merged_by         TEXT        REFERENCES users(id) ON DELETE SET NULL,
+        merged_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_product_merges_master ON product_merges (master_id, merged_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_product_merges_merged ON product_merges (merged_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_product_merges_sku ON product_merges (lower(merged_sku)) WHERE merged_sku IS NOT NULL`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

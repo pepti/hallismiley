@@ -56,7 +56,7 @@ paths:
 migrations: [001_initial_schema, 043_strip_stale_railway_references]
 since: 2026-08-09
 origin: null
-history: [build-status, base-sync, harvest-2, go-live, harvest-ice-f-2026-09-24, harvest-ice-e-2026-09-24, harvest-ice-a-2026-09-24, harvest-ice-c-2026-09-24, harvest2-lane1b-2026-09-26]
+history: [build-status, base-sync, harvest-2, go-live, harvest-ice-f-2026-09-24, harvest-ice-e-2026-09-24, harvest-ice-a-2026-09-24, harvest-ice-c-2026-09-24, harvest2-lane1b-2026-09-26, harvest2-lane6b-2026-09-26]
 ---
 
 The Express 5 app and boot sequence, the pg pool, the migration runner and the engine migration list (`schema.js`; product migrations are composed in by `migrationSet.js` from `product-migrations/<product>.js`), the central error middleware, the bootstrap/seed scripts, and CI. Everything here is cross-cutting by definition — a file with an obvious owner belongs in that feature instead.
@@ -69,5 +69,6 @@ The Express 5 app and boot sequence, the pg pool, the migration runner and the e
 - The migration runner is transactional and locked; a release's migrations are backward-compatible with the previous release (invariant 14).
 - A Claude client is built from `anthropicAuth.clientAuthOptions()`, never from `ANTHROPIC_API_KEY` directly; in workload-identity mode the key is never read.
 - Every PAID Claude call takes an `aiGate` slot (`services/aiGate.js`, harvest2 from icelandicstore #218; `AI_MAX_CONCURRENT`, default 4): fan-out/background callers `withQueuedSlot`, request-path callers `withSlot`, whose `AiBusyError` the central error middleware answers 429 + `Retry-After` (`reason: AI_BUSY`). Resource protection, not a usage budget.
+- A paid Claude feature with a per-use cost ships DARK behind its own flag and carries its own spend budget in front of the gate — the first is the products import's "Read with AI" (`PRODUCT_IMPORT_AI_*`, `productImport/aiLimits.js`: per request, per file, per user and per instance per UTC day, 2 gate slots). Its model is its own env override or `translator.getModel()` — never a literal ([history](../docs/history.d/2026-09-26-harvest2-lane6b-merge-ai.md#harvest2-lane6b-2026-09-26); cost note in `docs/DEPLOYMENT.md`).
 - The error middleware honours a typed error's `messageKey` / `retryAfterSeconds` / `reason` for a safe client status only; a 5xx never picks its message.
 - Full rules: [../docs/ARCHITECTURE.md#20-infrastructure-and-cross-cutting](../docs/ARCHITECTURE.md#20-infrastructure-and-cross-cutting).
