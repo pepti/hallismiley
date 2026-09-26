@@ -136,6 +136,16 @@ chunk lands; the story goes in a new `docs/history.d/` fragment (since
   the guides as "DRÖG — Halli staðfestir": the einingaverð amount, whether unused
   verkeiningar carry over, the cost of moving up a tier, how sellers demo before
   the demo instance exists.
+- Demo decisions 2026-09-26 (D-023, [demo-decisions-os-2026-09-26](docs/history.d/2026-09-26-docs-demo-decisions-2026-09-26.md)):
+  `demo.rekstrarkerfi.is` is one demo with every module, and "Fáðu demo" on each
+  /verdskra tier card opens it self-serve (a throwaway session per visitor). Open:
+  (a) the handbook guide "Að sýna kerfið" (`seed-sales-guides.js` + os_001) still
+  tells sellers a prospect gets time-limited access only after a guided demo; it
+  needs a new os product migration + the seed change, copy DRÖG for Halli
+  (Söluþjálfari); (b) the demo-instance chunk (`feat/demo-mode`, not yet
+  committed) plans a `kynning` prospect role with expiring logins, which the
+  throwaway visitor session replaces or complements, and how visitors are kept
+  from seeing each other's changes is not designed yet.
 - Decisions that are his, not code's: the lawyer on netting-only set-off
   (contract 5.4 DRÖG), Bókari on written-off balances and verktakamiði, the
   accountant on `docs/ACCOUNTANT-QUESTIONS.md` §2, §6, §7, §11; the VSK
