@@ -13,6 +13,7 @@ import { readListState, syncListState, readPageSize, writePageSize } from '../ut
 import { debounce } from '../utils/debounce.js';
 import { expiryBadgeHtml, expiryFieldHtml, wireExpiryField, readExpiryField } from '../components/ExpiryPicker.js';
 import { moduleEnabled } from '../utils/modules.js';
+import { formatDate } from '../utils/format.js';
 
 // Was a fixed 20 — a size the picker does not offer. The list remembers the
 // admin's own choice now, defaulting to the nearest offered value.
@@ -28,10 +29,11 @@ function cancelled() {
   showToast(t('admin.actionCancelled'), 'info');
 }
 
-function formatDate(str) {
-  if (!str) return '—';
-  return new Date(str).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-}
+// The "joined" date comes from the kit formatter (utils/format.js): it follows
+// the app locale and builds Icelandic by hand. It replaced a local
+// toLocaleDateString(undefined, …) that answered in the browser's language
+// (ice #324 sweep, harvest 2 lane 4a). Its default shape and its '—' for an
+// empty value are what the local helper had.
 
 export class AdminUsersView {
   constructor() {

@@ -58,3 +58,55 @@ describe('client CSV writer matches the server', () => {
     expect(clientCell(undefined)).toBe(csvCell(undefined));
   });
 });
+
+// downloadBlob (ported from icelandicstore #325, harvest 2 lane 4a): the object
+// URL must outlive the click. The engine used to revoke it synchronously, which
+// Safari and older Firefox answer by cancelling the download.
+describe('downloadBlob revokes the object URL late, never straight after click()', () => {
+  const { downloadBlob, downloadCsv, REVOKE_AFTER_MS } = require('../../public/js/utils/downloadCsv.js');
+  let revoked;
+  let clicked;
+  const saved = {};
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    revoked = [];
+    clicked = [];
+    saved.document = global.document;
+    saved.create = URL.createObjectURL;
+    saved.revoke = URL.revokeObjectURL;
+    URL.createObjectURL = () => 'blob:fake-1';
+    URL.revokeObjectURL = (u) => revoked.push(u);
+    const anchor = { click() { clicked.push({ href: this.href, download: this.download }); }, remove() {} };
+    global.document = { createElement: () => anchor, body: { appendChild() {} } };
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    global.document = saved.document;
+    URL.createObjectURL = saved.create;
+    URL.revokeObjectURL = saved.revoke;
+  });
+
+  test('clicks the link with the filename, and revokes only after the delay', () => {
+    downloadBlob('orders.xlsx', new Blob(['x']));
+    expect(clicked).toEqual([{ href: 'blob:fake-1', download: 'orders.xlsx' }]);
+    expect(revoked).toEqual([]);
+    jest.advanceTimersByTime(REVOKE_AFTER_MS - 1);
+    expect(revoked).toEqual([]);
+    jest.advanceTimersByTime(1);
+    expect(revoked).toEqual(['blob:fake-1']);
+  });
+
+  test('the delay is 30 s', () => {
+    expect(REVOKE_AFTER_MS).toBe(30_000);
+  });
+
+  test('downloadCsv goes through the same late revoke', () => {
+    downloadCsv('x.csv', ['a'], [['-500']]);
+    expect(clicked).toHaveLength(1);
+    expect(revoked).toEqual([]);
+    jest.runAllTimers();
+    expect(revoked).toEqual(['blob:fake-1']);
+  });
+});
