@@ -144,7 +144,19 @@ describe('MCP tools — the v1 system surface', () => {
     const res = await rpc({ jsonrpc: '2.0', id: 1, method: 'tools/list' });
     expect(res.status).toBe(200);
     const names = res.body.result.tools.map((t) => t.name).sort();
-    expect(names).toEqual(['environment_info', 'updates_status']);
+    // Read from the seam (found by the hallismiley sync, 2026-09-27): the lane-5 sales tools (read scope) list
+    // wherever the shop module is on and the token owner's admin sees their
+    // view (registry.js gates 3 + 4). Orange Smiley hides `sales`/`orders`;
+    // a product whose admin sees them lists both tools.
+    const { identity } = require('../../server/config/identity');
+    const { isModuleEnabled, disabledAdminViews } = require('../../server/config/modules');
+    const hidden = new Set([...(identity.surface.hiddenAdminViews || []), ...disabledAdminViews()]);
+    const salesTools = [['recent_orders', 'orders'], ['sales_report', 'sales']]
+      .filter(([, view]) => isModuleEnabled('shop') && !hidden.has(view)).map(([name]) => name);
+    expect(names).toEqual(['environment_info', ...salesTools, 'updates_status'].sort());
+    // The engine's own case, pinned literally so the derivation cannot drift
+    // along with a config change (CLAUDE.md: pins about THIS repo run only here).
+    if (require('../../engine.json').role === 'engine') expect(names).toEqual(['environment_info', 'updates_status']);
   });
 
   test('environment_info reports the environment, instance identity and counts', async () => {

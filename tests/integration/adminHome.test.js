@@ -221,14 +221,31 @@ describe('an admin', () => {
   });
 
   test('an all-clear instance: empty to-do list, no figures, no feed — still a 200', async () => {
-    const res = await request(app).get(URL).set('Cookie', adminCookie);
-    expect(res.status).toBe(200);
-    expect(res.body.todo).toEqual([]);
-    // Nothing has ever been sold, invoiced or ordered: the figures wait for the first one.
-    expect(res.body.figures.salesToday).toBeUndefined();
-    expect(res.body.figures.openOrders).toBeUndefined();
-    expect(res.body.figures.receivables).toBeUndefined();
-    expect(res.body.recent).toEqual([]);
+    // Found by the hallismiley sync (2026-09-27): for an admin who sees `bins`
+    // and `inventory`, any active product an earlier suite on the worker left
+    // behind is a to-do here —
+    // unshelved (bins_unshelved: lane 5's adminSalesReport 'report-table',
+    // booksInvoice 'vat-default-*', orderVatSnapshot 'vatsnap-table') or sold
+    // out (out_of_stock: productMerge's 'Merge *-m'). cleanTables() leaves
+    // products alone and those suites never remove theirs. Orange Smiley hides
+    // both views, so it never saw them. Deleting the strays is not an option
+    // (orders and append-only books reference them). Both sources read
+    // active products only: park the strays inactive for this one request
+    // and put them back after.
+    const parked = (await db.query(
+      'UPDATE products SET active = FALSE WHERE active = TRUE RETURNING id')).rows.map((r) => r.id);
+    try {
+      const res = await request(app).get(URL).set('Cookie', adminCookie);
+      expect(res.status).toBe(200);
+      expect(res.body.todo).toEqual([]);
+      // Nothing has ever been sold, invoiced or ordered: the figures wait for the first one.
+      expect(res.body.figures.salesToday).toBeUndefined();
+      expect(res.body.figures.openOrders).toBeUndefined();
+      expect(res.body.figures.receivables).toBeUndefined();
+      expect(res.body.recent).toEqual([]);
+    } finally {
+      await db.query('UPDATE products SET active = TRUE WHERE id = ANY($1::text[])', [parked]);
+    }
   });
 });
 

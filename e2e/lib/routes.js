@@ -20,6 +20,7 @@ const fs = require('fs');
 const path = require('path');
 const { ADMIN_VIEW_IDS } = require('../../server/auth/adminViews');
 const { isDisabledRoute } = require('../../server/config/modules');
+const { productRoutes } = require('../../server/config/identity');
 const gateCore = require('../../tests/lib/featureGate');
 
 const ROOT = path.join(__dirname, '../..');
@@ -54,7 +55,11 @@ function loadRoutes() {
   const listed = JSON.parse(fs.readFileSync(PATTERNS, 'utf8')).patterns;
   const parsed = routes.map((r) => r.pattern);
   const missing = listed.filter((p) => !parsed.includes(p));
-  const extra = parsed.filter((p) => !listed.includes(p));
+  // A product's own routes (identity.routes, e.g. /aron13ara; found by the
+  // hallismiley sync, 2026-09-27) reach the server through ssrMeta, not
+  // routePatterns.json — the exemption tests/unit/routePatterns.test.js makes.
+  const own = new Set(Object.keys(productRoutes()));
+  const extra = parsed.filter((p) => !listed.includes(p) && !own.has(p));
   if (missing.length || extra.length) {
     throw new Error(`routes.js: router.js parse disagrees with routePatterns.json — missing ${JSON.stringify(missing)}, extra ${JSON.stringify(extra)}`);
   }

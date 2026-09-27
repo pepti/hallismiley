@@ -388,7 +388,7 @@ export class AdminExpensesView {
     const items = this._intakeItems;
     const admin = isAdmin();
     const upload = admin ? `
-      <label class="books-check">
+      <label class="books-check books-check--file">
         <input type="file" id="exp-intake-file"
                accept="application/pdf,image/jpeg,image/png,image/webp,image/heic,text/xml,application/xml" />
         ${escHtml(t('adminBooks.intake.upload'))}
