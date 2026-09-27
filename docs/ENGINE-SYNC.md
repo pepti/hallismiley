@@ -127,7 +127,13 @@ engine commit absent from a downstream's `engine.json.rev..upstream/master`
   paths are never overwritten by a sync; `.gitattributes` marks them
   `merge=ours`.
 - **`package-lock.json`**: take theirs, then `npm install --package-lock-only`
-  (the tool does this).
+  (the tool does this). When `package.json` conflicted too, npm cannot read it
+  yet: the tool writes its state, stops with exit 3 and asks you to resolve
+  `package.json` and rerun with `--continue`, which regenerates the lock from
+  your resolution (site-factory, 2026-09-26). The lock is always regenerated
+  last, once every conflict is resolved; a failed regeneration is exit 3 as
+  well — fix the cause, then `--continue`. Every exit-3 message prints the
+  exact command, with `--repo <the worktree>` after a `--worktree` sync.
 - **`.engine-paths`, `.gitattributes`, `features/README.md`** are DERIVED —
   written by `scripts/features-index.js` from `features/**/*.md` — and differ
   per repo (a product's own feature paths), so they conflict on every sync.
@@ -201,6 +207,16 @@ engine commit absent from a downstream's `engine.json.rev..upstream/master`
 - **i18n**: product keys are being moved to `product.{lang}.json`; until that
   loader lands, resolve locale conflicts **by key**, never by hunk, and run
   `check:i18n` before pushing.
+- **History** (harvest2-lane0-2026-09-26, `docs/history.d/README.md`): the
+  fragments in `docs/history.d/` are engine-owned and arrive as NEW files, so
+  they do not conflict; a downstream adds its own fragments beside them. A
+  downstream that keeps its own `docs/HISTORY.md` archive (rekstrarkerfid
+  does) keeps ITS side on a conflict there, and should list
+  `docs/HISTORY.md` in its `engine.json` `productPaths` so the merge takes
+  its side without asking. A slug collision after a sync (the parity tests
+  fail on a repeated `<a id>`) is fixed by renaming the downstream's own
+  **fragment** slug and its links — never an archive anchor, which old
+  links and code comments cite.
 
 ## 7. What never syncs
 
@@ -213,6 +229,17 @@ machinery syncs, the hues do not) · `fleet.json` · `features/local.json` ·
 appear in `.engine-paths`. (`publicSurface.js` and `adminSurface.js` DO sync
 since 2026-09-22: their lists come from `identity.surface.*`, so the files
 carry no product data any more.)
+
+Two engine STUBS a product replaces with its own data: `server/demo/seed.js`
+(the demo instance's sample story) and `server/demo/testStackData.js` (a TEST
+stack's invented rows, harvest2-lane9-2026-09-26). The engine's copies seed
+nothing; a downstream that fills either lists it in its `engine.json`
+`productPaths` in the same change, so a later edit to the engine's stub (its
+header, its contract) can never be resolved over the product's data.
+
+History is split (§6): `docs/history.d/` fragments DO sync (engine-owned,
+new files); a downstream's own `docs/HISTORY.md` archive does not, once it
+is listed in that downstream's `productPaths`.
 
 ## 8. The upward path
 
@@ -231,6 +258,9 @@ building it with Orri). The rule for any downstream:
   upward PR renumbers it and the product file's `aliases` maps the engine
   name to the name the downstream's databases already applied
   (`docs/MIGRATIONS.md`).
+- A harvest PR into the engine gets the same review pass as any chunk
+  before it merges (the built-in `code-review` skill or the
+  `invariant-reviewer` agent; findings fixed on the branch — CLAUDE.md).
 
 ## 9. Cadence and owners
 
@@ -249,6 +279,57 @@ CI green on the default branch → the instance boots → `/ready` 200 →
 `/api/v1/system/version` shows the merged sha → for a promoted product, the
 `/admin/updates` row shows the release seen/applied. `migrate.js --plan` on
 the live database must print no `RUN` lines after boot.
+
+### Teardown after a sync (2026-09-26)
+
+A sync leaves three things behind on the operator's machine; remove them once
+the PR is merged (or abandoned). Since 2026-09-26 one command does steps 1 and
+2 ([test-db-followups-2026-09-26](history.d/2026-09-26-chore-test-db-hygiene-followups.md#test-db-followups-2026-09-26)):
+
+```
+node C:\Users\Notandi\claude\Projects\site-factory\engine-sync.js --repo <downstream> --cleanup <YYYY-MM-DD> [--dry-run]
+```
+
+It refuses a worktree with a sync in progress or tracked changes (`--force`
+overrides), fetches origin, unlinks a `node_modules` junction, runs `git worktree
+remove`, deletes the `engine-sync/<date>[-N]` branches git calls merged (`-d`,
+never `-D`; git measures a pushed branch against its own upstream, so it does
+NOT yet check that the PR merged — run it only after the merge, owed in
+site-factory), and runs the downstream's `npm run test:db:clean -- --gone --yes`
+with the same `TEST_PG_URL` the verification used — skipped, with a note, in a
+downstream whose `drop-test-dbs.js` has no `--gone` yet. The sync itself prints
+the command.
+
+**The verification runs on the throwaway test server.** A `.wt/` worktree has
+no `.env`, so `engine-sync.js` hands the downstream's npm scripts `TEST_PG_URL`
+(+ `TEST_PG_DATA`) from `--test-pg-url`, the environment, the downstream's
+`.env` or the engine checkout's `.env` (`ENGINE_CHECKOUT`, default
+`../orangesmiley`). It refuses a sync that would run tests with none found
+(`--allow-main-pg` overrides) and a `TEST_PG_URL` on `:5432`. `--worktree` also
+adds `/.wt/` to `.git/info/exclude`, and the engine's `.gitignore` lists `.wt/`
+since the same day, so a sync worktree never reads as stray untracked files.
+`--worktree` reads `engine.json` from `origin/<default>` (`git show`) — the
+commit the worktree is cut from — so the main checkout may sit on any branch,
+even one without an `engine.json` (2026-09-26).
+
+What `--cleanup` does, by hand:
+
+1. **Worktrees and clones.** `engine-sync.js --worktree` works in `<repo>/.wt/engine-sync-<date>`
+   (or a temporary clone). Unlink a `node_modules` junction first —
+   `cmd //c rmdir <worktree>\node_modules` — because `rm -rf` follows it and
+   empties the SOURCE `node_modules`; then `git worktree remove <path>` (a
+   clone: delete the folder) and `git branch -d engine-sync/<date>`.
+2. **Test databases.** The verify step's Jest and e2e runs created
+   `<product>_engine_sync_<date>_…_test` databases (per product since
+   2026-09-26 — before that every repo derived `orangesmiley_…` names). From
+   the downstream repo: `npm run test:db:clean -- --gone` (plan), then
+   `--gone --yes`. Every later `npm test` there also sweeps them once their
+   run is dead, but an e2e database waits 14 days unless its branch and
+   worktree are gone.
+3. **The first sync that brings the product prefix** leaves the repo's old
+   `orangesmiley_*` databases behind: `npm run test:db:clean -- --legacy --sweep`
+   shows them (dry run); read the plan — those names are shared with every repo
+   not yet synced — before adding `--yes`.
 
 ## 11. Rollback
 

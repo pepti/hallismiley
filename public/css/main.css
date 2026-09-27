@@ -15,6 +15,8 @@
 @import './shop.css';
 @import './analytics-admin.css';
 @import './admin-general-settings.css';
+@import './admin-checkout-settings.css';
+@import './site-announcement.css';
 @import './admin-updates.css';
 @import './barcode-scanner.css';
 @import './scan.css';
@@ -23,12 +25,15 @@
 @import './admin-sales.css';
 @import './admin-orders.css';
 @import './admin-products.css';
+@import './admin-product-merge.css';
+@import './admin-product-import-ai.css';
 @import './admin-roles.css';
 @import './admin-customers.css';
 @import './admin-background.css';
 @import './background-library.css';
 @import './admin-change-requests.css';
 @import './admin-bins.css';
+@import './admin-stock.css';
 @import './admin-handbok.css';
 @import './admin-leads.css';
 @import './admin-markadur.css';
@@ -39,6 +44,7 @@
 @import './admin-shell.css';
 @import './admin-monitoring.css';
 @import './admin-dashboard.css';
+@import './admin-idag.css';
 @import './admin-kit.css';
 @import './test-env.css';
 @import './theme-switcher.css';

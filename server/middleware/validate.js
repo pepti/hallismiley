@@ -144,8 +144,10 @@ const isEmail = (v) => typeof v === 'string' && v.length <= 254 && EMAIL_RE.test
 // Icelandic letters (both cases) are allowed so OAuth-derived usernames like
 // "jónþórsson" pass validation on subsequent profile updates.
 const USERNAME_RE = /^[a-zA-Z0-9_áéíóúýðþæöÁÉÍÓÚÝÐÞÆÖ]{3,40}$/;
-// phone: E.164-ish — digits, spaces, dashes, parentheses, leading +
-const PHONE_RE    = /^\+?[\d\s\-().]{7,20}$/;
+// phone: PHONE_RE (E.164-ish — digits, spaces, dashes, parentheses, leading +)
+// lives in utils/contactFormat.js, shared with the client forms so both refuse
+// the same values (ported from icelandicstore #399).
+const { PHONE_RE, isValidPhone, isValidZip } = require('../utils/contactFormat');
 
 // avatar-01.svg … avatar-40.svg
 const ALLOWED_AVATARS = Array.from({ length: 40 }, (_, i) =>
@@ -936,8 +938,141 @@ function validateAccountPatch(req, res, next) {
   next();
 }
 
+// ── Admin: edit one customer (PATCH /api/v1/admin/customers/:id) ─────────────
+// Ported from icelandicstore #336 (validateCustomerContact), on the engine's
+// isEmail and utils/contactFormat (isValidPhone, isValidZip — the checkout's
+// rules, ice #399). Each field is checked only when its key is present; a
+// blank string is allowed everywhere but the email (it clears the field — the
+// controller stores null). The email is the login, so it stays required. The
+// Icelandic three-digit postnúmer rule needs the country, so it is applied when
+// both `zip` and `country` are sent (the edit dialog always sends the pair).
+const CUSTOMER_TEXT_MAX = { display_name: 200, address1: 200, address2: 200, city: 100, zip: 20 };
+const COUNTRY_RE = /^[A-Za-z]{2}$/;
+const _present = (v) => v !== undefined && v !== null && v !== '';
+
+function validateCustomerContact(req, res, next) {
+  const b = req.body || {};
+  const errors = [];
+
+  if ('email' in b) {
+    if (typeof b.email !== 'string' || !isEmail(b.email.trim())) {
+      errors.push({ key: 'validation.email.invalid' });
+    }
+  }
+  if (_present(b.display_name) && (typeof b.display_name !== 'string' || b.display_name.trim().length > CUSTOMER_TEXT_MAX.display_name)) {
+    errors.push({ key: 'validation.displayName.maxLength', params: { n: CUSTOMER_TEXT_MAX.display_name } });
+  }
+  if (_present(b.phone) && (typeof b.phone !== 'string' || !isValidPhone(b.phone.trim()))) {
+    errors.push({ key: 'validation.phone.invalid' });
+  }
+  for (const k of ['address1', 'address2', 'city', 'zip']) {
+    if (_present(b[k]) && (typeof b[k] !== 'string' || b[k].trim().length > CUSTOMER_TEXT_MAX[k])) {
+      errors.push({ key: 'validation.address.maxLength', params: { n: CUSTOMER_TEXT_MAX[k] } });
+      break;
+    }
+  }
+  if (_present(b.country) && (typeof b.country !== 'string' || !COUNTRY_RE.test(b.country.trim()))) {
+    errors.push({ key: 'validation.country.invalid' });
+  } else if (typeof b.zip === 'string' && b.zip.trim() && 'country' in b
+             && !isValidZip(b.zip, typeof b.country === 'string' ? b.country : '')) {
+    errors.push({ key: 'validation.checkout.postcodeInvalid' });
+  }
+
+  if (errors.length) return _fail(req, res, errors);
+  next();
+}
+
+// POST /api/v1/shop/checkout — the SHAPE of the shipping address's postcode and
+// phone (ported from icelandicstore #399, utils/contactFormat.js). Everything
+// else about the body (items, currency, required fields, lengths) stays with
+// shopController.createCheckoutSession, which runs next.
+//
+// Only an Icelandic address is held to the three-digit postnúmer: a buyer in
+// Denmark or Britain keeps a free-text postcode. The phone is optional; when
+// present it gets the same rule as every other phone field. Nothing is read
+// when the method needs no address (local pickup ignores it).
+function validateCheckoutContact(req, res, next) {
+  const b = req.body || {};
+  const a = b.shipping_address;
+  if (b.shipping_method !== 'flat_rate' || !a || typeof a !== 'object' || Array.isArray(a)) return next();
+  const errors = [];
+  if (typeof a.postal === 'string' && a.postal.trim() && !isValidZip(a.postal, a.country)) {
+    errors.push({ key: 'validation.checkout.postcodeInvalid' });
+  }
+  if (typeof a.phone === 'string' && a.phone.trim() && !isValidPhone(a.phone.trim())) {
+    errors.push({ key: 'validation.phone.invalid' });
+  }
+  if (errors.length) return _fail(req, res, errors);
+  next();
+}
+
+// ── Product variant validation (ported from icelandicstore #194) ─────────────
+// POST  /api/v1/admin/shop/products/:id/variants
+// PATCH /api/v1/admin/shop/products/:id/variants/:variantId
+// Replaces the hand-rolled English checks that lived in createVariant and
+// gives PATCH the validation it never had. Engine delta: variants carry
+// price_eur too; bin is capped like the product editor's (40).
+const VARIANT_MAX_SKU     = 100;
+const VARIANT_MAX_BARCODE = 64;
+const VARIANT_MAX_BIN     = 40;
+const VARIANT_MAX_AXES    = 3;
+const VARIANT_MAX_KEY     = 50;
+const VARIANT_MAX_VALUE   = 100;
+
+function validateVariant(req, res, next) {
+  const b = req.body || {};
+  const errors = [];
+  const present = (v) => v !== undefined && v !== null && v !== '';
+  const posInt = (v) => Number.isInteger(Number(v)) && Number(v) > 0 && String(v).trim() !== '';
+
+  if (req.method === 'POST') {
+    if (!present(b.sku) || (typeof b.sku === 'string' && !b.sku.trim())) errors.push({ key: 'validation.variant.skuRequired' });
+    if (b.attributes === undefined) errors.push({ key: 'validation.variant.attributesRequired' });
+  } else if (b.sku !== undefined && (b.sku === null || (typeof b.sku === 'string' && !b.sku.trim()))) {
+    // PATCH: a SKU may change, never be emptied (the grid sends the cell as typed).
+    errors.push({ key: 'validation.variant.skuRequired' });
+  }
+  if (present(b.sku) && (typeof b.sku !== 'string' || b.sku.length > VARIANT_MAX_SKU)) {
+    errors.push({ key: 'validation.variant.skuMaxLength', params: { n: VARIANT_MAX_SKU } });
+  }
+  if (b.attributes !== undefined) {
+    const a = b.attributes;
+    if (a === null || typeof a !== 'object' || Array.isArray(a)) {
+      errors.push({ key: 'validation.variant.attributesObject' });
+    } else {
+      const keys = Object.keys(a);
+      if (keys.length === 0) errors.push({ key: 'validation.variant.attributesEmpty' });
+      else if (keys.length > VARIANT_MAX_AXES) errors.push({ key: 'validation.variant.attributesMaxKeys', params: { n: VARIANT_MAX_AXES } });
+      else if (keys.some(k => k.length > VARIANT_MAX_KEY)) {
+        errors.push({ key: 'validation.variant.attributeKeyMaxLength', params: { n: VARIANT_MAX_KEY } });
+      } else if (keys.some(k => typeof a[k] !== 'string' || a[k].trim() === '' || a[k].length > VARIANT_MAX_VALUE)) {
+        errors.push({ key: 'validation.variant.attributeValueString', params: { n: VARIANT_MAX_VALUE } });
+      }
+    }
+  }
+  // price_isk / price_eur are nullable — null means "inherit the product price".
+  for (const f of ['price_isk', 'price_eur']) {
+    if (present(b[f]) && !posInt(b[f])) errors.push({ key: 'validation.variant.pricePositive', params: { field: f } });
+  }
+  if (present(b.barcode) && (typeof b.barcode !== 'string' || b.barcode.length > VARIANT_MAX_BARCODE)) {
+    errors.push({ key: 'validation.variant.stringMaxLength', params: { field: 'barcode', n: VARIANT_MAX_BARCODE } });
+  }
+  if (present(b.bin) && (typeof b.bin !== 'string' || b.bin.trim().length > VARIANT_MAX_BIN)) {
+    errors.push({ key: 'validation.variant.stringMaxLength', params: { field: 'bin', n: VARIANT_MAX_BIN } });
+  }
+  if (b.active !== undefined && typeof b.active !== 'boolean') {
+    errors.push({ key: 'validation.variant.activeBoolean' });
+  }
+  // stock is checked by the controller's stockError (the audited writer's rule).
+  if (errors.length) return _fail(req, res, errors);
+  next();
+}
+
 module.exports = {
+  validateVariant,
+  validateCheckoutContact,
   _isEmail: isEmail,
+  validateCustomerContact,
   validateProject,
   validateQuery,
   validateLeadUpdate,

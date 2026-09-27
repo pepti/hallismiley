@@ -1,6 +1,9 @@
 // Session validation middleware — reads auth_session cookie, validates via Lucia,
 // attaches req.user and req.session, extends fresh sessions automatically.
 const { lucia } = require('./lucia');
+// Lucia's validateSession + the time-limited-login rule (migration 114): an
+// expired user comes back as "no session" and their sessions are deleted.
+const { validateSession, AccountExpiredError } = require('./accountExpiry');
 const { resolveLocale } = require('../middleware/locale');
 const UserRole = require('../models/UserRole');
 const logger   = require('../logger');
@@ -43,11 +46,14 @@ async function requireAuth(req, res, next) {
     return res.status(401).json({ error: 'Unauthorized', code: 401 });
   }
 
-  const { session, user } = await lucia.validateSession(sessionId);
+  const { session, user, expired } = await validateSession(sessionId);
 
   if (!session) {
     const blank = lucia.createBlankSessionCookie();
     res.setHeader('Set-Cookie', blank.serialize());
+    // A time-limited login that ran out mid-session: signed out (401), with
+    // the stable reason so the SPA can say why instead of "session expired".
+    if (expired) return next(new AccountExpiredError({ status: 401 }));
     return res.status(401).json({ error: 'Unauthorized', code: 401 });
   }
 
@@ -91,7 +97,7 @@ async function optionalAuth(req, res, next) {
     const sessionId = lucia.readSessionCookie(req.headers.cookie ?? '');
     if (!sessionId) return next();
 
-    const { session, user } = await lucia.validateSession(sessionId);
+    const { session, user } = await validateSession(sessionId);
     if (!session || user.disabled) return next();
 
     if (session.fresh) {

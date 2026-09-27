@@ -35,27 +35,62 @@ function productionDestination() {
   ]);
 }
 
+// Redact sensitive fields before they reach the log sink. Exported so
+// tests/unit/loggerRedact.test.js can build a pino with the SAME config (the
+// app logger is disabled under NODE_ENV=test).
+//
+// pino's `*` wildcard matches exactly ONE level, so `*.password` does NOT cover
+// a top-level `logger.info({ password }, '…')` — the shape a generated or
+// rotated credential takes. Ported from icelandicstore #382 (the top-level
+// `password` path) and widened to every credential field this engine's own
+// routes read (harvest 2, 2026-09-26): the password-change pair
+// (current_password / new_password, validatePasswordChange), their camelCase
+// spellings, and the two-factor secret. The TOTP `code` is redacted only
+// under req.body — a bare `code` is an error code everywhere else.
+const REDACT = {
+  paths: [
+    'req.headers.authorization',
+    'req.headers.cookie',
+    'req.headers["x-csrf-token"]',
+    'req.body.password',
+    'req.body.current_password',
+    'req.body.new_password',
+    'req.body.code',
+    'req.body.token',
+    'req.body.kennitala',
+    // top level — see above
+    'password',
+    'password_hash',
+    'current_password',
+    'new_password',
+    'currentPassword',
+    'newPassword',
+    'token',
+    'secret',
+    'totp_secret',
+    'totp_secret_enc',
+    'kennitala',
+    // one level down
+    '*.password',
+    '*.password_hash',
+    '*.current_password',
+    '*.new_password',
+    '*.currentPassword',
+    '*.newPassword',
+    '*.token',
+    '*.secret',
+    '*.totp_secret',
+    '*.totp_secret_enc',
+    '*.kennitala',       // Icelandic national ID — GDPR personal data
+  ],
+  censor: '[REDACTED]',
+};
+
 const logger = pino({
   level: LEVEL,
   // Suppress all output during tests to keep test output clean
   enabled: process.env.NODE_ENV !== 'test',
-  // Redact sensitive fields before they reach the log sink
-  redact: {
-    paths: [
-      'req.headers.authorization',
-      'req.headers.cookie',
-      'req.headers["x-csrf-token"]',
-      'req.body.password',
-      'req.body.token',
-      'req.body.kennitala',
-      '*.password',
-      '*.password_hash',
-      '*.token',
-      '*.secret',
-      '*.kennitala',       // Icelandic national ID — GDPR personal data
-    ],
-    censor: '[REDACTED]',
-  },
+  redact: REDACT,
   serializers: {
     err: pino.stdSerializers.err,
     // Wrap the std req serializer to scrub secrets that travel in the query
@@ -93,3 +128,4 @@ function createRequestLogger(req) {
 module.exports = logger;
 module.exports.createRequestLogger = createRequestLogger;
 module.exports.scrubUrl = scrubUrl;
+module.exports.REDACT = REDACT;

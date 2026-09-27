@@ -214,6 +214,12 @@
   white-space: nowrap;
 }
 .books-check input { width: auto; margin: 0; }
+/* The expenses intake puts a FILE input in the label (AdminExpensesView
+   _intakeHtml); its intrinsic width plus the nowrap text overflowed a 375 px
+   screen (the role × route e2e harness, 2026-09-27). This variant lets its
+   items wrap and never exceed the container; checkbox labels are unchanged. */
+.books-check--file { flex-wrap: wrap; max-width: 100%; }
+.books-check--file input[type="file"] { max-width: 100%; min-width: 0; }
 
 .btn--sm { padding: 0.2rem 0.5rem; font-size: 0.78rem; }
 

@@ -10,10 +10,23 @@
 // trackpad and shift+wheel scrolling on the table itself keep working and move
 // the mirror with them.
 //
-// attachStickyHScroll(wrap) → { refresh, detach }. Call refresh() whenever the
-// wrap's content is re-rendered (a replaced <table> is not observed).
+// attachStickyHScroll(wrap, { label }) → { refresh, detach }. Call refresh()
+// whenever the wrap's content is re-rendered (a replaced <table> is not observed).
+//
+// Keyboard reach (WCAG 2.1.1; the pattern of icelandicstore #279, 39fe3d5): a
+// region that scrolls sideways must be focusable, or a keyboard user cannot
+// reach the columns a mouse user scrolls to. The mirror bar is aria-hidden, so
+// it is the WRAP that takes tabindex="0", role="region" and an aria-label —
+// only while it actually overflows (a focus stop that scrolls nothing is noise).
+// Overflow is re-measured by a ResizeObserver, on window resize and on
+// `visibilitychange`: a tab that is not painting delivers no ResizeObserver
+// callbacks, but still computes layout, so a size change made while hidden is
+// caught the moment the page is looked at again. Attributes the wrap carried
+// before attach are its own and are never touched.
 
-export function attachStickyHScroll(wrap) {
+import { t } from '../i18n/i18n.js';
+
+export function attachStickyHScroll(wrap, { label } = {}) {
   const bar = document.createElement('div');
   bar.className = 'hscroll-sticky';
   bar.setAttribute('aria-hidden', 'true'); // a mirror of the wrap's own scroll
@@ -50,8 +63,20 @@ export function attachStickyHScroll(wrap) {
   wrap.addEventListener('scroll', onWrap, { passive: true });
   bar.addEventListener('scroll', onBar, { passive: true });
 
+  // Only the attributes this module adds are ever removed again.
+  const OWN = ['tabindex', 'role', 'aria-label'].filter((a) => !wrap.hasAttribute(a));
+  const setFocusable = (on) => {
+    for (const a of OWN) {
+      if (!on) { wrap.removeAttribute(a); continue; }
+      if (a === 'tabindex') wrap.setAttribute(a, '0');
+      else if (a === 'role') wrap.setAttribute(a, 'region');
+      else wrap.setAttribute(a, label || t('adminKit.scrollRegion'));
+    }
+  };
+
   const refresh = () => {
     const overflow = wrap.scrollWidth > wrap.clientWidth + 1;
+    setFocusable(overflow);
     bar.hidden = !overflow;
     // The wrap's own scrollbar is hidden only while the mirror is actually
     // showing — if refresh never sees the overflow, the native bar stays.
@@ -65,6 +90,7 @@ export function attachStickyHScroll(wrap) {
   const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(refresh) : null;
   ro?.observe(wrap);
   window.addEventListener('resize', refresh);
+  document.addEventListener('visibilitychange', refresh);
   refresh();
 
   return {
@@ -72,9 +98,11 @@ export function attachStickyHScroll(wrap) {
     detach() {
       ro?.disconnect();
       window.removeEventListener('resize', refresh);
+      document.removeEventListener('visibilitychange', refresh);
       wrap.removeEventListener('scroll', onWrap);
       bar.removeEventListener('scroll', onBar);
       wrap.classList.remove('has-sticky-hscroll');
+      setFocusable(false);
       bar.remove();
     },
   };

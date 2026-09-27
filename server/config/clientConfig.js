@@ -154,7 +154,7 @@ const SCHEMA = {
       // the resolved list, so a typo cannot silently hide nothing.
       hiddenAdminViews: {
         type: 'string[]',
-        default: ['products', 'collections', 'bins', 'orders', 'discounts', 'sales', 'pos', 'background'],
+        default: ['products', 'collections', 'bins', 'inventory', 'receiving', 'checkout', 'orders', 'discounts', 'sales', 'pos', 'background', 'projects'],
         validate: validateViewIds,
       },
     },
@@ -205,6 +205,34 @@ const SCHEMA = {
       // Profile URLs (LinkedIn, Facebook, GitHub…) for schema.org sameAs.
       sameAs:          { type: 'string[]', default: [], validate: validateHttpsUrls },
     },
+    // Transactional email (harvest 2 lane 2, 2026-09-26; icelandicstore
+    // #179/#190). The shell's name, host and legal line come from brand.* and
+    // APP_URL; its palette is derived from this product's LIGHT theme tokens
+    // at boot (server/utils/emailPalette.js). What lives here is what cannot
+    // be derived. Consumer: server/services/emailService.js (emailShell).
+    email: {
+      // The header logo: a FILE NAME under public/assets/brand/ — the one
+      // directory with the cross-origin CORP exemption (server/app.js), so a
+      // mail client on another origin may load it. PNG or JPEG: Gmail and
+      // Outlook do not render SVG. Served as `${APP_URL}/assets/brand/<logo>`.
+      logo:       { type: 'string', default: 'orangesmiley-emblem.png', validate: validateBrandFile },
+      // The size it is SHOWN at, in CSS px (the file may be larger for
+      // high-DPI screens; it should never be smaller, or it upscales).
+      logoWidth:  { type: 'int', default: 48, min: 16, max: 320 },
+      logoHeight: { type: 'int', default: 48, min: 16, max: 320 },
+      // Does the image spell the brand name (a wordmark, like icelandicstore's
+      // logo.png)? Then it stands alone in the header and its alt text — the
+      // brand name, in the wordmark's type — is the fallback when a client
+      // blocks remote images. false (an emblem): the brand name is set as
+      // text beside it.
+      logoWordmark: { type: 'boolean', default: false },
+      // Role → #hex overrides on top of the derived palette, for a product
+      // whose light theme does not carry over to mail: page, card, panel,
+      // border, heading, text, muted, accent, button, onButton. Every text
+      // colour is still held to WCAG AA at boot (a failing one is replaced
+      // and logged). Empty in the engine.
+      palette: { type: 'object', default: {}, validate: validateEmailPalette },
+    },
   },
   security: {
     mfa: {
@@ -225,6 +253,23 @@ const SCHEMA = {
       enrolment: { type: 'string', default: 'optional', enum: ['optional', 'required'] },
     },
   },
+  billing: {
+    // The product's pass-through terms (D-022, 2026-09-26): hosting beyond
+    // the tier's standard pattern is billed at cost + markup, and AI inside
+    // the customer's system is included up to an allowance a month, the rest
+    // at cost + markup. Read by invoiceService.createServiceInvoice (kind
+    // `passthrough`, which carries NO seller commission) and handed to the
+    // admin's live preview by GET /api/v1/admin/accounts/:id. The defaults
+    // are Rekstrarkerfið's D-022 values; a product with other terms sets them
+    // in config/client.json. Env: CLIENT_CONFIG_BILLING_PASSTHROUGH_MARKUP_BP,
+    // CLIENT_CONFIG_BILLING_PASSTHROUGH_AI_ALLOWANCE_ISK.
+    passthrough: {
+      // Basis points on the cost, like the commission rates: 1500 = 15 %.
+      markupBp:       { type: 'int', default: 1500, min: 0, max: 10000 },
+      // Whole ISK of AI cost included per account per month (ex VSK).
+      aiAllowanceIsk: { type: 'int', default: 2000, min: 0, max: 10000000 },
+    },
+  },
   mcp: {
     // The MCP catalogue write tools (harvest-ice-c-2026-09-24; icelandicstore
     // #248/#250/#361). Each kind of write is its own switch and every switch
@@ -236,12 +281,16 @@ const SCHEMA = {
     //   productUpdate → update_product (never stock — that is set_stock's)
     //   stock         → set_stock (audited in inventory_adjustments, actor =
     //                   the token's owner)
+    //   variantCreate → add_variants (harvest 2 lane 6c, ice #432): several
+    //                   variants of an existing product, all or none; they
+    //                   start INACTIVE and at stock 0
     // Read per call by server/mcp/registry.js, so flipping the env var bites
     // without a restart. Env: CLIENT_CONFIG_MCP_WRITE_PRODUCT_CREATE etc.
     write: {
       productCreate: { type: 'boolean', default: false },
       productUpdate: { type: 'boolean', default: false },
       stock:         { type: 'boolean', default: false },
+      variantCreate: { type: 'boolean', default: false },
     },
   },
   modules: {
@@ -433,6 +482,25 @@ function validateThemeSwatches(map) {
     else if (Object.keys(s).some(k => k !== 'bg' && k !== 'fg')) bad.push(`${id}: unknown field`);
   }
   return bad.length ? `has entries that are not { "<theme id>": { bg, fg } } (${bad.join('; ')})` : null;
+}
+
+// identity.email.logo — a bare file name under public/assets/brand/ (no
+// directory, no traversal), in a format mail clients render.
+function validateBrandFile(value) {
+  return /^[a-z0-9][a-z0-9._-]*\.(png|jpe?g|gif)$/i.test(value) && !value.includes('..')
+    ? null
+    : 'must be a .png/.jpg/.gif file name under public/assets/brand/ (no path)';
+}
+
+// identity.email.palette — role → #hex. Hex only: the AA guard measures each
+// value, and a named colour or a var() cannot be measured.
+const EMAIL_HEX_RE = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
+function validateEmailPalette(map) {
+  const { ROLES } = require('../utils/emailPalette');
+  const bad = Object.entries(map)
+    .filter(([role, v]) => !ROLES.includes(role) || typeof v !== 'string' || !EMAIL_HEX_RE.test(v))
+    .map(([role]) => role);
+  return bad.length ? `has entries that are not { "<role>": "#hex" } with role one of ${ROLES.join(', ')} (${bad.join(', ')})` : null;
 }
 
 // Admin view ids are lowercase words (server/auth/adminViews.js). Whether each

@@ -25,7 +25,15 @@ function stockBadgeHtml(stock) {
   return '';
 }
 
-export function renderProductCard(product) {
+// A variant product carries no product-level SKU; its first variant's stands in.
+function skuOf(product) {
+  return product.sku || (product.variants || []).find(v => v && v.sku)?.sku || '';
+}
+
+// `showSku`: the caller found another product with the same name on the page
+// (utils/duplicateNames.js) — print the SKU under the name so the two differ.
+// Ported from icelandicstore #399.
+export function renderProductCard(product, { showSku = false } = {}) {
   const cur   = getCurrency();
   const price = cur === 'ISK' ? product.price_isk : product.price_eur;
   const cover = product.images?.[0]?.url || '';
@@ -52,6 +60,7 @@ export function renderProductCard(product) {
     </div>
     <div class="product-card__body">
       <h3 class="product-card__name">${_esc(product.name)}</h3>
+      ${showSku && skuOf(product) ? `<p class="product-card__sku"><span class="product-card__sku-chip" data-testid="card-dup-sku">${_esc(skuOf(product))}</span></p>` : ''}
       <p class="product-card__price">${formatMoney(price, cur)}</p>
     </div>
   `;

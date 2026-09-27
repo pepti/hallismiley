@@ -5,6 +5,13 @@
 let _client = null;
 
 function getStripe() {
+  // Payments are off on a demo instance (config/demoInstance.js), key or not —
+  // including the books' Stripe sync, which calls this directly.
+  if (require('./demoInstance').isDemoInstance()) {
+    const err = new Error('Stripe is off on a demo instance.');
+    err.code = 'STRIPE_NOT_CONFIGURED';
+    throw err;
+  }
   if (_client) return _client;
 
   const key = process.env.STRIPE_SECRET_KEY;
@@ -29,6 +36,8 @@ function getStripe() {
 }
 
 function isConfigured() {
+  // Payments are off on a demo instance (config/demoInstance.js), key or not.
+  if (require('./demoInstance').isDemoInstance()) return false;
   return Boolean(process.env.STRIPE_SECRET_KEY);
 }
 

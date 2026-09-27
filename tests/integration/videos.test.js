@@ -23,7 +23,7 @@ let projectId;
 
 const uploadDirs = new Set();
 function cleanupUploadDir(id) {
-  const dir = path.join(__dirname, '../../public/assets/projects', String(id));
+  const dir = path.join(require('../../server/config/paths').UPLOAD_ROOT, 'projects', String(id));
   if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
 }
 

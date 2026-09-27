@@ -7,3 +7,19 @@ jest.config.js
 *.md
 data/
 .gitignore
+
+# Never in an image, even from a local `docker build .` (CI builds from a clean
+# checkout; these mirror .gitignore so a local build gets exactly what CI gets).
+# Öryggisvörður finding 6, 2026-09-26. public/assets/backgrounds/ is NOT listed:
+# it holds two committed files the image needs.
+company/
+keys/
+**/*.pem
+private-uploads/
+assets-src/
+Claude outputs/
+public/assets/party/[0-9]*-*
+public/assets/avatars/user-*
+public/assets/content/
+public/assets/products/
+public/assets/responsive-screenshots/

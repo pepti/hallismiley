@@ -18,6 +18,8 @@ const { trackedFetch } = require('../observability/trackedFetch');
 const { query: dbQuery }          = require('../config/database');
 const { userIsAdminAnywhere } = require('../utils/adminRole');
 const { lucia }                   = require('../auth/lucia');
+// Time-limited logins (migration 114): an expired account never signs in.
+const { isExpired, ACCOUNT_EXPIRED } = require('../auth/accountExpiry');
 const securityLogger               = require('../observability/securityLogger');
 const { loadArctic, isConfigured } = require('../auth/google');
 const { generateUniqueUsername, isSafeReturnTo } = require('../auth/oauthHelpers');
@@ -130,20 +132,24 @@ async function callback(req, res, next) {
 
     // 1. Existing Google-linked user.
     const { rows: byGoogle } = await dbQuery(
-      `SELECT id, disabled FROM users WHERE google_id = $1`,
+      `SELECT id, disabled, expires_at FROM users WHERE google_id = $1`,
       [profile.sub],
     );
     if (byGoogle[0]?.disabled) return redirectWithError(res, 'account_disabled', req.locale);
+    if (byGoogle[0] && isExpired(byGoogle[0])) return redirectWithError(res, ACCOUNT_EXPIRED, req.locale);
     let userId = byGoogle[0]?.id ?? null;
 
     // 2. Else existing by email → auto-link (Google has verified the email).
     if (!userId) {
       const { rows: byEmail } = await dbQuery(
-        `SELECT id, disabled FROM users WHERE email = $1`,
+        `SELECT id, disabled, expires_at FROM users WHERE email = $1`,
         [email],
       );
       if (byEmail[0]) {
         if (byEmail[0].disabled) return redirectWithError(res, 'account_disabled', req.locale);
+        // Refused BEFORE the link, so an expired login is not quietly given
+        // a Google identity either.
+        if (isExpired(byEmail[0])) return redirectWithError(res, ACCOUNT_EXPIRED, req.locale);
         await dbQuery(
           `UPDATE users
              SET google_id = $1,

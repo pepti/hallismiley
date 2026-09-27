@@ -27,6 +27,25 @@ export async function updateGeneralSettings(patch) {
   return data; // { settings }
 }
 
+// ── The demo instance (/api/v1/admin/demo, R2b) ─────────────────────────────
+// 404 unless this is a demo instance. A reset answers 202 and runs after the
+// answer: the site is back in about a minute.
+export async function getDemoStatus() {
+  const res  = await fetch('/api/v1/admin/demo', { credentials: 'include' });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to load the demo status');
+  return data; // { demo, lastReset: { at, trigger } | null, nextReset }
+}
+
+export async function resetDemoData() {
+  const res = await fetch('/api/v1/admin/demo/reset', {
+    method: 'POST', credentials: 'include', headers: await _csrfHeaders(), body: '{}',
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Reset failed');
+  return data; // { started, retryAfterSeconds }
+}
+
 // ── Module switches (/api/v1/admin/modules, R5b) ────────────────────────────
 // The contract (the instance's tier) is the ceiling; a contracted module can
 // be switched off and back on. Applies at once on the server.

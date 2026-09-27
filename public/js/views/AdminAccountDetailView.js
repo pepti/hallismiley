@@ -1,7 +1,8 @@
 // AdminAccountDetailView (/admin/accounts/:id) — one customer account: facts
 // and contact, the lifecycle (status transitions, provision request), the
 // admin-only owner change and service-invoice issue (build deposit / final,
-// a contract month, overage), the account's commission events and its audit
+// a contract month, overage, the month's pass-through hosting/AI costs with a
+// live preview — D-022, no commission), the account's commission events and its audit
 // trail. Scoped on the server: a foreign id is a 404 → back to the list.
 import { isAuthenticated, canSeeView, isAdmin, adminGetUsers } from '../services/auth.js';
 import {
@@ -10,11 +11,13 @@ import {
 } from '../services/accounts.js';
 import { escHtml } from '../utils/escHtml.js';
 import { formatDateTime } from '../utils/format.js';
-import { t, href } from '../i18n/i18n.js';
+import { t, href, getLocale } from '../i18n/i18n.js';
+import { adminPageTitle } from '../utils/pageTitle.js';
 import { navigate, navigateReplace } from '../navigate.js';
 import { renderAdminShell } from '../components/AdminSidebar.js';
 import { showToast } from '../components/Toast.js';
 import { TIER_KEY, STATUS_KEY, TIERS, statusChip, isk } from './AdminAccountsView.js';
+import { previewPassthrough } from '../utils/passthrough.js';
 
 // Grouped rather than one flat wall: migration 100 took this form past twenty
 // fields, and "Reikningsupplýsingar" is a section a person fills in once, at
@@ -78,6 +81,12 @@ const AUDIT_KEY = {
 // of those drive money. Same shape as AdminMarketView's label().
 const label = (map, v) => (map[v] ? t(map[v]) : (v || '—'));
 
+// 1500 bp → "15", 1250 bp → "12,5" (IS) / "12.5" (EN).
+function percent(bp) {
+  const n = Number(bp) / 100;
+  return getLocale() === 'en' ? String(n) : String(n).replace('.', ',');
+}
+
 function thisMonth() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -89,6 +98,7 @@ export class AdminAccountDetailView {
     this._el = null;
     this._account = null;
     this._transitions = [];
+    this._ptTerms = null;
     this._destroyed = false;
   }
 
@@ -128,9 +138,10 @@ export class AdminAccountDetailView {
 
   async _load() {
     try {
-      const { account, transitions } = await getAccount(this._id);
+      const { account, transitions, passthrough_terms: ptTerms } = await getAccount(this._id);
       if (this._destroyed) return;
       this._account = account;
+      this._ptTerms = ptTerms || null;
       this._transitions = transitions || [];
       this._paint();
       // The two side panels load independently of the main card.
@@ -145,6 +156,14 @@ export class AdminAccountDetailView {
   _paint() {
     const a = this._account;
     const admin = isAdmin();
+    // The pass-through terms come with the account for an admin only; without
+    // them there is no preview to show, so the kind is not offered.
+    const pt = this._ptTerms;
+    // The tab names the account (Ported from icelandicstore #324). The router
+    // reads documentTitle once render() resolves; after a save that renames the
+    // account the view is already on screen, so the tab is updated here.
+    this.documentTitle = adminPageTitle(a.name, getLocale());
+    if (this._el.isConnected && !this._destroyed) document.title = this.documentTitle;
     const transitionBtns = this._transitions.map(s =>
       `<button type="button" class="btn btn--sm ${s === 'churned' ? 'btn--danger' : 'btn--outline'}" data-status="${s}">${escHtml(t(STATUS_KEY[s]))}</button>`).join('');
     const provisionBtn = (a.status === 'signed' || a.status === 'provisioning')
@@ -212,9 +231,10 @@ export class AdminAccountDetailView {
               <option value="build-final">${escHtml(t('accounts.invoice.buildFinal'))}</option>
               <option value="recurring">${escHtml(t('accounts.invoice.recurring'))}</option>
               <option value="overage">${escHtml(t('accounts.invoice.overage'))}</option>
+              ${pt ? `<option value="passthrough">${escHtml(t('accounts.invoice.passthrough'))}</option>` : ''}
             </select>
           </label>
-          <label class="acct-field" data-for="recurring"><span>${escHtml(t('accounts.invoice.period'))}</span>
+          <label class="acct-field" data-for="recurring passthrough"><span>${escHtml(t('accounts.invoice.period'))}</span>
             <input name="period" type="month" value="${thisMonth()}">
           </label>
           <label class="acct-field" data-for="recurring"><span>${escHtml(t('accounts.invoice.amountOverride'))}</span>
@@ -226,6 +246,14 @@ export class AdminAccountDetailView {
           <label class="acct-field" data-for="overage"><span>${escHtml(t('accounts.invoice.unitPrice'))}</span>
             <input name="unit_price_isk" type="number" min="1" step="1">
           </label>
+          ${pt ? `<div class="acct-pt" data-for="passthrough">
+            <p class="acct-group__help">${escHtml(t('accounts.invoice.ptHelp', {
+              allowance: isk(pt.ai_allowance_isk), markup: percent(pt.markup_bp), rate: pt.vat_rate,
+            }))}</p>
+            <div class="acct-pt__lines" id="acct-pt-lines"></div>
+            <div><button type="button" class="btn btn--sm btn--outline" id="acct-pt-add">${escHtml(t('accounts.invoice.ptAddLine'))}</button></div>
+            <div class="acct-pt__preview" id="acct-pt-preview" aria-live="polite"></div>
+          </div>` : ''}
           ${a.invoice_ready === false
             ? `<p class="acct-notice acct-notice--warn">${escHtml(t('accounts.invoiceBlocked'))}</p>`
             : ''}
@@ -254,12 +282,89 @@ export class AdminAccountDetailView {
       const invForm = this._el.querySelector('#acct-invoice-form');
       const syncKind = () => {
         const kind = invForm.querySelector('#acct-inv-kind').value;
-        invForm.querySelectorAll('[data-for]').forEach(el => { el.hidden = el.dataset.for !== kind; });
+        invForm.querySelectorAll('[data-for]').forEach(el => { el.hidden = !el.dataset.for.split(' ').includes(kind); });
       };
       invForm.querySelector('#acct-inv-kind').addEventListener('change', syncKind);
       syncKind();
+      if (pt) this._wirePassthrough(invForm);
       invForm.addEventListener('submit', (e) => { e.preventDefault(); this._issue(invForm); });
     }
+  }
+
+  // ── Pass-through rows (D-022) ─────────────────────────────────────────────
+  // Rows of type / description / cost, and a live preview of the marked-up
+  // net, the VSK and the total from the instance's terms. Nothing here is
+  // authoritative: the server recomputes from the rows it is sent.
+  _wirePassthrough(form) {
+    const host = form.querySelector('#acct-pt-lines');
+    const addRow = () => {
+      const row = document.createElement('div');
+      row.className = 'acct-pt__row';
+      row.innerHTML = `
+        <label class="acct-field"><span>${escHtml(t('accounts.invoice.ptType'))}</span>
+          <select name="pt_type">
+            <option value="hosting">${escHtml(t('accounts.invoice.ptTypeHosting'))}</option>
+            <option value="ai">${escHtml(t('accounts.invoice.ptTypeAi'))}</option>
+          </select>
+        </label>
+        <label class="acct-field acct-pt__desc"><span>${escHtml(t('accounts.invoice.ptDescription'))}</span>
+          <input name="pt_description" type="text" maxlength="120" required>
+        </label>
+        <label class="acct-field"><span>${escHtml(t('accounts.invoice.ptCost'))}</span>
+          <input name="pt_cost" type="number" min="1" step="1" inputmode="numeric" required>
+        </label>
+        <button type="button" class="btn btn--sm btn--outline acct-pt__remove"
+                aria-label="${escHtml(t('accounts.invoice.ptRemoveLine'))}" title="${escHtml(t('accounts.invoice.ptRemoveLine'))}">&times;</button>`;
+      row.querySelector('.acct-pt__remove').addEventListener('click', () => {
+        row.remove();
+        if (!host.children.length) addRow();
+        this._paintPassthroughPreview(form);
+      });
+      host.appendChild(row);
+    };
+    form.querySelector('#acct-pt-add').addEventListener('click', () => {
+      if (host.children.length < 20) addRow();
+      host.lastElementChild?.querySelector('input[name="pt_description"]')?.focus();
+    });
+    host.addEventListener('input', () => this._paintPassthroughPreview(form));
+    host.addEventListener('change', () => this._paintPassthroughPreview(form));
+    addRow();
+    this._paintPassthroughPreview(form);
+  }
+
+  _passthroughRows(form) {
+    return [...form.querySelectorAll('.acct-pt__row')].map(row => ({
+      type: row.querySelector('[name="pt_type"]').value,
+      description: row.querySelector('[name="pt_description"]').value.trim(),
+      cost: row.querySelector('[name="pt_cost"]').value.trim(),
+    }));
+  }
+
+  _paintPassthroughPreview(form) {
+    const host = form.querySelector('#acct-pt-preview');
+    if (!host || !this._ptTerms) return;
+    const p = previewPassthrough(this._passthroughRows(form), this._ptTerms);
+    host.innerHTML = `<table class="admin-table acct-table acct-pt__table">
+      <caption>${escHtml(t('accounts.invoice.ptPreview'))}</caption>
+      <thead><tr>
+        <th>${escHtml(t('accounts.invoice.ptDescription'))}</th>
+        <th class="num">${escHtml(t('accounts.invoice.ptCost'))}</th>
+        <th class="num">${escHtml(t('accounts.invoice.ptIncluded'))}</th>
+        <th class="num">${escHtml(t('accounts.invoice.ptNet', { markup: percent(this._ptTerms.markup_bp) }))}</th>
+      </tr></thead>
+      <tbody>${p.lines.map(l => `<tr>
+        <td>${escHtml(l.type === 'ai' ? t('accounts.invoice.ptTypeAi') : t('accounts.invoice.ptTypeHosting'))}${l.description ? ` — ${escHtml(l.description)}` : ''}</td>
+        <td class="num">${l.valid ? escHtml(isk(l.cost)) : '—'}</td>
+        <td class="num">${l.valid && l.included ? escHtml(isk(-l.included)) : '—'}</td>
+        <td class="num">${l.valid ? escHtml(isk(l.net)) : '—'}</td>
+      </tr>`).join('')}</tbody>
+      <tfoot>
+        <tr class="acct-total"><td colspan="3">${escHtml(t('accounts.invoice.ptNetTotal'))}</td><td class="num">${escHtml(isk(p.net))}</td></tr>
+        <tr><td colspan="3">${escHtml(t('accounts.invoice.ptVat', { rate: this._ptTerms.vat_rate }))}</td><td class="num">${escHtml(isk(p.vat))}</td></tr>
+        <tr class="acct-total"><td colspan="3">${escHtml(t('accounts.invoice.ptGross'))}</td><td class="num">${escHtml(isk(p.gross))}</td></tr>
+      </tfoot>
+    </table>
+    ${p.lines.some(l => l.valid) && p.net === 0 ? `<p class="acct-notice acct-notice--warn">${escHtml(t('accounts.invoice.ptNothing'))}</p>` : ''}`;
   }
 
   async _paintOwner() {
@@ -334,6 +439,11 @@ export class AdminAccountDetailView {
       body.kind = 'recurring'; body.period = String(fd.get('period') || '');
       const override = String(fd.get('amount_net_isk') || '').trim();
       if (override) body.amount_net_isk = Number(override);
+    } else if (raw === 'passthrough') {
+      body.kind = 'passthrough'; body.period = String(fd.get('period') || '');
+      body.lines = this._passthroughRows(form).map(r => ({
+        type: r.type, description: r.description, cost_isk: r.cost === '' ? null : Number(r.cost),
+      }));
     } else {
       body.kind = 'overage'; body.units = Number(fd.get('units')); body.unit_price_isk = Number(fd.get('unit_price_isk'));
     }

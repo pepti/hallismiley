@@ -31,6 +31,13 @@ const isPartyGuest = (p = '') => {
 };
 const notPartyGuest = (p = '') => `NOT ${isPartyGuest(p)}`;
 
+// A plain customer the Customers screen may read one-by-one and edit: the
+// deleteCustomers guards (role 'user', no extra role grant, not a party
+// guest). `p` is the table alias.
+const EDITABLE = (p) => `${p}.role = 'user'
+  AND NOT EXISTS (SELECT 1 FROM user_roles ur WHERE ur.user_id = ${p}.id AND ur.role_name <> 'user')
+  AND ${notPartyGuest(p)}`;
+
 function makeToken() {
   return crypto.randomBytes(32).toString('hex');
 }
@@ -71,6 +78,7 @@ const Customer = {
       `SELECT u.id, ${U_EMAIL} AS email, u.username, u.display_name, u.phone, u.role,
               u.email_verified, u.disabled, u.created_at, u.invited_at,
               ${isPartyGuest('u')} AS is_party_guest,
+              (${EDITABLE('u')}) AS editable,
               COALESCE(o.cnt, 0)::int    AS order_count,
               COALESCE(o.spent, 0)::bigint AS total_spent
          FROM users u
@@ -113,7 +121,10 @@ const Customer = {
   // Scrypt as the rest of auth, approval at once, and NO reset token: there is
   // nowhere to mail one. Returns { user, resetToken: null, password } — the
   // caller hands `password` to the admin ONCE and must never log or store it.
-  async create({ email, display_name = null, phone = null, nameOnly = false }) {
+  //
+  // expiresAt (migration 114): a time-limited login — a Date the caller has
+  // validated (auth/accountExpiry.js parseExpiresAt), or null for never.
+  async create({ email, display_name = null, phone = null, nameOnly = false, expiresAt = null }) {
     if (nameOnly) {
       const password = generatePassword();
       const hash     = await new Scrypt().hash(password);
@@ -123,10 +134,10 @@ const Customer = {
           const { rows } = await dbQuery(
             `INSERT INTO users
                (username, email, password_hash, role, display_name, phone,
-                approval_status, email_verified)
-             VALUES ($1, $2, $3, 'user', $4, $5, 'approved', FALSE)
-             RETURNING id, username, email, role, display_name, phone, email_verified, created_at`,
-            [username, noEmailEmail(username), hash, display_name, phone]
+                approval_status, email_verified, expires_at)
+             VALUES ($1, $2, $3, 'user', $4, $5, 'approved', FALSE, $6)
+             RETURNING id, username, email, role, display_name, phone, email_verified, created_at, expires_at`,
+            [username, noEmailEmail(username), hash, display_name, phone, expiresAt]
           );
           return { user: rows[0], resetToken: null, password };
         } catch (err) {
@@ -145,10 +156,10 @@ const Customer = {
         const { rows } = await dbQuery(
           `INSERT INTO users
              (username, email, password_hash, role, display_name, phone,
-              email_verified, password_reset_token, password_reset_expires)
-           VALUES ($1, $2, NULL, 'user', $3, $4, FALSE, $5, $6)
-           RETURNING id, username, email, role, display_name, phone, email_verified, created_at`,
-          [username, lowered, display_name, phone, resetToken, expires]
+              email_verified, password_reset_token, password_reset_expires, expires_at)
+           VALUES ($1, $2, NULL, 'user', $3, $4, FALSE, $5, $6, $7)
+           RETURNING id, username, email, role, display_name, phone, email_verified, created_at, expires_at`,
+          [username, lowered, display_name, phone, resetToken, expires, expiresAt]
         );
         return { user: rows[0], resetToken };
       } catch (err) {
@@ -187,6 +198,78 @@ const Customer = {
       }
     }
     return created;
+  },
+
+  // ── One customer (harvest 2 lane 3, ported from icelandicstore #336) ───────
+  //
+  // Only a PLAIN customer can be read or edited here: role='user', no extra
+  // user_roles grant (the trigger mirrors the primary role, so a plain
+  // customer holds exactly 'user'), and not a party guest. These are the same
+  // guards deleteCustomers uses. The screen is gated on the `customers` view,
+  // which a non-admin role can hold — without this, a seller with that view
+  // could change a STAFF account's email and take it over through
+  // forgot-password. A staff/unknown id simply is not found (404, never 403,
+  // so the answer does not say the id exists).
+  //
+  // The contact + address of one editable customer, or null.
+  async findEditable(id) {
+    const { rows } = await dbQuery(
+      `SELECT u.id, ${U_EMAIL} AS email, u.username, u.display_name, u.phone,
+              u.address1, u.address2, u.city, u.zip, u.country,
+              u.disabled, u.email_verified, u.invited_at, u.created_at,
+              (u.password_hash IS NOT NULL) AS has_password
+         FROM users u
+        WHERE u.id = $1 AND ${EDITABLE('u')}`,
+      [String(id)]
+    );
+    return rows[0] || null;
+  },
+
+  // Write the contact + address fields of one editable customer. The allow-list
+  // is the ceiling; the caller decides which keys it sends (an omitted key is
+  // left alone) and shapes a blank as null. Returns the updated row, or null
+  // when the id is not an editable customer. A duplicate email surfaces as the
+  // UNIQUE violation (23505) for the caller to map.
+  async updateContact(id, fields = {}) {
+    const ALLOWED = ['email', 'display_name', 'phone', 'address1', 'address2', 'city', 'zip', 'country'];
+    const keys = ALLOWED.filter(k => k in fields);
+    if (!keys.length) return Customer.findEditable(id);
+    const set = keys.map((k, i) => `${k} = $${i + 2}`);
+    // A NEW address inherits nothing from the old mailbox, in the same
+    // statement (so it can never be half-applied): not its verification, not
+    // a set-password/reset link still in flight, and not `invited_at` — the
+    // seller area (auth/publishedSeller.js) reads invited_at as proof the
+    // address is real, so keeping it would vouch for an address nobody
+    // checked (lane 3 review, H1). The right-hand `email` is the OLD value.
+    if (keys.includes('email')) {
+      const p = `$${keys.indexOf('email') + 2}`;
+      for (const col of ['password_reset_token', 'password_reset_expires', 'invited_at']) {
+        set.push(`${col} = CASE WHEN email IS DISTINCT FROM ${p} THEN NULL ELSE ${col} END`);
+      }
+      set.push(`email_verified = CASE WHEN email IS DISTINCT FROM ${p} THEN FALSE ELSE email_verified END`);
+    }
+    const { rows } = await dbQuery(
+      `UPDATE users u SET ${set.join(', ')}
+        WHERE u.id = $1 AND ${EDITABLE('u')}
+        RETURNING u.id, ${U_EMAIL} AS email, u.username, u.display_name, u.phone,
+                  u.address1, u.address2, u.city, u.zip, u.country`,
+      [String(id), ...keys.map(k => fields[k])]
+    );
+    return rows[0] || null;
+  },
+
+  // Mint a fresh set-password token for one editable, passwordless customer
+  // (the per-customer "send invite"). Returns the token, or null when the row
+  // is no longer an editable passwordless customer.
+  async mintInviteToken(id) {
+    const token   = makeToken();
+    const expires = new Date(Date.now() + INVITE_TTL_MS);
+    const { rowCount } = await dbQuery(
+      `UPDATE users u SET password_reset_token = $2, password_reset_expires = $3
+        WHERE u.id = $1 AND u.password_hash IS NULL AND ${EDITABLE('u')}`,
+      [String(id), token, expires]
+    );
+    return rowCount ? token : null;
   },
 
   // Hard-delete customers from the admin list, in one transaction. Hard-guarded

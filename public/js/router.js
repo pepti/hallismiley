@@ -34,6 +34,8 @@ const VIEWS = {
   AdminUsersView:           () => import('./views/AdminUsersView.js').then((m) => m.AdminUsersView),
   AdminAnalyticsView:       () => import('./views/AdminAnalyticsView.js').then((m) => m.AdminAnalyticsView),
   AdminGeneralSettingsView: () => import('./views/AdminGeneralSettingsView.js').then((m) => m.AdminGeneralSettingsView),
+  AdminCheckoutSettingsView: () => import('./views/AdminCheckoutSettingsView.js').then((m) => m.AdminCheckoutSettingsView),
+  AdminAnnouncementView:    () => import('./views/AdminAnnouncementView.js').then((m) => m.AdminAnnouncementView),
   AdminUpdatesView:         () => import('./views/AdminUpdatesView.js').then((m) => m.AdminUpdatesView),
   AdminMonitoringView:      () => import('./views/AdminMonitoringView.js').then((m) => m.AdminMonitoringView),
   AdminMcpSettingsView:     () => import('./views/AdminMcpSettingsView.js').then((m) => m.AdminMcpSettingsView),
@@ -68,11 +70,16 @@ const VIEWS = {
   CheckoutCancelView:       () => import('./views/CheckoutCancelView.js').then((m) => m.CheckoutCancelView),
   OrderHistoryView:         () => import('./views/OrderHistoryView.js').then((m) => m.OrderHistoryView),
   AdminProductsView:        () => import('./views/AdminProductsView.js').then((m) => m.AdminProductsView),
+  AdminProductDuplicatesView: () => import('./views/AdminProductDuplicatesView.js').then((m) => m.AdminProductDuplicatesView),
   AdminOrdersView:          () => import('./views/AdminOrdersView.js').then((m) => m.AdminOrdersView),
   AdminOrderDetailView:     () => import('./views/AdminOrderDetailView.js').then((m) => m.AdminOrderDetailView),
   AdminCollectionsView:     () => import('./views/AdminCollectionsView.js').then((m) => m.AdminCollectionsView),
   AdminRolesView:           () => import('./views/AdminRolesView.js').then((m) => m.AdminRolesView),
   AdminBinsView:            () => import('./views/AdminBinsView.js').then((m) => m.AdminBinsView),
+  AdminInventoryView:       () => import('./views/AdminInventoryView.js').then((m) => m.AdminInventoryView),
+  AdminStockCountView:      () => import('./views/AdminStockCountView.js').then((m) => m.AdminStockCountView),
+  AdminReceivingView:       () => import('./views/AdminReceivingView.js').then((m) => m.AdminReceivingView),
+  AdminReceivingDetailView: () => import('./views/AdminReceivingDetailView.js').then((m) => m.AdminReceivingDetailView),
   AdminBooksView:           () => import('./views/AdminBooksView.js').then((m) => m.AdminBooksView),
   AdminBooksSettingsView:   () => import('./views/AdminBooksSettingsView.js').then((m) => m.AdminBooksSettingsView),
   AdminInvoicesView:        () => import('./views/AdminInvoicesView.js').then((m) => m.AdminInvoicesView),
@@ -98,6 +105,9 @@ const VIEWS = {
 // release. A bug in the view's own constructor is NOT marked: it stays the
 // error it is instead of passing for a network problem.
 class AssetLoadError extends Error {}
+
+// Admin screens gated on the admin role itself (isAdmin()), not a view id.
+const ADMIN_ONLY_PATHS = new Set(['/admin/roles', '/admin/monitoring', '/admin/mcp']);
 async function make(name, ...args) {
   let View;
   try {
@@ -136,6 +146,8 @@ const ROUTES = [
   { pattern: '/admin/users',     factory: async ()  => (isAuthenticated() && canSeeView('users')) ? make('AdminUsersView') : new HomeView() },
   { pattern: '/admin/analytics', factory: async ()  => (isAuthenticated() && canSeeView('analytics')) ? make('AdminAnalyticsView') : new HomeView() },
   { pattern: '/admin/general',   factory: async ()  => (isAuthenticated() && canSeeView('general')) ? make('AdminGeneralSettingsView') : new HomeView() },
+  { pattern: '/admin/checkout',  factory: async ()  => (isAuthenticated() && canSeeView('checkout')) ? make('AdminCheckoutSettingsView') : new HomeView() },
+  { pattern: '/admin/announcement', factory: async () => (isAuthenticated() && canSeeView('announcement')) ? make('AdminAnnouncementView') : new HomeView() },
   { pattern: '/admin/updates',   factory: async ()  => (isAuthenticated() && canSeeView('updates')) ? make('AdminUpdatesView') : new HomeView() },
   { pattern: '/admin/monitoring', factory: async () => (isAuthenticated() && isAdmin()) ? make('AdminMonitoringView') : new HomeView() },
   { pattern: '/admin/mcp', factory: async () => (isAuthenticated() && isAdmin()) ? make('AdminMcpSettingsView') : new HomeView() },
@@ -144,6 +156,11 @@ const ROUTES = [
   { pattern: '/admin/background', factory: async () => (isAuthenticated() && canSeeView('background')) ? make('AdminBackgroundView') : new HomeView() },
   { pattern: '/admin/feedback',  factory: async ()  => (isAuthenticated() && canSeeView('feedback')) ? make('AdminChangeRequestsView') : new HomeView() },
   { pattern: '/admin/bins',      factory: async ()  => (isAuthenticated() && canSeeView('bins')) ? make('AdminBinsView') : new HomeView() },
+  { pattern: '/admin/inventory', factory: async ()  => (isAuthenticated() && canSeeView('inventory')) ? make('AdminInventoryView') : new HomeView() },
+  // Not a sidebar item: the count is a tab of the inventory screen and rides its view id.
+  { pattern: '/admin/stock-count', factory: async () => (isAuthenticated() && canSeeView('inventory')) ? make('AdminStockCountView') : new HomeView() },
+  { pattern: '/admin/receiving/:id', factory: async (p) => (isAuthenticated() && canSeeView('receiving')) ? make('AdminReceivingDetailView', p.id) : new HomeView() },
+  { pattern: '/admin/receiving', factory: async ()  => (isAuthenticated() && canSeeView('receiving')) ? make('AdminReceivingView') : new HomeView() },
   { pattern: '/admin/handbok/:slug', factory: async (p) => (isAuthenticated() && canSeeView('handbok')) ? make('AdminHandbookView', p.slug) : new HomeView() },
   { pattern: '/admin/handbok',   factory: async ()  => (isAuthenticated() && canSeeView('handbok')) ? make('AdminHandbookView') : new HomeView() },
   { pattern: '/admin/leads',     factory: async ()  => (isAuthenticated() && canSeeView('leads')) ? make('AdminLeadsView') : new HomeView() },
@@ -170,7 +187,7 @@ const ROUTES = [
   { pattern: '/admin/books',     factory: async ()  => (isAuthenticated() && canSeeView('books')) ? make('AdminBooksView') : new HomeView() },
   { pattern: '/admin/roles',     factory: async ()  => (isAuthenticated() && isAdmin()) ? make('AdminRolesView') : new HomeView() },
   // The portfolio projects board — unlisted, same gate the old dashboard had.
-  { pattern: '/admin/projects',  factory: async ()  => (isAuthenticated() && (canSeeView('dashboard') || canEdit())) ? make('AdminProjectsView') : new HomeView() },
+  { pattern: '/admin/projects',  factory: async ()  => (isAuthenticated() && (canSeeView('projects') || canEdit())) ? make('AdminProjectsView') : new HomeView() },
   { pattern: '/admin',           factory: async ()  => isAuthenticated() ? make('AdminView') : new HomeView() },
   // OAuth consent for the MCP connector (R5a): /oauth/authorize lands here.
   // The view handles signed-out and non-admin visitors itself; the server
@@ -207,6 +224,7 @@ const ROUTES = [
   { pattern: '/checkout',        factory: async ()  => make('CheckoutView') },
   { pattern: '/orders',          factory: async ()  => isAuthenticated() ? make('OrderHistoryView') : new HomeView() },
   { pattern: '/admin/shop/products', factory: async () => (isAuthenticated() && canSeeView('products')) ? make('AdminProductsView') : new HomeView() },
+  { pattern: '/admin/shop/products/duplicates', factory: async () => (isAuthenticated() && canSeeView('products')) ? make('AdminProductDuplicatesView') : new HomeView() },
   { pattern: '/admin/shop/orders',   factory: async () => (isAuthenticated() && canSeeView('orders')) ? make('AdminOrdersView') : new HomeView() },
   { pattern: '/admin/shop/orders/:id', factory: async (p) => (isAuthenticated() && canSeeView('orders')) ? make('AdminOrderDetailView', p.id) : new HomeView() },
   { pattern: '/admin/shop/collections', factory: async () => (isAuthenticated() && canSeeView('collections')) ? make('AdminCollectionsView') : new HomeView() },
@@ -399,12 +417,17 @@ export class Router {
       '/admin/users':      'users',
       '/admin/analytics':  'analytics',
       '/admin/general':    'general',
+      '/admin/checkout':   'checkout',
+      '/admin/announcement': 'announcement',
       '/admin/updates':    'updates',
       '/admin/discounts':  'discounts',
       '/admin/sales':      'sales',
       '/admin/background': 'background',
       '/admin/feedback':   'feedback',
       '/admin/bins':       'bins',
+      '/admin/inventory':  'inventory',
+      '/admin/stock-count': 'inventory',
+      '/admin/receiving':  'receiving',
       '/admin/handbok':    'handbok',
       '/admin/leads':      'leads',
       '/admin/markadur':   'markadur',
@@ -426,7 +449,16 @@ export class Router {
       navigateReplace('/' + getLocale() + '/');
       return;
     }
-    if (path === '/admin/roles' && (!isAuthenticated() || !isAdmin())) {
+    // Admin-only screens, and the projects board (its view or the editor
+    // carve-out). Their factories fall back to HomeView too, but in place —
+    // the home page painted under /admin/monitoring. The role × route harness
+    // (e2e/roles, harvest 2 lane 9) found monitoring, mcp and projects doing
+    // that; roles already redirected. Refuse them all the same way.
+    if (ADMIN_ONLY_PATHS.has(path) && (!isAuthenticated() || !isAdmin())) {
+      navigateReplace('/' + getLocale() + '/');
+      return;
+    }
+    if (path === '/admin/projects' && (!isAuthenticated() || !(canSeeView('projects') || canEdit()))) {
       navigateReplace('/' + getLocale() + '/');
       return;
     }

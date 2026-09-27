@@ -18,6 +18,7 @@ import {
 } from '../services/salesGuides.js';
 import { escHtml } from '../utils/escHtml.js';
 import { sanitizeBodyHtml } from '../utils/sanitizeHtml.js';
+import { formatDate } from '../utils/format.js';
 import { t, href, getLocale } from '../i18n/i18n.js';
 import { navigateReplace } from '../navigate.js';
 import { renderAdminShell } from '../components/AdminSidebar.js';
@@ -302,8 +303,9 @@ export class AdminHandbookView {
       const body  = editing && getLocale() === 'en' ? (g.body_en  || g.body)  : g.body;
 
       const updated = g.updated_at
-        ? new Date(g.updated_at).toLocaleDateString(getLocale() === 'is' ? 'is-IS' : 'en-GB',
-            { day: 'numeric', month: 'long', year: 'numeric' })
+        // The kit formatter: toLocaleDateString('is-IS') answered in English in
+        // Chrome, which ships no Icelandic ICU data (ice #324).
+        ? formatDate(g.updated_at, { day: 'numeric', month: 'long', year: 'numeric' })
         : '';
       const draft = editing && !g.published
         ? `<span class="admin-handbok__draft-badge">${t('handbok.draftBadge')}</span>` : '';

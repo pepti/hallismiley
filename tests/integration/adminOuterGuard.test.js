@@ -11,6 +11,7 @@
 const request = require('supertest');
 const app     = require('../../server/app');
 const db      = require('../../server/config/database');
+const Role    = require('../../server/models/Role');
 const {
   createTestAdminUser, createTestModeratorUser, createTestRegularUser,
   getTestSessionCookie, cleanTables,
@@ -20,7 +21,16 @@ const NOWHERE = '/api/v1/admin/no-such-router/anything';
 let cookies;
 
 async function createViewHolder() {
-  // solufolk = the seeded seller role that grants only the handbook view (migration 090).
+  // solufolk = the seeded seller role that grants the handbook view (migration 090).
+  // adminRoles.test.js deletes every non-system role, solufolk included, and
+  // workers share a DB across suites — so re-seed it here (as leads/salesGuides
+  // do) and drop the role cache, or this suite fails on users_role_fkey
+  // whenever it runs after adminRoles on the same worker.
+  await db.query(
+    `INSERT INTO roles (name, description, view_access, is_system) VALUES
+       ('solufolk', 'Sölufólk — aðgangur að handbók sölufólks', '["handbok"]'::jsonb, FALSE)
+     ON CONFLICT (name) DO NOTHING`);
+  Role.invalidateCache();
   const id = 'outer-guard-seller';
   await db.query(
     `INSERT INTO users (id, email, username, role, approval_status, email_verified)

@@ -20,10 +20,14 @@ const manage    = require('./tools/manage');
 // its own mcp.write.* switch in config/client.json, all OFF by default, AND
 // the shop module — the third gate below.
 const products  = require('./tools/products');
+// Harvest 2 lane 5 (2026-09-26): read-only sales tools — the period summary
+// and the recent orders. Scope 'read', the shop module, AND a fourth gate: the
+// token owner's admin views (`view` on the tool; mcp/owner.js ownerViewAccess).
+const orders    = require('./tools/orders');
 const { clientConfig, envNameFor } = require('../config/clientConfig');
 const { isModuleEnabled } = require('../config/modules');
 
-const TOOLS = [...system, ...manage, ...products];
+const TOOLS = [...system, ...manage, ...products, ...orders];
 
 // The environment's scope ceiling. Unset → read-only: PROD is safe by default
 // and turning writes on is a deliberate per-stack act (REGLA_WS_ALLOW_LIVE
@@ -45,19 +49,23 @@ function writeFlagOn(flag) {
   return Boolean(clientConfig.mcp && clientConfig.mcp.write && clientConfig.mcp.write[flag]);
 }
 
-function permitted(tool, tokenScopes) {
+// Fourth gate, for a tool that names a `view`: the token OWNER must hold that
+// admin view on this instance (canView from mcp/owner.js ownerViewAccess). No
+// canView given means no answer, which is a no.
+function permitted(tool, tokenScopes, canView = null) {
   const ceiling = allowedScopes();
   const scope = tool.scope || 'read';
   if (!ceiling.includes(scope) || !(tokenScopes || []).includes(scope)) return false;
   if (tool.writeFlag && !writeFlagOn(tool.writeFlag)) return false;
   if (tool.module && !isModuleEnabled(tool.module)) return false;
+  if (tool.view && (typeof canView !== 'function' || !canView(tool.view))) return false;
   return true;
 }
 
 // Tools the presented token may call in this environment (drives tools/list —
 // Claude never sees a tool it would be refused).
-function listTools(tokenScopes) {
-  return TOOLS.filter((t) => permitted(t, tokenScopes))
+function listTools(tokenScopes, canView = null) {
+  return TOOLS.filter((t) => permitted(t, tokenScopes, canView))
     .map(({ name, description, inputSchema }) => ({ name, description, inputSchema }));
 }
 
@@ -65,28 +73,59 @@ function getTool(name) {
   return TOOLS.find((t) => t.name === name) || null;
 }
 
-// Minimal JSON-Schema-subset validation: required keys + primitive types. The
-// tools only take flat objects of strings/numbers/booleans; anything richer
-// should reconsider hand-rolling. Returns an error string or null.
-function validateArgs(tool, args) {
-  const schema = tool.inputSchema || {};
+// Minimal JSON-Schema-subset validation: required keys, primitive types and
+// enums, plus — since add_variants (ported from icelandicstore #432, harvest 2
+// lane 6c, 2026-09-26), the first tool that takes a list — arrays (minItems /
+// maxItems / items) and nested objects (properties, required,
+// additionalProperties given as a schema). Unknown keys are refused at every
+// level, so a misspelt field fails loudly instead of being dropped. Anything
+// richer should reconsider hand-rolling. Returns an error string or null.
+const isPlainObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+
+function checkObject(schema, obj, where) {
   const props = schema.properties || {};
-  const required = schema.required || [];
-  if (args == null) args = {};
-  if (typeof args !== 'object' || Array.isArray(args)) return 'arguments must be an object';
-  for (const key of required) {
-    if (!(key in args) || args[key] === null || args[key] === '') return `missing required argument: ${key}`;
+  const extra = isPlainObject(schema.additionalProperties) ? schema.additionalProperties : null;
+  const at = (key) => (where ? `${where}.${key}` : key);
+  for (const key of schema.required || []) {
+    if (!Object.hasOwn(obj, key) || obj[key] === null || obj[key] === '') return `missing required argument: ${at(key)}`;
   }
-  for (const [key, val] of Object.entries(args)) {
-    const spec = props[key];
-    if (!spec) return `unknown argument: ${key}`;
-    if (spec.type === 'string'  && typeof val !== 'string')  return `${key} must be a string`;
-    if (spec.type === 'number'  && typeof val !== 'number')  return `${key} must be a number`;
-    if (spec.type === 'integer' && !Number.isInteger(val))   return `${key} must be an integer`;
-    if (spec.type === 'boolean' && typeof val !== 'boolean') return `${key} must be a boolean`;
-    if (spec.enum && !spec.enum.includes(val))               return `${key} must be one of ${spec.enum.join(', ')}`;
+  for (const [key, val] of Object.entries(obj)) {
+    // Own keys only: `props["constructor"]` would otherwise find
+    // Object.prototype's and wave the key through untyped.
+    const spec = Object.hasOwn(props, key) ? props[key] : extra;
+    if (!spec) return `unknown argument: ${at(key)}`;
+    const err = checkValue(spec, val, at(key));
+    if (err) return err;
   }
   return null;
+}
+
+function checkValue(spec, val, name) {
+  if (spec.type === 'string'  && typeof val !== 'string')  return `${name} must be a string`;
+  if (spec.type === 'number'  && typeof val !== 'number')  return `${name} must be a number`;
+  if (spec.type === 'integer' && !Number.isInteger(val))   return `${name} must be an integer`;
+  if (spec.type === 'boolean' && typeof val !== 'boolean') return `${name} must be a boolean`;
+  if (spec.enum && !spec.enum.includes(val))               return `${name} must be one of ${spec.enum.join(', ')}`;
+  if (spec.type === 'array') {
+    if (!Array.isArray(val)) return `${name} must be an array`;
+    if (spec.minItems != null && val.length < spec.minItems) return `${name} needs at least ${spec.minItems} item(s)`;
+    if (spec.maxItems != null && val.length > spec.maxItems) return `${name} may hold at most ${spec.maxItems} items`;
+    for (let i = 0; spec.items && i < val.length; i++) {
+      const err = checkValue(spec.items, val[i], `${name}[${i}]`);
+      if (err) return err;
+    }
+  }
+  if (spec.type === 'object') {
+    if (!isPlainObject(val)) return `${name} must be an object`;
+    return checkObject(spec, val, name);
+  }
+  return null;
+}
+
+function validateArgs(tool, args) {
+  if (args == null) args = {};
+  if (!isPlainObject(args)) return 'arguments must be an object';
+  return checkObject(tool.inputSchema || {}, args, '');
 }
 
 module.exports = { listTools, getTool, validateArgs, permitted, allowedScopes, writeFlagOn };

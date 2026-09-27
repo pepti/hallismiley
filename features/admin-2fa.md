@@ -28,7 +28,7 @@ paths:
 migrations: [082_admin_totp, 107_totp_secret_enc, 109_user_mfa_reminder]
 since: 2026-08-19
 origin: null
-history: [base-sync, ui-kit, review-099, harvest-rk-totp-2026-09-23, mfa-optional-2026-09-23, mfa-reminder-2026-09-23, harvest-ice-a-2026-09-24]
+history: [base-sync, ui-kit, review-099, harvest-rk-totp-2026-09-23, mfa-optional-2026-09-23, mfa-reminder-2026-09-23, harvest-ice-a-2026-09-24, security-hygiene-2026-09-26]
 ---
 
 TOTP enrolment and the login-time second step for protected roles. `mfaService.protectedRole` decides who must enrol (admins, `accounts` holders, published sellers) and the client mirrors it in `auth.isMfaProtected()`.

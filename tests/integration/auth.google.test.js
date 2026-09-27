@@ -308,6 +308,58 @@ describe('GET /auth/google/callback', () => {
     expect(cookies.some(c => c.startsWith('auth_session='))).toBe(false);
   });
 
+  // Time-limited logins (migration 114, login-expiry-2026-09-26).
+  test('an expired time-limited login redirects with account_expired, no session', async () => {
+    await db.query(
+      `INSERT INTO users (email, username, role, email_verified, google_id, oauth_provider, avatar, expires_at)
+       VALUES ('expired@example.com', 'expiredgoogle', 'user', TRUE,
+               'google-sub-1', 'google', 'avatar-01.svg', NOW() - INTERVAL '1 minute')`,
+    );
+
+    const res = await request(app)
+      .get('/auth/google/callback?code=abc&state=test-state-123')
+      .set('Cookie', cookieHeader);
+
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toBe(`${localePrefix()}/#/?error=account_expired`);
+    const cookies = res.headers['set-cookie'] ?? [];
+    expect(cookies.some(c => c.startsWith('auth_session='))).toBe(false);
+  });
+
+  test('an expired login found by EMAIL is refused before Google is linked to it', async () => {
+    await db.query(
+      `INSERT INTO users (email, username, role, email_verified, avatar, expires_at)
+       VALUES ('newgoogleuser@example.com', 'expiredbyemail', 'user', TRUE, 'avatar-01.svg',
+               NOW() - INTERVAL '1 minute')`,
+    );
+
+    const res = await request(app)
+      .get('/auth/google/callback?code=abc&state=test-state-123')
+      .set('Cookie', cookieHeader);
+
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toBe(`${localePrefix()}/#/?error=account_expired`);
+    const { rows } = await db.query(`SELECT google_id FROM users WHERE username = 'expiredbyemail'`);
+    expect(rows[0].google_id).toBeNull();
+  });
+
+  test('a not-yet-expired time-limited login signs in normally', async () => {
+    await db.query(
+      `INSERT INTO users (email, username, role, email_verified, google_id, oauth_provider, avatar, expires_at)
+       VALUES ('live@example.com', 'livegoogle', 'user', TRUE,
+               'google-sub-1', 'google', 'avatar-01.svg', NOW() + INTERVAL '3 days')`,
+    );
+
+    const res = await request(app)
+      .get('/auth/google/callback?code=abc&state=test-state-123')
+      .set('Cookie', cookieHeader);
+
+    expect(res.status).toBe(302);
+    expect(res.headers.location).not.toMatch(/error=/);
+    const cookies = res.headers['set-cookie'] ?? [];
+    expect(cookies.some(c => c.startsWith('auth_session='))).toBe(true);
+  });
+
   test('token-exchange failure redirects with oauth_failed', async () => {
     mockState.validateAuthorizationCode = async () => { throw new Error('bad code'); };
 

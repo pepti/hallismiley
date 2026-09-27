@@ -28,6 +28,10 @@ const lucia = new Lucia(adapter, {
       phone:            attributes.phone,
       email_verified:   attributes.email_verified,
       disabled:         attributes.disabled,
+      // Time-limited login (migration 114): the session readers refuse an
+      // expired user through auth/accountExpiry.js validateSession. It is
+      // already in the row Lucia's session join loads — no extra query.
+      expires_at:       attributes.expires_at,
       party_access:     attributes.party_access,
       approval_status:  attributes.approval_status,
       preferred_locale: attributes.preferred_locale,

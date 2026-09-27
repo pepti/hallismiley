@@ -4,17 +4,23 @@
 import { isAuthenticated, isAdmin } from '../services/auth.js';
 import { fetchOrder, setOrderStatuses, setOrderTags, paymentBadge, fulfillmentBadge } from '../services/adminOrders.js';
 import { escHtml } from '../utils/escHtml.js';
-import { t, href } from '../i18n/i18n.js';
+import { t, href, getLocale } from '../i18n/i18n.js';
+import { adminPageTitle } from '../utils/pageTitle.js';
+import { formatDateTime } from '../utils/format.js';
 import { navigateReplace } from '../navigate.js';
 import { renderAdminShell } from '../components/AdminSidebar.js';
 import { showToast } from '../components/Toast.js';
 import * as cart from '../services/cart.js';
+import { vatBreakdown, isExport } from '../utils/vat.js';
 import { CustomerNotes } from '../components/CustomerNotes.js';
 import { mountAsideWidthControl } from '../components/AsideWidthControl.js';
 
+// Was toLocaleString('en-GB') — English in the Icelandic admin. The kit's
+// formatter follows the app locale and builds Icelandic by hand (Chrome has no
+// is ICU data); Ported from icelandicstore #324.
 function fmtDate(iso) {
   if (!iso) return '';
-  return new Date(iso).toLocaleString('en-GB', {
+  return formatDateTime(iso, {
     day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
   });
 }
@@ -38,12 +44,38 @@ export class AdminOrderDetailView {
     try {
       const data = await fetchOrder(this._id);
       this._order = data.order;
+      // The router titles the tab from this once render() resolves (Ported
+      // from icelandicstore #324): the order number, then the admin title.
+      this.documentTitle = adminPageTitle(t('adminOrders.documentTitle', { number: data.order.order_number }), getLocale());
       this._items = data.items || [];
       this._paint();
     } catch (err) {
       this._el.innerHTML = `<p class="admin-error">${escHtml(err.message)}</p>
         <p><a class="btn btn--ghost" href="${href('/admin/shop/orders')}" data-route="/admin/shop/orders">← ${t('adminOrders.title')}</a></p>`;
     }
+  }
+
+  // The VAT inside the total, per rate, BELOW the total (prices are
+  // VAT-inclusive, so it is not an addend) — ported from icelandicstore #51.
+  // utils/vat.js splits it the way the invoice books it: each line at its
+  // product's rate, shipping at 24 %, the discount taken off the lines in
+  // proportion, and an order shipped abroad zero-rated on goods and shipping.
+  _vatRowsHtml(money) {
+    const o = this._order;
+    const addr = o.shipping_address && typeof o.shipping_address === 'object' ? o.shipping_address : null;
+    const exportSale = isExport((addr && (addr.country_code || addr.country)) || 'IS');
+    const rows = vatBreakdown({
+      lines: this._items.map(it => ({
+        gross: Number(it.product_price_snapshot) * Number(it.quantity),
+        rate: it.vat_rate,
+        isService: !!it.is_bookable,
+      })),
+      shipping: Math.max(0, Number(o.shipping || 0) - Number(o.shipping_discount || 0)),
+      total: o.total,
+      exportSale,
+    });
+    return rows.map(v => `<div class="ord-detail__vat" data-testid="order-vat-${v.rate}"><dt>${escHtml(t('shop.vatIncludedRate', { rate: v.rate }))}</dt><dd>${money(v.vat)}</dd></div>`).join('')
+      + (exportSale ? `<div class="ord-detail__vat"><dt>${escHtml(t('checkout.vatExportNote'))}</dt><dd></dd></div>` : '');
   }
 
   _paint() {
@@ -85,6 +117,7 @@ export class AdminOrderDetailView {
             <div><dt>${t('checkout.shipping')}</dt><dd>${money(o.shipping)}</dd></div>
             ${o.discount_amount ? `<div><dt>${t('adminOrders.discount')}${o.discount_code ? ` (${escHtml(o.discount_code)})` : ''}</dt><dd>−${money(o.discount_amount)}</dd></div>` : ''}
             <div class="ord-detail__grand"><dt>${t('orders.total')}</dt><dd>${money(o.total)}</dd></div>
+            ${this._vatRowsHtml(money)}
           </dl>
           <p><a class="ord-detail__pdf" href="/api/v1/admin/shop/orders/${escHtml(o.id)}/delivery-note" target="_blank" rel="noopener">${t('adminOrders.deliveryNote')}</a></p>
         </section>
@@ -95,6 +128,11 @@ export class AdminOrderDetailView {
             <p>${escHtml(customer)}</p>
             ${o.user_email ? `<p class="ord-detail__muted">${t('adminOrders.ordersCount', { n: o.user_order_count })}</p>` : `<p class="ord-detail__muted">${t('adminOrders.guest')}</p>`}
           </section>
+
+          ${o.notes ? `<section class="ord-detail__card" data-testid="order-note">
+            <h2>${t('adminOrders.orderNote')}</h2>
+            <p class="ord-detail__note">${escHtml(o.notes)}</p>
+          </section>` : ''}
 
           ${o.user_id ? `<section class="ord-detail__card">
             <h2>${t('customerNotes.title')}</h2>

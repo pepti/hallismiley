@@ -7,13 +7,25 @@
   font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
   background: var(--bg-elevated); color: var(--text-muted);
 }
-.ord-badge--pay-paid               { background: rgba(76, 175, 120, .18); color: var(--success); }
+/* Every wash is a status token (ported from icelandicstore #399): the "needs
+   action" states — not paid yet, not sent, partly sent — ride the amber
+   --warning ink on its --warning-dim wash, re-valued per theme, instead of a
+   neutral grey (pending) or the brown interface ramp (partial). Done/good and
+   voided use --success / --error on their -dim washes instead of rgba literals. */
+.ord-badge--pay-paid               { background: var(--success-dim); color: var(--success); }
 .ord-badge--pay-refunded,
 .ord-badge--pay-partially_refunded { background: var(--gold-glow); color: var(--gold); }
-.ord-badge--pay-voided             { background: rgba(224, 92, 92, .16); color: var(--error); }
+.ord-badge--pay-voided             { background: var(--error-dim); color: var(--error); }
 .ord-badge--ful-fulfilled,
-.ord-badge--ful-delivered          { background: rgba(76, 175, 120, .18); color: var(--success); }
-.ord-badge--ful-partial            { background: var(--gold-glow); color: var(--gold); }
+.ord-badge--ful-delivered          { background: var(--success-dim); color: var(--success); }
+.ord-badge--pay-pending,
+.ord-badge--ful-unfulfilled,
+.ord-badge--ful-partial            { background: var(--warning-dim); color: var(--warning); }
+/* In the orders list a badge may wrap onto two short lines rather than hold
+   the table at one wide line (ice #400: "Endurgreitt að hluta" set the
+   column's min-content width); the order number itself never breaks. */
+.admin-shop__table td .ord-badge { white-space: normal; line-height: 1.3; }
+.admin-shop__table td code { white-space: nowrap; }
 
 /* ── Bulk select + print ───────────────────────────────────────────────────── */
 .admin-orders__check { width: 32px; text-align: center; }
@@ -79,8 +91,14 @@
   border-top: 1px solid var(--border-dim); margin-top: 6px; padding-top: 8px; font-weight: 700;
 }
 .ord-detail__grand dt, .ord-detail__grand dd { color: var(--text-primary); }
+/* "Þar af VSK 24%" under the total: informational, not an addend (ice #51). */
+.ord-detail__totals > .ord-detail__vat { padding: 2px 0; font-size: 13px; }
+.ord-detail__vat dt, .ord-detail__vat dd { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .ord-detail__pdf { color: var(--gold); font-weight: 600; font-size: 14px; }
 .ord-detail__muted { color: var(--text-muted); font-size: 13px; }
+/* The buyer's checkout note (migration 115): their line breaks kept, a long
+   unbroken word wrapped. */
+.ord-detail__note { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text-primary); }
 .ord-detail__actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
 .ord-detail__tags { margin-bottom: 8px; }
 .ord-detail__tag-form { display: flex; gap: 6px; }

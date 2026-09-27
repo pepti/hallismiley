@@ -25,52 +25,41 @@
 //
 // Resolution order:
 //   1. E2E_DATABASE_URL — explicit override, used verbatim (CI pins this)
-//   2. otherwise take host/port/credentials from TEST_DATABASE_URL, else
+//   2. otherwise take host/port/credentials from TEST_PG_URL (the local
+//      throwaway test cluster, docs/TESTING.md), else TEST_DATABASE_URL, else
 //      DATABASE_URL (.env), else the localhost default — and replace the
 //      database NAME with the derived per-branch e2e name. Borrowing the
 //      connection details keeps this working whatever the local password is.
 //
-// These databases accumulate one per branch. They are throwaway: drop the lot
-// with
-//   psql -Atc "SELECT datname FROM pg_database WHERE datname LIKE 'orangesmiley_e2e%'" \
-//     | xargs -r -n1 dropdb
-const { execSync } = require('child_process');
+// The name is `<product>_e2e_<branch>_test` (tests/workerDb.js e2eTestDbName;
+// the product id comes from engine.json since 2026-09-26 — before that every
+// repo derived the same `orangesmiley_e2e_…` names on one shared server).
+//
+// These databases persist one per branch, by design (a re-run reuses one).
+// e2e/global-setup.js labels each with its branch, worktree and lastUsedAt,
+// and every Jest run's sweep drops those whose branch AND worktree are gone
+// or that sat unused for 14 days (tests/lib/testDbSweep.js). By hand:
+//   npm run test:db:clean -- --gone          # plan
+//   npm run test:db:clean -- --gone --yes    # drop
 require('dotenv').config({ path: require('path').join(__dirname, '../../.env'), quiet: true });
+const { branchSlug, e2eTestDbName } = require('../../tests/workerDb');
 
 // Connection details only — the database name here is a placeholder that
-// e2eDatabaseUrl always overwrites. Deliberately NOT orangesmiley_test: a
-// constant naming Jest's database in this file would read like an endorsement,
-// and any future early return of it would restore the very collision above.
+// e2eDatabaseUrl always overwrites. Deliberately NOT a Jest name: a constant
+// naming Jest's database in this file would read like an endorsement, and any
+// future early return of it would restore the very collision above.
 const DEFAULT_URL = 'postgresql://postgres:postgres@localhost:5432/postgres';
-const PREFIX = 'orangesmiley_e2e';
-const MAX_IDENTIFIER = 63; // Postgres truncates silently past this — do it ourselves
 
-// The checked-out branch, reduced to an identifier-safe slug. Returns '' when
-// git is unavailable or HEAD is detached, which just yields the unsuffixed
-// name — a shared database is still better than a crashed config.
-function branchSlug() {
-  let branch;
-  try {
-    branch = execSync('git rev-parse --abbrev-ref HEAD', {
-      cwd: __dirname, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000,
-    }).trim();
-  } catch {
-    return '';
-  }
-  if (!branch || branch === 'HEAD') return ''; // detached
-  return branch.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-}
-
+// The checked-out branch as a slug; '' when git is unavailable or HEAD is
+// detached, which just yields the unsuffixed name — a shared database is
+// still better than a crashed config.
 function e2eDatabaseName() {
-  const slug = branchSlug();
-  const room = MAX_IDENTIFIER - PREFIX.length - '_test'.length - 1; // 1 for the joining _
-  const trimmed = slug.slice(0, Math.max(0, room)).replace(/_+$/, '');
-  return `${PREFIX}${trimmed ? `_${trimmed}` : ''}_test`;
+  return e2eTestDbName(branchSlug());
 }
 
 function e2eDatabaseUrl() {
   if (process.env.E2E_DATABASE_URL) return process.env.E2E_DATABASE_URL;
-  const base = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL || DEFAULT_URL;
+  const base = process.env.TEST_PG_URL || process.env.TEST_DATABASE_URL || process.env.DATABASE_URL || DEFAULT_URL;
   const u = new URL(base);
   u.pathname = `/${e2eDatabaseName()}`;
   return u.toString();

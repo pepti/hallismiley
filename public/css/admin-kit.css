@@ -161,3 +161,46 @@
   font-size: 0.72rem;
   opacity: 0.75;
 }
+
+/* ── Combobox (components/Combobox.js) ───────────────────────────────────────
+   A text input with a searchable dropdown of known values; replaces the native
+   <datalist> (expense supplier, party assignee) and the hand-built member
+   search on /admin/roles. Ported from icelandicstore #194/#351 (its shop.css
+   rules), re-pointed at tokens only: the dropdown is an elevated surface with
+   the modal shadow, the hover/active row is --bg-hover (no literal fallback),
+   and the matched run is --accent-ink, the accent that is safe as text. */
+.combobox { position: relative; }
+.combobox__list {
+  position: absolute;
+  z-index: 40;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin: 2px 0 0;
+  padding: 4px 0;
+  list-style: none;
+  max-height: 240px;
+  overflow-y: auto;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-modal);
+}
+.combobox__opt {
+  padding: 6px 10px;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.combobox__opt:hover,
+.combobox__opt.is-active { background: var(--bg-hover); }
+/* A row with a quiet right-hand note (entry.meta): label left, note right. */
+.combobox__opt--meta { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.combobox__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.combobox__meta { flex: none; font-size: 0.75rem; color: var(--text-secondary); white-space: nowrap; }
+/* The matched run, so it is obvious why a row is listed. */
+.combobox__opt mark {
+  background: none;
+  color: var(--accent-ink);
+  font-weight: 600;
+}

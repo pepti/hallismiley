@@ -224,7 +224,7 @@ The survey's headline is that **the harvest is not one-directional**. This repo'
 
 ### 22. ✅ DONE 2026-09-24 (till) — Barcode scanning at the till and on the floor
 
-**Status.** Approved by Halli with the 2026-09-24 ice harvest (chunk C, his defaults) and landed: `components/ScanInput.js` (ice's file, unchanged) mounted on `AdminPosView` with `GET /api/v1/admin/bookkeeping/pos/lookup` (variant first). The sounds are a per-device switch on the till, not the `scan_sounds`/`scan_volume` settings pair; the pick / receive / inventory-check screens stay ice-only. [HISTORY](docs/HISTORY.md#harvest-ice-c-2026-09-24).
+**Status.** Approved by Halli with the 2026-09-24 ice harvest (chunk C, his defaults) and landed: `components/ScanInput.js` (ice's file, unchanged) mounted on `AdminPosView` with `GET /api/v1/admin/bookkeeping/pos/lookup` (variant first). The sounds are a per-device switch on the till, not the `scan_sounds`/`scan_volume` settings pair; the pick / receive / inventory-check screens stay ice-only. [HISTORY](docs/HISTORY.md#harvest-ice-c-2026-09-24). *Reopened 2026-09-26 by #27: receive and inventory-check are engine screens now; pick stays ice-only.*
 
 
 **What.** Port `ScanInput.js` (226 lines): a USB keyboard-wedge detector with an auto-focused field firing on Enter *plus* a document-level capture listener for scanners that send no Enter suffix, burst timings (35 ms gap, 60 ms idle flush, minimum length 3), a duplicate-read cooldown, six distinct WebAudio feedback tones synthesised with no asset (ok / error / wrong item / line done / all done / over-scan, told apart by tone count and pitch direction), vibrate patterns, and a reduced-motion-aware flash. It bails whenever an editable element has focus, so it never swallows typing.
@@ -244,7 +244,7 @@ The survey's headline is that **the harvest is not one-directional**. This repo'
 
 ### 24. ◐ PARTLY DONE 2026-09-24 — Import wizards with a dry-run stage
 
-**Status.** The products half landed with the 2026-09-24 ice harvest (chunk D): the product import reads CSV, .xlsx and PDF on the server (`services/productImport`, `exceljs` + `pdf-parse`), matches on SKU then barcode, never reads an order quantity as stock, and can create a product with its variants from grouped rows — the dry run is the existing preview. Still open: the customer importer's column mapping, goods receipt and the invoice merger (Ísprjón-specific). [HISTORY](docs/HISTORY.md#harvest-ice-d-2026-09-24).
+**Status.** The products half landed with the 2026-09-24 ice harvest (chunk D): the product import reads CSV, .xlsx and PDF on the server (`services/productImport`, `exceljs` + `pdf-parse`), matches on SKU then barcode, never reads an order quantity as stock, and can create a product with its variants from grouped rows — the dry run is the existing preview. Still open: the customer importer's column mapping and the invoice merger (Ísprjón-specific); goods receipt landed with #27 (2026-09-26). [HISTORY](docs/HISTORY.md#harvest-ice-d-2026-09-24).
 
 
 **What.** icelandicstore's four-stage customer importer (ingest → map columns → preview → confirm), the invoice merger with fuzzy catalogue matching, the goods-receipt receive/reconcile flow, and `utils/parseSalesReport.js` — delimiter detection, quote-aware splitting, header-row detection that disqualifies numeric and banner rows, and bilingual field hints.
@@ -267,6 +267,60 @@ The survey's headline is that **the harvest is not one-directional**. This repo'
 **What.** Extract the footer into `components/Footer.js`, mounted once from `main.js` and re-rendered on locale change.
 **Why.** The footer markup lives inside `HomeView.js` here, so most routes have no footer at all. icelandicstore's is a component with an explicit comment about the stale-locale trap it had to solve.
 **Effort.** S. **Risk.** Low.
+
+### 27. ✅ DONE 2026-09-26 (branch) — Roles by name, one permissions grid, edit one customer
+
+**Status.** Approved 2026-09-26 (harvest 2, lane 3) and built on branch `harvest2/lane3-users`: [harvest2-lane3-2026-09-26](docs/history.d/2026-09-26-harvest2-lane3-users.md#harvest2-lane3-2026-09-26). Engine migrations `116_role_label` and `117_user_address` (provisional numbers). All new strings DRAFT.
+
+**What.** From icelandicstore #421/#416/#336: create an admin role by its display name (the server derives the slug; reserved back-office names refused folded), one roles × admin-screens grid with a save bar that counts the people a change reaches, the Profile badge naming the session's roles, 409-with-count on deleting a role in use, and editing one customer's contact details and address with a per-customer invite that never returns the set-password link ("send now" off by default on Add).
+**Why.** The role form refused Icelandic names; the per-role modal made comparing roles hard; the Customers screen could not correct an email or keep an address.
+**Effort.** M. **Risk.** Low: changing a customer's email is admin-only (the `customers` view edits name, phone and address); Halli may loosen it.
+
+### 28. ✅ Approved 2026-09-26 (harvest 2) — Inventory Watch, stock count, goods receiving
+
+**Status.** Approved by Halli 2026-09-26 as Harvest 2 lane 6a and built on branch `harvest2/lane6a-stock` ([harvest2-lane6a](docs/history.d/2026-09-26-harvest2-lane6a-stock.md#harvest2-lane6a-2026-09-26)). This reopens the 2026-09-24 call under #22 that the receive / inventory-check screens stay ice-only: both are engine screens now, hidden here with the retail surface (view ids `inventory`, `receiving`, owned by the `shop` module). Pick stays ice-only.
+
+**What.** Inventory Watch (ice #13/#15): every stocked unit, velocity over 90 days of paid order lines, months of cover, a status bucket on Available, and an audited "Fix stock". The stock count (ice #18): scan or search, per-line Set / Add / Remove, saved as ONE audited batch (`Inventory.applyBatch`, all or nothing, below zero refused). Goods receiving (ice #23): a receipt read from the supplier's file through the one product-file reader, scanned in, shorts / overs / not-on-invoice, finalised once into stock, a receipt PDF. Migration `118_goods_receipts` (provisional number).
+**Why.** A shop that counts, receives and re-orders on paper is the job the retail tiers are sold to replace; icelandicstore already runs these screens.
+**Effort.** L. **Risk.** Medium, contained: every write goes through the one audited writer, under its lock order, and the engine keeps `stock >= 0`.
+### 29. ✅ DONE 2026-09-26 (on its branch) — Merge duplicate products; AI reads a supplier PDF into the import (dark)
+
+**Status.** Approved 2026-09-26 (harvest 2) by Halli; built on `harvest2/lane6b-merge-ai` from icelandicstore `941cf51d` (#309/#311/#312/#315, #306/#314). Products → Duplicates suggests duplicates with their evidence and merges them in one transaction (engine migration 120, provisional number); "Read with AI" ships dark behind `PRODUCT_IMPORT_AI_ENABLED` — **switching it on costs money per page** (budgets and the cost note in `docs/DEPLOYMENT.md`). [history](docs/history.d/2026-09-26-harvest2-lane6b-merge-ai.md#harvest2-lane6b-2026-09-26).
+
+**What.** (a) Duplicate suggestions (same barcode, same SKU, same name, colourway, similar name) and a merge that moves variants, stock (through `Inventory`, audited), images, collection links and order lines to the product kept, leaves issued invoices alone, and redirects the merged product's URL. (b) Claude reads a free-form supplier price list into create-only import rows, verified against the PDF's own text, priced by the admin's markup and EUR rate.
+**Why.** Every catalogue that came from an import has duplicates; and a supplier's price list is rarely a spreadsheet.
+**Effort.** L. **Risk.** Money/stock path (merge) and spend (AI) — both behind review, tests and, for the AI, a switch that is off. The merge itself is **admin-only** (the default taken, since it cannot be undone; Halli may loosen it to the `products` view); the suggestions and the preview are on the `products` view.
+
+### 30. ✅ Variants that work, colour → photo, the delivery note as a pick list — approved 2026-09-26 (harvest 2)
+
+**Status.** Approved by Halli 2026-09-26 as harvest 2 lane 6c; built on branch `harvest2/lane6c-variants` ([history](docs/history.d/2026-09-26-harvest2-lane6c-variants.md#harvest2-lane6c-2026-09-26)). New strings DRAFT.
+**What.** From icelandicstore #194, #352/#381, #430, #432, #182/#265/#270/#273, #334/#335 and #8: a product-editor variant grid that can add and delete rows (a variant on an order or with stock history is archived and frees its SKU — migration 119), arranges colour → size and sorts by header, and adds a whole colour from a spreadsheet paste; a bulk variants route and MCP `add_variants` / `list_variants` behind an off-by-default switch; colour swatches on the product page that show the colour's own photo (matched on the server); a delivery note with a picture, the size, BIN and SKU per line, walked by shelf.
+**Why.** The engine's variant table could not add a row, "delete" kept the SKU taken for ever, and the delivery note was a list of identical names.
+**Effort.** L (done). **Risk.** Medium — a unique rule became partial (expand-safe; see the migration's comment).
+
+### 31. ✅ Approved 2026-09-26 (harvest 2) — Sales report periods, net sales, insights, marketing; "Í dag" attention cards; MCP sales tools
+
+**Status.** Approved by Halli 2026-09-26 (harvest 2) as lane 5 and built on branch `harvest2/lane5-reports` ([harvest2-lane5](docs/history.d/2026-09-26-harvest2-lane5-reports.md#harvest2-lane5-2026-09-26)). Engine migration `121_order_vat_snapshot`. All new strings DRAFT.
+
+**What.** From icelandicstore #414/#417/#419: eleven period presets with a comparison window and +/- % on every KPI; net sales ("Sala án VSK") as the headline from a VAT snapshot the checkout now writes with the invoice's own rule; fulfilment time, new and dormant customers; a marketing section (visits by channel, discounted sales, campaigns); "Í dag" cards for sold-out goods and sign-ups awaiting approval, every card linking to its list filtered to the rows it counts; read-only MCP `sales_report` / `recent_orders`, gated by the token owner's admin views.
+**Why.** The report showed gross revenue over 7/30/90 rolling days only; the business counts net, by calendar period, against the last one.
+**Effort.** M. **Risk.** Money path: the checkout writes the snapshot inside the order transaction (a refused rate leaves NULL, never a lost sale), and `buildLines` is pinned byte-for-byte to its pre-extraction output.
+
+### 32. ✅ Approved 2026-09-26 (harvest 2) — Checkout settings enforced on the order path; a time-limited site announcement
+
+**Status.** Approved by Halli 2026-09-26 as Harvest 2 lane 7a and built on branch `harvest2/lane7a-checkout-settings` from icelandicstore `941cf51d` (#151, #200): [harvest2-lane7a](docs/history.d/2026-09-26-harvest2-lane7a-checkout-settings.md#harvest2-lane7a-2026-09-26). No migration (`app_settings`). All new strings DRAFT. Both are OFF / unchanged until an admin saves: the defaults reproduce today's checkout and show no announcement.
+
+**What.** (a) Admin → Greiðsla (view `checkout`, shop module, hidden here): an ordering pause with a per-language message, a minimum order value, the delivery price as settings (flat rate + free-over threshold; `SHIPPING_FLAT_RATE_ISK` the fallback), optional / required / hidden rules for phone, company, kennitala and the note, and who gets a "new paid order" email. All enforced on the server; the cart and checkout show them. (b) Admin → Tilkynning (view `announcement`, core): on/off, a start and end date-time, IS + EN heading and message, an optional link; signed-out visitors get a dialog once, then a slim banner.
+**Why.** A shop needs a kill switch, a minimum and a delivery price it can change without a redeploy; a cutover (a new site, a move) needs one message every visitor sees for a while.
+**Effort.** M. **Risk.** Money path: the pause, the minimum and the price are server-side with tests on each; the owner alert can never fail or hold up the Stripe webhook. **For Halli:** the pause answers 503 (the brief) where ice answers 403 so an intentional pause does not count against the 5xx error budget — one constant to flip; company and kennitala are checked but not stored on the order yet (needs a migration).
+
+### 33. ✅ Approved 2026-09-26 (harvest 2) — Expiry watch, role × route e2e harness, TEST-stack sample rows
+
+**Status.** Approved by Halli 2026-09-26 as Harvest 2 lane 9 and built on branch `harvest2/lane9-ops` from icelandicstore `941cf51d` (#90, #62, #183): [harvest2-lane9](docs/history.d/2026-09-26-harvest2-lane9-ops.md#harvest2-lane9-2026-09-26). No migration, no new strings. The watch is inert until its repository variables are set (PLAN.md → Status has the list).
+
+**What.** (a) `.github/workflows/secret-cert-watch.yml`: every Monday, fail (and optionally email) when a TLS certificate on a `WATCH_HOSTS` host is inside 21 days or a `WATCH_KEY_VAULTS` secret is inside 30 days or has no expiry; the judging in `scripts/expiry-watch.js`, unit-tested. (b) `e2e/roles`: anonymous, a plain user, a seller and an admin walk every route the router knows (derived from `router.js`, never hand-listed) — public pages render cleanly, admin pages open with the view or are refused without it, the sidebar offers exactly the role's grants, nothing scrolls sideways at 375px. Its first run found five real bugs, fixed on the branch. (c) `server/demo/testStackData.js` + `services/testStackSeeder.js`: a product's invented sample rows applied at boot on a TEST stack only (`APP_ENV=test`, not a production database), so they never reach production with a promote; the engine ships none.
+**Why.** A managed certificate that failed to renew, or a secret nobody stamped, is found by customers; a route nobody opened as a seller is found by the seller; a demo row in a migration is in production at the next promote.
+**Effort.** M. **Risk.** Low: the watch only reads (metadata, never values); the harness only adds tests; the seeder is gated three ways and never throws.
 
 ### Reverse queue — this repo → icelandicstore and the base
 

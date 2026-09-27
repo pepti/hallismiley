@@ -37,6 +37,18 @@ incidents that used to live in `CLAUDE.md` are in the same file, from
   and the six engine-test re-applies are retired; two-factor enrolment is the
   engine default `optional`; migration 108 runs
   ([engine-sync-3-2026-09-23](docs/HISTORY.md#engine-sync-3-2026-09-23)).
+- 2026-09-26 — engine sync to `3e9d903` (125 engine commits: harvest 2 lanes,
+  the admin home, the
+  [test-DB hygiene](docs/history.d/2026-09-26-feat-test-db-hygiene.md#test-db-hygiene-2026-09-26)):
+  test databases are `hs_…` now (product id from `engine.json`), made on the
+  throwaway test server named by `TEST_PG_URL`, labelled and swept
+  (`npm run test:db:clean`). Record: `engine.json` history and the sync PR.
+- 2026-09-27 — the same PR (#174) extended to engine `cbee076`, then
+  `96f9818`: no engine-test re-apply is left (the `moduleFlags` one and the
+  three this sync found are engine fixes now); glacier/moss `--text-muted` alpha 0.55 → 0.58 and aurora's
+  `--accent-gradient` dark stop `#8A63E0` → `#8D67E1` clear 4.5 : 1
+  ([engine-sync-5-2026-09-26](docs/history.d/2026-09-26-engine-sync-2026-09-26.md#engine-sync-5-2026-09-26)).
+  Merging deploys www.hallismiley.is — Halli merges.
 
 **Open — what the identity seam still lacks (engine changes, Halli decides)**
 Since the 57362dc sync the list is § "What the seam still lacks" in

@@ -18,8 +18,9 @@
 // draft WITHOUT a full re-render (that would drop focus); the order-ID preview
 // updates in place. A full re-render happens only after save/discard.
 import { isAuthenticated, isAdmin } from '../services/auth.js';
-import { getGeneralSettings, updateGeneralSettings, getModules, setModule } from '../services/adminGeneralSettings.js';
+import { getGeneralSettings, updateGeneralSettings, getModules, setModule, getDemoStatus, resetDemoData } from '../services/adminGeneralSettings.js';
 import { escHtml } from '../utils/escHtml.js';
+import { formatDateTime } from '../utils/format.js';
 import { t, href } from '../i18n/i18n.js';
 import { navigateReplace } from '../navigate.js';
 import { renderAdminShell } from '../components/AdminSidebar.js';
@@ -53,10 +54,12 @@ export class AdminGeneralSettingsView {
         <p class="gs-sub">${t('adminGeneral.subtitle')}</p>
       </div>
       <div id="gs-body"><div class="admin-loading">${t('form.loading')}</div></div>
+      <div id="gs-demo"></div>
       <div id="gs-modules"></div>
     `;
     this._el = el;
     await this._load();
+    await this._loadDemo();
     await this._loadModules();
     return renderAdminShell({ activePath: '/admin/general', content: el });
   }
@@ -133,6 +136,39 @@ export class AdminGeneralSettingsView {
 
     this._bind();
     this._recomputeDirty();
+  }
+
+  // ── The demo instance (R2b) ─────────────────────────────────────────────────
+  // Only on a demo instance (<html data-demo-instance>, ssrMeta): when the data
+  // was last reset, when it is next, and "reset now". The reset rebuilds the
+  // database and restarts the site; staff accounts survive it.
+  async _loadDemo() {
+    if (document.documentElement.dataset.demoInstance !== 'true') return;
+    const host = this._el.querySelector('#gs-demo');
+    let st;
+    try { st = await getDemoStatus(); } catch (err) {
+      host.innerHTML = `<p class="admin-error">${escHtml(err.message)}</p>`;
+      return;
+    }
+    const when = (iso) => formatDateTime(iso); // app locale, Icelandic built by hand ('—' when unset)
+    host.innerHTML = this._card(t('demo.adminTitle'), t('demo.adminBadge'), `
+      <p class="gs-row__help">${escHtml(t('demo.adminHelp'))}</p>
+      ${this._row({ title: t('demo.lastReset'), help: '', control: `<span data-testid="demo-last-reset">${escHtml(when(st.lastReset && st.lastReset.at))}</span>` })}
+      ${this._row({ title: t('demo.nextReset'), help: '', control: `<span data-testid="demo-next-reset">${escHtml(when(st.nextReset))}</span>` })}
+      ${this._row({ title: t('demo.resetNow'), help: t('demo.resetHelp'),
+        control: `<button type="button" class="btn btn--sm btn--danger" data-demo-reset data-testid="demo-reset">${escHtml(t('demo.resetButton'))}</button>` })}`);
+    const button = host.querySelector('[data-demo-reset]');
+    button.addEventListener('click', async () => {
+      if (!confirm(t('demo.resetConfirm'))) return;
+      button.disabled = true;
+      try {
+        await resetDemoData();
+        showToast(t('demo.resetStarted'), 'success', 8000);
+      } catch (err) {
+        button.disabled = false;
+        showToast(t('demo.resetFailed') + ': ' + err.message, 'error', 8000);
+      }
+    });
   }
 
   // ── Module switches (R5b) ───────────────────────────────────────────────────

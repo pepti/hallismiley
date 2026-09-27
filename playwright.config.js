@@ -56,6 +56,11 @@ const SERVER_ENV = {
   // meant every local e2e run wrote into the dev database).
   DATABASE_URL: E2E_DATABASE_URL,
   DB_SSL:       'false',
+  // Uploads go to this run's temp folder, never the committed public/assets
+  // tree (tests/lib/testUploads.js — the same prefix, so the next Jest setup
+  // sweeps a finished run's folder once its process is gone).
+  UPLOAD_ROOT:       require('path').join(require('./tests/lib/testUploads').baseFor(process.pid), 'e2e', 'assets'),
+  BOOKS_UPLOAD_ROOT: require('path').join(require('./tests/lib/testUploads').baseFor(process.pid), 'e2e', 'books'),
   PORT,
   // Must match the origin the browser actually uses, or every state-changing
   // request fails CORS the moment E2E_PORT is set.
@@ -140,7 +145,7 @@ module.exports = defineConfig({
       CLIENT_CONFIG_IDENTITY_SURFACE_NAV_SIGN_IN: 'false',
       // Under `required`, admins must enrol a second factor before they hold
       // admin rights (server/auth/mfaPolicy.js). `testadmin` is exempt by
-      // name, through a switch production ignores, in case a spec on this
+      // name, through a switch only development/test honour, in case a spec on this
       // server signs in as it; every other admin is under the real rule —
       // e2e/admin-totp-enrolment.spec.js walks `enroladmin` through it.
       ADMIN_TOTP_EXEMPT: 'testadmin',

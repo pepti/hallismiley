@@ -5,12 +5,25 @@ import { t, href } from '../i18n/i18n.js';
 import { BarcodeScanner } from '../components/BarcodeScanner.js';
 import { renderAdminShell } from '../components/AdminSidebar.js';
 import { thumbUrl } from '../utils/imageUrl.js';
-import { formatDateTime } from '../utils/format.js';
+import { formatDate, formatDateTime } from '../utils/format.js';
 import {
   adminExportProductsUrl, adminPreviewProductImport, adminApplyProductImport,
   adminBulkProducts, adminProductAdjustments, adminParseProductImportFile,
 } from '../services/adminProducts.js';
 import { showToast } from '../components/Toast.js';
+import { dragHasFiles, dragHasUsableFile } from '../utils/dragFiles.js';
+// Harvest 2 lane 6c (icelandicstore #194/#270/#352/#381/#430): the variant
+// grid, the per-photo colour, colour → size order, the subcategory picker.
+import { VariantGrid } from '../components/VariantGrid.js';
+import { attachCombobox } from '../components/Combobox.js';
+import { arrangeVariants } from '../utils/variantArrange.js';
+import { colorKey } from '../utils/variantAxis.js';
+import { keysMatch, colorOptions } from '../utils/colorMatch.js';
+import { mountImportAi } from '../components/ProductImportAi.js';
+
+// The image types the product-image upload takes: the drop filter and the
+// drag-time check share this pattern; the file input's accept lists the same.
+const PRODUCT_IMAGE_MIME = /^image\/(jpeg|png|webp)$/;
 
 // Reasons an admin may give for a stock change (server models/Inventory.js
 // ADJUSTMENT_REASONS); the product form's default is 'correction'.
@@ -47,6 +60,7 @@ export class AdminProductsView {
           <div class="admin-shop__header-actions">
             <button type="button" id="admin-products-export" class="admin-shop__primary-btn">${t('adminProducts.export')}</button>
             <button type="button" id="admin-products-import" class="admin-shop__primary-btn">${t('adminProducts.import')}</button>
+            <a class="admin-shop__primary-btn" href="${href('/admin/shop/products/duplicates')}" data-route="/admin/shop/products/duplicates">${t('adminProducts.duplicates')}</a>
             <button type="button" id="admin-new-product" class="admin-shop__primary-btn">${t('adminProducts.newProduct')}</button>
           </div>
         </header>
@@ -314,12 +328,14 @@ export class AdminProductsView {
   }
 
   _detailPanelHtml(p) {
-    const variants = Array.isArray(p.variants) ? p.variants : [];
+    // Colour → size, XS → 2XL, not the API's SKU order (ice #352).
+    const variants = arrangeVariants(Array.isArray(p.variants) ? p.variants : [], p.variant_axes);
     const onHand    = Number(p.on_hand ?? p.stock) || 0;
     const committed = Number(p.committed) || 0;
     const available = p.available == null ? onHand - committed : Number(p.available);
+    // App-locale dates (was toLocaleDateString('en-GB'); ice #324).
     const fmtDate = (iso) => iso
-      ? new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+      ? formatDate(iso, { day: '2-digit', month: 'short', year: 'numeric' })
       : '—';
     const field = (label, val) => `<div class="prod-detail__field"><dt>${label}</dt><dd>${val}</dd></div>`;
     const axes = Array.isArray(p.variant_axes) ? p.variant_axes : [];
@@ -369,23 +385,77 @@ export class AdminProductsView {
       onSaved: () => this._load(),
       paintImages:   (modal, product) => this._paintImages(modal, product),
       paintVariants: (modal, product) => this._paintVariants(modal, product),
+      subcategories: () => [...new Set(this._products.map(p => p.subcategory).filter(Boolean))].sort(),
     });
   }
 
+  // The colours a photo can be tagged with: the product's ACTIVE variant
+  // colours only (ice #270 — an inactive colour is one no shopper can pick,
+  // and listing it manufactured ambiguity that hid a correct tag).
+  _imageColors(product) {
+    const axis = (product.variant_axes || []).find(a => ['color', 'colour'].includes(colorKey(a)));
+    return axis ? colorOptions(product.variants || [], axis) : [];
+  }
+
+  // Which of those colours a photo is tagged for, resolved ONCE and compared by
+  // identity: an ambiguous tag resolves to none rather than the wrong one (ice
+  // #265 — the same conservatism as the server's match).
+  _matchedColorKey(img, colors) {
+    const key = colorKey(img && img.color);
+    if (!key) return null;
+    const hits = colors.filter(c => keysMatch(key, c.key));
+    return hits.length === 1 ? hits[0].key : null;
+  }
 
   _paintImages(modal, product) {
     const list = modal.querySelector('#admin-product-images');
     if (!list) return;
+    const coverage = modal.querySelector('#admin-product-image-coverage');
+    const colors = this._imageColors(product);
     if (!product.images || product.images.length === 0) {
       list.innerHTML = `<p class="admin-shop__hint">${t('adminProducts.noImages')}</p>`;
+      if (coverage) coverage.textContent = '';
       return;
     }
-    list.innerHTML = product.images.map(img => `
+    list.innerHTML = product.images.map(img => {
+      const matched = colors.length ? this._matchedColorKey(img, colors) : null;
+      return `
       <div class="admin-shop__image-item" data-img-id="${_esc(img.id)}">
         <img src="${_esc(thumbUrl(img.url))}" alt="" loading="lazy"/>
         <button type="button" class="admin-shop__image-del" data-img-id="${_esc(img.id)}">${t('admin.delete')}</button>
-      </div>
-    `).join('');
+        ${colors.length ? `<select class="admin-shop__image-color" data-img-color="${_esc(img.id)}" aria-label="${_esc(t('adminProducts.imageColorLabel'))}">
+          <option value=""${matched ? '' : ' selected'}>${_esc(t('adminProducts.imageColorNone'))}</option>
+          ${colors.map(c => `<option value="${_esc(c.key)}"${matched === c.key ? ' selected' : ''}>${_esc(c.label)}</option>`).join('')}
+        </select>` : ''}
+      </div>`;
+    }).join('');
+    // Say how many colours have a photo — otherwise a missing tag only shows
+    // on the storefront (ice #265).
+    if (coverage) {
+      const tagged = new Set(product.images.map(img => this._matchedColorKey(img, colors)).filter(Boolean));
+      coverage.textContent = colors.length
+        ? t('adminProducts.imageColorCoverage', { n: colors.filter(c => tagged.has(c.key)).length, total: colors.length })
+        : '';
+    }
+    list.querySelectorAll('[data-img-color]').forEach(sel => {
+      sel.addEventListener('change', async () => {
+        const img = product.images.find(i => i.id === sel.dataset.imgColor);
+        if (!img) return;
+        try {
+          const headers = await getCsrfHeaders();
+          const res = await fetch(`/api/v1/admin/shop/products/${encodeURIComponent(product.id)}/images/${encodeURIComponent(img.id)}`, {
+            method: 'PATCH', credentials: 'include', headers, body: JSON.stringify({ color: sel.value || null }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.error || t('form.error'));
+          Object.assign(img, data.image);
+          this._detailCache.delete(product.id);
+        } catch (err) {
+          modal.querySelector('#admin-product-error').textContent = err.message;
+        }
+        this._paintImages(modal, product); // put the select back where the database is
+      });
+    });
     list.querySelectorAll('.admin-shop__image-del').forEach(btn => {
       btn.addEventListener('click', async () => {
         if (!confirm(t('adminProducts.confirmDeleteImage'))) return;
@@ -410,90 +480,23 @@ export class AdminProductsView {
     });
   }
 
+  // The editor's variant table is components/VariantGrid.js (harvest 2 lane
+  // 6c, ice #194/#381/#430): add, edit, delete, arrange, "+ Add a colour".
+  // Its saves feed the photo colour picker (active colours only) and drop
+  // this product's cached detail panel.
   _paintVariants(modal, product) {
     const wrap = modal.querySelector('#admin-variant-table-wrap');
     if (!wrap) return;
-    const variants = product.variants || [];
-    if (variants.length === 0) {
-      wrap.innerHTML = `<p class="admin-shop__hint">
-        ${t('adminProducts.noVariants')}
-        (<code>POST /api/v1/admin/shop/products/${product.id}/variants</code>).
-      </p>`;
-      return;
-    }
-    // Detect the axes used by this product so the table has a consistent shape.
-    const axes = Array.isArray(product.variant_axes) ? product.variant_axes : [];
-    wrap.innerHTML = `
-      <table class="admin-shop__variant-table">
-        <thead>
-          <tr>
-            ${axes.map(a => `<th>${_esc(a.charAt(0).toUpperCase() + a.slice(1))}</th>`).join('')}
-            <th>SKU</th>
-            <th>Override ISK</th>
-            <th>Override EUR</th>
-            <th>Stock</th>
-            <th>Active</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${variants.map(v => `
-            <tr data-variant-id="${_esc(v.id)}">
-              ${axes.map(a => `<td>${_esc(v.attributes?.[a] ?? '—')}</td>`).join('')}
-              <td><code style="font-size:12px">${_esc(v.sku)}</code></td>
-              <td><input class="admin-shop__var-input" type="number" min="1" step="1"
-                         data-field="price_isk" value="${v.price_isk ?? ''}" placeholder="inherit"/></td>
-              <td><input class="admin-shop__var-input" type="number" min="1" step="1"
-                         data-field="price_eur" value="${v.price_eur ?? ''}" placeholder="inherit"/></td>
-              <td><input class="admin-shop__var-input" type="number" min="0" step="1"
-                         data-field="stock" value="${v.stock}"/></td>
-              <td><input type="checkbox" data-field="active" ${v.active ? 'checked' : ''}/></td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-      <p class="admin-shop__hint" id="admin-variant-status" aria-live="polite"></p>
-    `;
-
-    const commit = async (row, field, rawValue) => {
-      const status = wrap.querySelector('#admin-variant-status');
-      const variantId = row.dataset.variantId;
-      // Compose payload: empty string on price fields → null (inherit).
-      let value = rawValue;
-      if (field === 'price_isk' || field === 'price_eur') {
-        value = (rawValue === '' || rawValue == null) ? null : Number(rawValue);
-      } else if (field === 'stock') {
-        value = Number(rawValue);
-      } else if (field === 'active') {
-        value = Boolean(rawValue);
-      }
-      status.textContent = t('form.saving');
-      status.style.color = 'var(--text-muted)';
-      try {
-        const headers = await getCsrfHeaders();
-        const res = await fetch(
-          `/api/v1/admin/shop/products/${product.id}/variants/${variantId}`,
-          { method: 'PATCH', credentials: 'include', headers, body: JSON.stringify({ [field]: value }) }
-        );
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Save failed');
-        // Update local cache so a subsequent paint doesn't revert.
-        const idx = product.variants.findIndex(x => x.id === variantId);
-        if (idx >= 0) product.variants[idx] = data.variant;
-        status.textContent = t('form.saved');
-        status.style.color = 'var(--success)';
-      } catch (err) {
-        status.textContent = err.message;
-        status.style.color = 'var(--error)';
-      }
-    };
-
-    wrap.querySelectorAll('tr[data-variant-id]').forEach(row => {
-      row.querySelectorAll('.admin-shop__var-input').forEach(inp => {
-        inp.addEventListener('change', () => commit(row, inp.dataset.field, inp.value));
-      });
-      const activeBox = row.querySelector('input[data-field=active]');
-      activeBox?.addEventListener('change', () => commit(row, 'active', activeBox.checked));
-    });
+    if (modal._variantGrid) modal._variantGrid.destroy();
+    modal._variantGrid = new VariantGrid({
+      host: wrap,
+      product,
+      onChange: (variants) => {
+        product.variants = variants;
+        this._detailCache.delete(product.id);
+        this._paintImages(modal, product);
+      },
+    }).mount();
   }
 
   // ── CSV export / import ───────────────────────────────────────────────────────
@@ -526,11 +529,13 @@ export class AdminProductsView {
             ${t('adminProducts.importCreate')}
           </label>
           <p class="admin-shop__error" id="prod-import-error" role="alert"></p>
+          <div id="prod-import-ai"></div>
           <div id="prod-import-preview"></div>
         </div>
       </div>`;
     document.body.appendChild(modal);
-    const close = () => modal.remove();
+    let ai = null;
+    const close = () => { if (ai) ai.destroy(); modal.remove(); };
     modal.querySelector('.admin-shop__modal-close').addEventListener('click', close);
     modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
 
@@ -556,6 +561,15 @@ export class AdminProductsView {
       }
     };
     createBox.addEventListener('change', preview);
+    // "Read with AI" (dark unless the server enables it; components/ProductImportAi.js):
+    // its rows go through the same preview → apply, always with create on.
+    ai = mountImportAi(modal.querySelector('#prod-import-ai'), {
+      onRows: (rows) => {
+        parsed = { source: 'ai', rows, ignored: [], orderQtyColumns: [], truncated: false };
+        createBox.checked = true;
+        preview();
+      },
+    });
     modal.querySelector('#prod-import-file').addEventListener('change', async (e) => {
       errorEl.textContent = '';
       previewEl.innerHTML = '';
@@ -563,11 +577,13 @@ export class AdminProductsView {
       const file = e.target.files && e.target.files[0];
       if (!file) return;
       previewEl.innerHTML = `<p class="admin-shop__hint">${t('adminProducts.importReading')}</p>`;
+      ai.setFile(file);
       try {
         parsed = await adminParseProductImportFile(file);
       } catch (err) {
         previewEl.innerHTML = '';
         errorEl.textContent = err.message;
+        ai.setFile(file, { readerFailed: true });
         return;
       }
       await preview();
@@ -633,12 +649,15 @@ export class AdminProductsView {
 // The images/variants sub-sections are only rendered when `existing` is set
 // (a product must be saved first to have an id for image/variant FKs), so a
 // fresh-create flow (new product) doesn't need the paint callbacks.
-export function openProductFormModal({ existing = null, onSaved = () => {}, paintImages, paintVariants } = {}) {
+//   subcategories  — optional () => string[]: the values already in use, for
+//                    the subcategory Combobox (ice #194's value pickers)
+export function openProductFormModal({ existing = null, onSaved = () => {}, paintImages, paintVariants, subcategories = null } = {}) {
   const isEdit = !!existing;
   const modal = document.createElement('div');
   modal.className = 'admin-shop__modal';
+  // Edit mode carries the variant grid (lane 6c): the wide card.
   modal.innerHTML = `
-    <div class="admin-shop__modal-card">
+    <div class="admin-shop__modal-card${isEdit ? ' admin-shop__modal-card--wide' : ''}">
       <header>
         <h2>${isEdit ? t('adminProducts.editProduct') : t('adminProducts.createProduct')}</h2>
         <button type="button" class="admin-shop__modal-close" aria-label="${t('common.close')}">✕</button>
@@ -768,6 +787,7 @@ export function openProductFormModal({ existing = null, onSaved = () => {}, pain
         <section class="admin-shop__images">
           <h3>${t('adminProducts.images')}</h3>
           <div class="admin-shop__image-list" id="admin-product-images"></div>
+          <p class="admin-shop__hint" id="admin-product-image-coverage" aria-live="polite"></p>
           <label class="admin-shop__upload-btn">
             <input type="file" accept="image/jpeg,image/png,image/webp" id="admin-product-image-input" multiple/>
             ${t('adminProducts.uploadImage')}
@@ -777,7 +797,6 @@ export function openProductFormModal({ existing = null, onSaved = () => {}, pain
         <section class="admin-shop__variants">
           <h3>${t('adminProducts.variants')} <span class="admin-shop__hint" style="margin:0 8px;font-size:12px">
             ${(existing.variants || []).length} SKUs</span></h3>
-          <p class="admin-shop__hint">${t('adminProducts.variantHint')}</p>
           <div id="admin-variant-table-wrap"></div>
         </section>
 
@@ -793,7 +812,17 @@ export function openProductFormModal({ existing = null, onSaved = () => {}, pain
   `;
   document.body.appendChild(modal);
 
-  const close = () => modal.remove();
+  // The subcategory picks from the values already in use, still free text
+  // (Combobox; ice #194). Detached with the modal, like the variant grid, so
+  // no document listener outlives it.
+  const detachSubcat = subcategories
+    ? attachCombobox(modal.querySelector('input[name="subcategory"]'), () => subcategories())
+    : () => {};
+  const close = () => {
+    detachSubcat();
+    if (modal._variantGrid) modal._variantGrid.destroy();
+    modal.remove();
+  };
   modal.querySelector('.admin-shop__modal-close').addEventListener('click', close);
   modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
 
@@ -865,8 +894,10 @@ export function openProductFormModal({ existing = null, onSaved = () => {}, pain
     // Inventory codes — empty ⇒ null (clears the column; keeps the sku index sparse).
     body.sku     = String(fd.get('sku') || '').trim() || null;
     body.barcode = String(fd.get('barcode') || '').trim() || null;
-    // Collection membership (edit mode only) — checked ids replace the set.
-    if (isEdit) {
+    // Collection membership (edit mode only) — checked ids replace the set,
+    // and only once the list actually loaded (an empty set is otherwise a
+    // silent "remove from every collection").
+    if (isEdit && modal.dataset.collectionsLoaded === '1') {
       body.collection_ids = [...modal.querySelectorAll('#admin-product-collections input[data-coll-id]')]
         .filter(c => c.checked).map(c => c.dataset.collId);
     }
@@ -914,11 +945,20 @@ export function openProductFormModal({ existing = null, onSaved = () => {}, pain
       const wrap = modal.querySelector('#admin-product-collections');
       if (!wrap) return;
       let all = [];
+      // res.ok is checked (ice #194): a failed load used to render "no
+      // collections", and the next Save then sent collection_ids: [] and
+      // silently took the product out of every collection. Now the section
+      // says it failed and Save leaves membership alone (submit handler).
       try {
         const res  = await fetch('/api/v1/admin/shop/collections', { credentials: 'include' });
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || t('form.error'));
         all = data.collections || [];
-      } catch { /* offline — section just shows empty */ }
+        modal.dataset.collectionsLoaded = '1';
+      } catch (err) {
+        wrap.innerHTML = `<p class="admin-shop__error">${_esc(err.message)}</p>`;
+        return;
+      }
       const memberIds = new Set((existing.collections || []).map(c => c.id));
       const render = () => {
         wrap.innerHTML = all.length
@@ -961,7 +1001,7 @@ export function openProductFormModal({ existing = null, onSaved = () => {}, pain
     // (drag-and-drop, harvested from icelandicstore #240). Non-image files in a
     // drop are skipped and counted.
     const uploadFiles = async (picked) => {
-      const files = picked.filter(f => /^image\/(jpeg|png|webp)$/.test(f.type));
+      const files = picked.filter(f => PRODUCT_IMAGE_MIME.test(f.type));
       const skipped = picked.length - files.length;
       if (!files.length) {
         if (skipped) errorEl.textContent = t('adminProducts.dropSkipped', { n: skipped });
@@ -994,7 +1034,10 @@ export function openProductFormModal({ existing = null, onSaved = () => {}, pain
       }
 
       try {
-        const refreshed = await (await fetch(`/api/v1/admin/shop/products/${existing.id}`, { credentials: 'include' })).json();
+        // res.ok checked (ice #194): an error body has no `product`.
+        const res = await fetch(`/api/v1/admin/shop/products/${existing.id}`, { credentials: 'include' });
+        const refreshed = await res.json().catch(() => ({}));
+        if (!res.ok || !refreshed.product) throw new Error(refreshed.error || t('form.error'));
         existing.images = refreshed.product.images;
         if (paintImages) paintImages(modal, existing);
         await onSaved(refreshed.product);
@@ -1017,25 +1060,37 @@ export function openProductFormModal({ existing = null, onSaved = () => {}, pain
     const zone = modal.querySelector('.admin-shop__images');
     if (zone) {
       zone.classList.add('admin-shop__dropzone');
-      const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes('Files');
+      const hasFiles = dragHasFiles;
       const swallow = (e) => { e.preventDefault(); e.stopPropagation(); };
-      zone.addEventListener('dragenter', (e) => { if (!hasFiles(e)) return; swallow(e); zone.classList.add('is-dragover'); });
+      // Say yes or no while the file is still in the air (Ported from
+      // icelandicstore #193): a drag with no JPEG/PNG/WebP in it turns the
+      // outline --error and the cursor to no-drop. preventDefault still runs
+      // for a refused drag — without it the browser takes the drop itself and
+      // navigates to the file, losing the form. uploadFiles re-checks each
+      // file at the drop and stays the authority.
+      const mark = (e) => {
+        const ok = dragHasUsableFile(e.dataTransfer, PRODUCT_IMAGE_MIME);
+        zone.classList.toggle('is-dragover', ok);
+        zone.classList.toggle('is-dragreject', !ok);
+        e.dataTransfer.dropEffect = ok ? 'copy' : 'none';
+      };
+      const clear = () => zone.classList.remove('is-dragover', 'is-dragreject');
+      zone.addEventListener('dragenter', (e) => { if (!hasFiles(e)) return; swallow(e); mark(e); });
       zone.addEventListener('dragover', (e) => {
         if (!hasFiles(e)) return;
         swallow(e);
-        e.dataTransfer.dropEffect = 'copy';
-        zone.classList.add('is-dragover');
+        mark(e);
       });
       zone.addEventListener('dragleave', (e) => {
         // dragleave fires between the section's children too — only clear the
         // highlight once the pointer has actually left it.
         if (e.relatedTarget && zone.contains(e.relatedTarget)) return;
-        zone.classList.remove('is-dragover');
+        clear();
       });
       zone.addEventListener('drop', (e) => {
         if (!hasFiles(e)) return;
         swallow(e);
-        zone.classList.remove('is-dragover');
+        clear();
         uploadFiles(Array.from(e.dataTransfer.files || []));
       });
       // A file dropped elsewhere on the open modal must not make the browser

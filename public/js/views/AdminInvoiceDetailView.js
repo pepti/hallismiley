@@ -15,7 +15,8 @@ import {
   newIdempotencyKey,
 } from '../services/adminBookkeeping.js';
 import { escHtml } from '../utils/escHtml.js';
-import { t, href } from '../i18n/i18n.js';
+import { t, href, getLocale } from '../i18n/i18n.js';
+import { adminPageTitle } from '../utils/pageTitle.js';
 import { navigateReplace } from '../navigate.js';
 import { renderAdminShell } from '../components/AdminSidebar.js';
 import { showToast } from '../components/Toast.js';
@@ -57,6 +58,13 @@ export class AdminInvoiceDetailView {
       const data = await fetchInvoice(this._id);
       if (generation !== this._generation) return;
       this._invoice = data.invoice;
+      // The tab names the invoice (Ported from icelandicstore #324). render()
+      // does not await this load, so the router has usually titled the tab
+      // already; the generation check above says this view is still the live
+      // one, so set it directly as well.
+      this.documentTitle = adminPageTitle(t(data.invoice.series === 'receipt' ? 'adminBooks.receiptNo' : 'adminBooks.invoiceNo',
+        { number: data.invoice.invoice_number }), getLocale());
+      document.title = this.documentTitle;
       this._history = data.history || [];
       // Whether the document can be emitted as Peppol BIS 3.0, and why not.
       this._peppol = data.peppol || null;

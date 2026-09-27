@@ -60,6 +60,67 @@ describe('staff audit hooks', () => {
     expect(await rows('user.enabled')).toHaveLength(1);
   });
 
+  // harvest2 lane 1b (2026-09-26): the gaps found reviewing icelandicstore
+  // #416/#421 — the Users-page role dropdown, role create/delete and the hard
+  // delete wrote nothing, and the 2FA reset / new-password rows were refused by
+  // the closed vocabulary (recordSafe swallowed it).
+  test('the Users-page role dropdown writes role.granted + role.revoked (via users_page)', async () => {
+    const res = await request(app).patch(`/api/v1/admin/users/${userId}/role`).set('Cookie', adminCookie).send({ role: 'auditrole' });
+    expect(res.status).toBe(200);
+    const granted = await rows('role.granted');
+    expect(granted).toHaveLength(1);
+    expect(granted[0]).toMatchObject({ entity_type: 'user', entity_id: userId, actor_id: adminId, summary: { role: 'auditrole', via: 'users_page' } });
+    const revoked = await rows('role.revoked');
+    expect(revoked).toHaveLength(1);
+    expect(revoked[0]).toMatchObject({ entity_id: userId, summary: { role: 'user', via: 'users_page' } });
+
+    // Setting the role it already holds grants and revokes nothing.
+    expect((await request(app).patch(`/api/v1/admin/users/${userId}/role`).set('Cookie', adminCookie).send({ role: 'auditrole' })).status).toBe(200);
+    expect(await rows('role.granted')).toHaveLength(1);
+    expect(await rows('role.revoked')).toHaveLength(1);
+
+    // A refused change (your own role) leaves no row.
+    expect((await request(app).patch(`/api/v1/admin/users/${adminId}/role`).set('Cookie', adminCookie).send({ role: 'user' })).status).toBe(400);
+    expect(await rows('role.revoked')).toHaveLength(1);
+  });
+
+  test('role create and delete', async () => {
+    const create = await request(app).post('/api/v1/admin/roles').set('Cookie', adminCookie)
+      .send({ name: 'audit-new', description: 'x', view_access: ['handbok'] });
+    expect(create.status).toBe(201);
+    const created = await rows('role.created');
+    expect(created).toHaveLength(1);
+    expect(created[0]).toMatchObject({ entity_type: 'role', entity_id: 'audit-new', actor_id: adminId, summary: { views: ['handbok'] } });
+
+    const del = await request(app).delete('/api/v1/admin/roles/audit-new').set('Cookie', adminCookie);
+    expect(del.status).toBe(204);
+    const deleted = await rows('role.deleted');
+    expect(deleted).toHaveLength(1);
+    expect(deleted[0]).toMatchObject({ entity_type: 'role', entity_id: 'audit-new', actor_id: adminId, summary: { views: ['handbok'] } });
+
+    // A refused create (reserved name) writes nothing.
+    expect((await request(app).post('/api/v1/admin/roles').set('Cookie', adminCookie).send({ name: 'admin' })).status).toBe(409);
+    expect(await rows('role.created')).toHaveLength(1);
+  });
+
+  test('a hard user delete writes user.deleted, and the row outlives the user', async () => {
+    const del = await request(app).delete(`/api/v1/admin/users/${userId}`).set('Cookie', adminCookie);
+    expect(del.status).toBe(204);
+    const deleted = await rows('user.deleted');
+    expect(deleted).toHaveLength(1);
+    expect(deleted[0]).toMatchObject({ entity_type: 'user', entity_id: userId, actor_id: adminId });
+    expect(deleted[0].summary.username).toBeTruthy();
+    expect(deleted[0].summary).not.toHaveProperty('email');
+  });
+
+  test('2FA reset and a name-only new password now reach the trail', async () => {
+    const reset = await request(app).post(`/api/v1/admin/users/${userId}/totp/reset`).set('Cookie', adminCookie).send({});
+    expect(reset.status).toBe(200);
+    expect(await rows('user.totp_reset')).toHaveLength(1);
+    // The vocabulary is what used to refuse them.
+    expect(staffAudit.ACTIONS).toEqual(expect.arrayContaining(['user.totp_reset', 'user.password_replaced']));
+  });
+
   test('an unknown action is refused; a failed best-effort write does not throw', async () => {
     await expect(staffAudit.record(db, { action: 'nope', entityType: 'x' })).rejects.toThrow(/Unknown staff audit action/);
     await expect(staffAudit.recordSafe({ action: 'nope', entityType: 'x' })).resolves.toBeUndefined();

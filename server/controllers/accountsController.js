@@ -18,6 +18,8 @@ const { hasRole } = require('../auth/roles');
 const { toIsoDate } = require('../utils/booksDate');
 const { buyerPartyProblems, buyerOfAccount, invoiceableProblems } = require('../services/bookkeeping/peppol/party');
 const logger = require('../logger');
+const { passthroughTerms } = require('../services/bookkeeping/invoiceService');
+const { STANDARD_VAT_RATE } = require('../utils/vat');
 
 // Commission rates decide what the company pays the account's owner, so only an
 // admin may set them — a seller editing their own account must not be able to
@@ -120,7 +122,17 @@ const accountsController = {
       if (!id) return res.status(400).json({ error: t(req.locale, 'errors.accounts.invalidId'), code: 400 });
       const account = await CustomerAccount.findById(req.accountScope, id);
       if (!account) return res.status(404).json({ error: t(req.locale, 'errors.accounts.notFound'), code: 404 });
-      return res.json({ account: _withReadiness(account), transitions: CustomerAccount.TRANSITIONS[account.status] || [] });
+      const body = { account: _withReadiness(account), transitions: CustomerAccount.TRANSITIONS[account.status] || [] };
+      // The pass-through terms (D-022, billing.passthrough in the product
+      // config) for the admin's invoice form, whose live preview applies them.
+      // Admin only, like the form itself: issuing is hard admin.
+      if (hasRole(req.user, 'admin')) {
+        const terms = passthroughTerms();
+        body.passthrough_terms = {
+          markup_bp: terms.markupBp, ai_allowance_isk: terms.aiAllowanceIsk, vat_rate: STANDARD_VAT_RATE,
+        };
+      }
+      return res.json(body);
     } catch (err) { next(err); }
   },
 

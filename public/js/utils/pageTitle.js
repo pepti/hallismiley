@@ -138,5 +138,19 @@ export function titleForRoute(pattern, locale) {
   return site;
 }
 
+/**
+ * The title an admin detail view owns (`view.documentTitle`): its own subject
+ * first, so a narrow tab still tells two admin tabs apart, then the shared
+ * "Admin — site" title every other /admin route carries. Ported from
+ * icelandicstore #324 (8e977ae).
+ * @param {string} label  already-translated subject, e.g. "Order OS-1042"
+ * @param {string} locale 'en' | 'is'
+ * @returns {string}
+ */
+export function adminPageTitle(label, locale) {
+  const base = titleForRoute('/admin', locale);
+  return label ? `${label} — ${base}` : base;
+}
+
 // Exported for the parity test, which walks these against the server's tables.
 export const __tables = { PUBLIC_TITLES, TITLE_MODE, INHERITS, SECTIONS, ADMIN };

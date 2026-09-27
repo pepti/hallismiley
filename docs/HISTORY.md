@@ -1,11 +1,20 @@
 # History — hallismiley.is (the base until 2026-09-22, an engine downstream since)
 
+> **FROZEN 2026-09-26 — do not append here.** This file is the archive of every
+> write-up up to 2026-09-26. New entries are one file per branch in
+> [`history.d/`](history.d/README.md): every chunk appended to the tail of this
+> file and its index, so parallel sessions kept conflicting on every merge
+> ([harvest2-lane0](history.d/2026-09-26-harvest2-lane0-history.md#harvest2-lane0-2026-09-26),
+> ported from icelandicstore #355). The index below covers this archive only;
+> its anchors stay valid link targets, and no fragment may reuse one.
+> "How this file was used" below describes the practice up to the freeze.
+
 The dated write-up of every programme that has landed on this repo, moved out
 of `CLAUDE.md` on 2026-09-17 **unchanged in wording** (only a date prefix and an
 anchor were added to each heading). This is where the *why* lives: the
 reasoning behind the rules that `docs/ARCHITECTURE.md` lists per domain.
 
-**How to use this file.** Append-only. When a chunk lands: its write-up goes
+**How this file was used (until 2026-09-26).** Append-only. When a chunk landed: its write-up goes
 here (a new `## YYYY-MM-DD — title` section with an `<a id>` anchor, plus a row
 in the index below); the rules it establishes go into the domain's "Rules that
 must hold" block in `docs/ARCHITECTURE.md`, each linking back here; its open
@@ -83,6 +92,8 @@ link to them. "This repo" inside an engine entry means orangesmiley.
 | 2026-09-24 | [Ice harvest, chunk C — inventory and the shop floor (lane 2)](#harvest-ice-c-2026-09-24) | On hand / Committed / Available with ONE audited writer (`models/Inventory.js`, migration 112 `inventory_adjustments` + `orders.stock_deducted_at`); committed = paid, unshipped; stock moves at fulfilment, never below zero; the webhook re-checks Available and refunds an oversell; lock order + 40P01 → 409 BUSY; the sold-out basket guard (ENH #25); the search box that dropped letters; bulk product edit; the till scanner (ENH #22); MCP catalogue tools behind `mcp.write.*` switches, all off |
 | 2026-09-24 | [Ice harvest, chunk D — import, export, uploads (lane 2)](#harvest-ice-d-2026-09-24) | One server-side reader for every product file (CSV, .xlsx, PDF; `POST /products/import/parse-file`, `services/productImport`); barcode as the fallback match key (migration 113 `product_variants.barcode`), ambiguous/duplicate refused, order quantities never stock; rows with a Variant cell create one Draft product with its variants, whole or not at all; the orders list as a real .xlsx; product images normalised on upload + lazy `.thumb.webp` (Buffer writes, no mozjpeg); `exceljs` / `pdf-parse` pinned, `sharp` a runtime dependency |
 | 2026-09-24 | [Engine sync 4 — the icelandicstore harvest (D-021)](#engine-sync-4-2026-09-24) | hallismiley: up to engine `702af0f` (53 commits: ice chunks A–F, 2FA reminder, R4 module switches, MCP OAuth, signup module); `Aron13View` into the lazy `VIEWS` table; its stylesheet resolved next to the stamped `main.css`; `deploy.yml` checks `X-App-Build` on `/ready` after the restart; migrations 109–113 run; the public shop reads Available |
+| 2026-09-25 | [The legal pages name the site they are on; the images are the company's own](#legal-pages-site-host-2026-09-25) | `/terms` and `/personuvernd` took "orangesmiley.is" as a literal, so rekstrarkerfi.is would have said it was orangesmiley.is; the host now comes from the canonical origin (APP_URL) via `utils/identity.js` `siteHost()`; the terms credit the landscape images to Orange Smiley ehf. (iceland-v2), not to licensed photographers; both dated 25. september 2026; copy approved by Halli |
+| 2026-09-26 | [/hafa-samband speaks for the company; no named software](#contact-page-company-2026-09-26) | Halli: the "Undir húddinu" tech-stack section (Rekstrarkerfið's stack) left the company site; hero subtitle and the "What we take on" cards redrafted for the whole offering by Efnishöfundur with no Shopify/Wix/WordPress; the platform select offers categories (`webstore`, `website`, `accounting`, `custom`, `spreadsheets`; old values still accepted); the status chip is translated; /thjonusta's migration card drops the names too; product migration `os_002_contact_content_offering`; copy DRAFT |
 
 ---
 
@@ -3846,3 +3857,78 @@ module, the `/ready` + SSR hardening, and the signed-out `/admin` staff door.
 **Hooks on engine files after this sync:** the `/aron13ara` entry in
 `router.js`'s `VIEWS` table and route list, and the six-theme hues in
 `public/css/themes.css`.
+<a id="legal-pages-site-host-2026-09-25"></a>
+## 2026-09-25 — The legal pages name the site they are on; the images are the company's own
+
+Halli asked whether rekstrarkerfi.is/is/terms was up to date. It was not, in
+two ways:
+- **The live page was the old portfolio text** ("By accessing hallismiley.is",
+  "a personal portfolio showcasing the carpentry…"). rekstrarkerfid's last
+  deploy (22 Sept) predates the engine sync that brought the 2026-09-01
+  rewrite, so the next rk deploy replaces it anyway.
+- **The rewrite was written for this site only.** Section 1 of the terms, and
+  of the privacy policy, named the site as the literal "orangesmiley.is".
+  rekstrarkerfi.is takes both views from the engine, so it would have said it
+  was orangesmiley.is. And section 3 of the terms still said the landscape
+  photographs were published "under their authors' licences"; since
+  iceland-v2 (2026-09-22) they are Halli's own generations, credited to
+  Orange Smiley ehf.
+
+**What changed:**
+- `public/js/utils/identity.js` gains `siteHost()`: the host of the
+  canonical link ssrMeta bakes from APP_URL, without "www." (the same origin
+  the server's `{siteHost}` email parameter uses), with the address bar as
+  the fallback. Both legal views write `{siteHost}` in their copy and fill it
+  at render.
+- The terms' image sentence (DRÖG, approved by Halli 2026-09-25):
+  "Landslagsmyndirnar á vefnum eru gerðar af Orange Smiley ehf.; nánar í
+  myndaskránni." (EN: "The landscape images on this site are made by Orange
+  Smiley ehf.; details in the image credits.")
+- Both pages are dated 25. september 2026.
+- `e2e/legal-pages.spec.js` (new, 5): each legal page, in both locales,
+  names the canonical host; the terms credit the images to the company.
+
+Everything else in both pages was checked against both sites and still holds
+(company identity, prices indicative + a separate service agreement, the
+IP/contact/disclaimer/liability sections, Icelandic law, Héraðsdómur
+Reykjaness). No migration.
+
+<a id="contact-page-company-2026-09-26"></a>
+## 2026-09-26 — /hafa-samband speaks for the company; no named software
+
+Halli: the contact page was outdated. Its "Undir húddinu — Hvernig
+Rekstrarkerfið er byggt" section listed the product's tech stack on the
+company site, and the page named the software a prospect would move off
+("Á leið af Shopify, Wix eða WordPress"). He does not want named products
+to replace on the site.
+
+**What changed:**
+- The built-with section is gone from `ContactView.js` (render, edit
+  collectors, prefill button) and `contact.css`; `contact.builtWithPrefill`
+  left both locale files. The `contact_built_with` rows stay in the
+  database, inert (nothing reads them; dropping them would buy nothing and
+  the old container reads them during a swap).
+- Efnishöfundur redrafted the hero subtitle and the three "Hvað við tökum að
+  okkur" cards for the whole company offering (custom systems and
+  integrations · websites, stores and migrations · larger projects, the last
+  one "limited"). No product is named. DRAFT until Halli approves.
+- The "Núverandi kerfi" select offers categories, not products:
+  `webstore`, `website`, `accounting`, `custom`, `spreadsheets`, `none`,
+  `other`. `KNOWN_PLATFORMS` keeps the old product values so older leads,
+  imports and API callers still map. No schema change (`current_platform` is
+  free text, 20 chars).
+- The availability status chip said "Open"/"Limited" in English on /is/;
+  it reads `contact.status.*` now, and the admin save maps the translated
+  label back to the key.
+- /thjonusta's migration card (`thjonusta.service.migration.desc`) dropped
+  "Shopify, Wix" in both locales under the same rule.
+- Product migration `os_002_contact_content_offering` writes the new subtitle
+  (jsonb_set, the hero's other fields kept) and cards into the seeded rows,
+  only where `updated_by IS NULL` (the 091/092 guard).
+  `tests/integration/contactContentOs002.test.js` pins the rewrite, the
+  edit guard, the re-run no-op, and that the ContactView defaults carry the
+  same copy with no product named.
+
+Left for Halli: `umOkkur.story3` ("flutti af Shopify", a fact about
+customer #1) and `'Shopify Migration'` in the Organization JSON-LD
+`knowsAbout` still name the platform.

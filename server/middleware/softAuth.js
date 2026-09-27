@@ -9,13 +9,16 @@
 // decisions (changeRequestGate reads it); users.role is only the denormalized
 // primary, and an admin granted through Admin → Roles never has it updated.
 const { lucia } = require('../auth/lucia');
+// validateSession = Lucia's + the time-limited-login rule (migration 114): an
+// expired user is simply anonymous here, and their sessions are deleted.
+const { validateSession } = require('../auth/accountExpiry');
 const { attachRoles } = require('../auth/middleware');
 
 async function softAuth(req, res, next) {
   try {
     const sessionId = lucia.readSessionCookie(req.headers.cookie ?? '');
     if (!sessionId) return next();
-    const { session, user } = await lucia.validateSession(sessionId);
+    const { session, user } = await validateSession(sessionId);
     if (session && user && !user.disabled) {
       req.user = user;
       req.session = session;

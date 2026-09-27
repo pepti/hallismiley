@@ -343,9 +343,9 @@ settle. One total answers neither question.
 ### Service invoices and the build deposit (migrations 099 – 101)
 
 `invoiceService.createServiceInvoice()` issues a company's own service documents against a
-`customer_accounts` row: the build halves (50 % / 50 %), the recurring month, overage. Two
-partial unique indexes (099) make a double issue a 409 rather than a second statutory
-document. The buyer party comes from the account (100); the invoice keeps the value **as
+`customer_accounts` row: the build halves (50 % / 50 %), the recurring month, overage, and
+(122) a month's **pass-through** costs. Three partial unique indexes (099, 122) make a double
+issue a 409 rather than a second statutory document. The buyer party comes from the account (100); the invoice keeps the value **as
 at issue**.
 
 The first build half is a **prepayment**, not revenue (101): it is credited to
@@ -355,6 +355,27 @@ entry that issuing the final half posts in the same transaction. VSK does **not*
 into reitur A in the period the deposit invoice is dated (l. nr. 50/1988 13. gr.). The
 standing invariant: **2150 never goes debit**; crediting a released deposit goes against
 the account it was recognised into.
+
+**Pass-through costs (D-022, migration 122).** Kind `passthrough` bills hosting beyond the
+tier's standard pattern at Azure cost + markup, and AI inside the customer's system above a
+monthly allowance at cost + markup. The staff member enters each cost line ex VSK (`hosting`
+or `ai`, a description, the cost in ISK); `computePassthrough` takes the allowance off the
+period's AI lines in order (never below zero; a fully covered line stays on the invoice at
+0 kr. so the customer sees it), applies the markup per line with `Math.round`, and each
+line's text names its cost basis ("kostnaður 3.500 kr., þar af 2.000 kr. innifalið + 15 %").
+VSK is 24 % on the net total, rounded once and shared across the lines by largest remainder,
+so the invoice's VSK equals EN 16931's per-rate figure exactly. The markup and the allowance
+are **product config** (`billing.passthrough.markupBp` / `aiAllowanceIsk` in
+`config/client.json`; the schema defaults are D-022's 1500 bp and 2.000 kr.). The net goes
+to `4110 Sala þjónustu 24%` like the contract month — we buy the capacity in our own name and
+resell it at a markup, so it is our own taxable turnover (`docs/ACCOUNTANT-QUESTIONS.md` §12
+asks the accountant to confirm, and whether it wants a separate revenue account). One per
+account per period (migration 122), because the allowance is monthly; unlike the recurring
+index, a **fully credited** one frees the period, so a corrected Azure bill is handled by a
+full credit note and a new invoice. **It never records commission**: the commission hook
+runs for `COMMISSIONABLE_KINDS` (build, recurring) only. Before this kind existed, the only
+way to bill a pass-through was a `recurring` invoice with the net overridden, which paid the
+seller 10 % of it — about 77 % of the markup. Never bill it that way.
 
 ### Commission (migrations 098 and 102)
 
@@ -408,8 +429,8 @@ Other notes:
 
 ```bash
 npm run migrate                          # apply schema changes
-npm run seed:books                       # demo data for a software business
-npm run seed:books -- --wipe             # ...replacing what is there
+npm run seed:books -- --allow-dev-db    # demo data for a software business (local dev DB)
+npm run seed:books -- --allow-dev-db --wipe  # ...replacing an earlier demo (refuses if real rows exist)
 npm run books:fx -- --date=2026-08-06 --rate=143.20
 npm run books:archive -- --out=./archive/2026
 npm run books:archive -- --verify-only --out=./archive/2026
@@ -419,8 +440,13 @@ npm run books:replay -- --all             # replay recorded periods, diff agains
 npm run books:replay -- --case=D:/customer1/2025-P6.json --db=postgresql://…/customer1_replay
 ```
 
+`seed:books` runs only against a local `_test` database or, with `--allow-dev-db`, the local
+dev database — never a `*_books`/ops/prod name or an Azure host (`server/scripts/targetGuard.js`).
+Its `--wipe` deletes only the rows the seed created and refuses, deleting nothing, when the
+books hold anything else.
+
 `books:replay` drops and recreates its target schema, so it refuses any database whose
-name does not end in `_replay` (`createdb orangesmiley_replay` once). Cases live in
+name does not end in `_replay`, or that is not on a local host (`createdb orangesmiley_replay` once). Cases live in
 `server/fixtures/books-replay/` (this company's own) or outside the repo (a customer's);
 the format and the reason the D-split is diffed are in `server/services/bookkeeping/replayCase.js`.
 
@@ -432,7 +458,7 @@ npx jest tests/integration/booksReports.test.js     # one suite, still on its ow
 ```
 
 Since 2026-09-02 the test databases are derived per branch and per Jest worker
-(`tests/workerDb.js`: `orangesmiley_<branch>_w<N>_test`, migrated from one template), so
+(`tests/workerDb.js`: `<product>_<branch>_w<N>_test`, migrated from one template), so
 two worktrees never share one and `TEST_DATABASE_URL` is only needed to pin a fixed name —
 see `docs/TESTING.md`. The old advice here (a hand-named `hallismiley_books_test` and
 `--runInBand`) predates that.

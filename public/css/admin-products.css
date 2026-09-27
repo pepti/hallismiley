@@ -106,3 +106,97 @@
 .prod-import__create { display: flex; align-items: center; gap: var(--sp-2); margin: var(--sp-3) 0 0; font-size: 0.9rem; color: var(--text-secondary); }
 .prod-import__errors { margin: var(--sp-2) 0; padding-left: var(--sp-4); font-size: 0.85rem; color: var(--text-secondary); }
 .prod-import__errors li { margin: 2px 0; }
+
+/* The product-image drop zone refuses a file type while it is still being
+   dragged (AdminProductsView, ported from icelandicstore #193): the dashed
+   outline shop.css draws for .is-dragover turns --error, and the cursor shows
+   no-drop (dropEffect 'none'). Loaded after shop.css, same specificity. */
+.admin-shop__dropzone.is-dragreject { outline-color: var(--error); background: var(--error-dim); }
+
+/* ── Variant grid (components/VariantGrid.js; ported from icelandicstore
+   #194/#381/#430 — harvest 2 lane 6c). Tokens only (invariant 15). ───────── */
+/* Edit mode carries an eleven-column grid: the wide card. */
+.admin-shop__modal-card--wide { width: min(1080px, 100%); }
+/* The grid scrolls inside its own box — never the page (375 px). */
+.vgrid__scroll { overflow-x: auto; max-width: 100%; position: relative; }
+.vgrid__scroll:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 2px; }
+.vgrid .admin-shop__var-input[data-f^="attr:"] { min-width: 12ch; }
+.vgrid .admin-shop__var-input[data-f="sku"]     { min-width: 16ch; }
+.vgrid .admin-shop__var-input[data-f="barcode"] { min-width: 15ch; }
+.vgrid .admin-shop__var-input[data-f="price_isk"],
+.vgrid .admin-shop__var-input[data-f="price_eur"] { min-width: 10ch; }
+.vgrid .admin-shop__var-input[data-f="stock"],
+.vgrid .admin-shop__var-input[data-f="bin"]     { min-width: 8ch; }
+.vgrid input[type="checkbox"]:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: -2px; }
+.admin-shop__var-input:disabled { opacity: 0.5; cursor: not-allowed; }
+/* Per-row save state, narrow so it never pushes the inputs around. */
+.admin-shop__var-status {
+  font-size: 12px; color: var(--text-secondary); white-space: nowrap;
+  max-width: 22ch; overflow: hidden; text-overflow: ellipsis;
+}
+.admin-shop__var-del {
+  background: none; border: 0; color: var(--text-secondary); cursor: pointer;
+  font-size: 15px; line-height: 1; padding: 5px 8px;
+}
+.admin-shop__var-del:hover,
+.admin-shop__var-del:focus-visible { color: var(--error); }
+/* Archived = deleted but still named by an order or the stock history. */
+.admin-shop__var-row--archived { opacity: 0.55; }
+.vgrid__acts { display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-4); margin-top: var(--sp-2); }
+
+/* Clickable column headers (utils/variantSort.js, ice #381): the arrow — not
+   colour alone — carries the direction; the ❶ ❷ badge the click order once
+   two or more columns are active. `thead` outranks the table's own th rule. */
+thead th.vsort-th { padding: 0; white-space: nowrap; }
+thead th.vsort-th--sorted { color: var(--text-primary); background: var(--bg-hover); }
+.vsort-th__btn {
+  display: inline-flex; align-items: center; width: 100%;
+  padding: 6px 8px; border: 0; background: none; color: inherit;
+  font: inherit; letter-spacing: inherit; text-transform: inherit;
+  text-align: inherit; cursor: pointer; user-select: none;
+}
+.vsort-th__btn:hover { color: var(--text-primary); background: var(--bg-hover); }
+.vsort-th__btn:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: -2px; }
+.vsort-th__order {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 15px; height: 15px; margin-left: 5px; padding: 0 3px; border-radius: 8px;
+  background: var(--text-primary); color: var(--bg-surface);
+  font-size: 9px; font-weight: 700; line-height: 1;
+}
+.vsort-th__arrow { margin-left: 3px; font-size: 0.72em; }
+
+/* "+ Add a colour" panel and the option-name setter (ice #430). */
+.vgrid-av {
+  margin-top: var(--sp-3); padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: var(--bg-elevated); color: var(--text-primary);
+}
+.vgrid-av__title { margin: 0 0 4px; font-size: 1rem; color: var(--text-primary); }
+.vgrid-av__fields, .vgrid-axes { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--sp-3); margin: var(--sp-2) 0; }
+.vgrid-av__field { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; color: var(--text-secondary); }
+.vgrid-av__field input, .vgrid-av__field select, .vgrid-av__field textarea {
+  font: inherit; color: var(--text-primary); background: var(--bg-surface);
+  border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px 8px;
+}
+.vgrid-av__field input { min-width: 220px; }
+.vgrid-av__paste { width: 100%; }
+.vgrid-av__paste textarea { width: 100%; box-sizing: border-box; font-family: var(--font-mono); }
+.vgrid-av__err { margin: 6px 0; color: var(--error); font-size: 0.85rem; }
+.vgrid-av__err:empty { display: none; }
+.vgrid-av__acts { display: flex; gap: var(--sp-2); justify-content: flex-end; margin-top: var(--sp-2); }
+@media (max-width: 480px) {
+  .vgrid-av__field input { min-width: 0; width: 100%; }
+  .vgrid-av__fields, .vgrid-axes { flex-direction: column; align-items: stretch; }
+}
+
+/* The per-photo colour (ice #182/#270): which variant colour a photo shows. */
+.admin-shop__image-item { display: flex; flex-direction: column; }
+.admin-shop__image-item img { flex: 1; min-height: 0; }
+.admin-shop__image-color {
+  width: 100%; border: 0; border-top: 1px solid var(--border);
+  background: var(--bg-surface); color: var(--text-primary);
+  font: inherit; font-size: 11px; padding: 3px 4px;
+}
+/* With a colour select along the bottom, the delete button moves to the top
+   corner so the two never overlap. */
+.admin-shop__image-item:has(.admin-shop__image-color) .admin-shop__image-del { bottom: auto; top: 4px; }

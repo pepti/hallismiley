@@ -611,3 +611,52 @@
 .hscroll-sticky__track { height: 1px; }
 .admin-table-wrap.has-sticky-hscroll { scrollbar-width: none; }
 .admin-table-wrap.has-sticky-hscroll::-webkit-scrollbar { display: none; }
+/* While it overflows the wrap is a focusable region (stickyHScroll.js, the
+   pattern of ice #279), so arrow keys scroll it; show where focus is. */
+.admin-table-wrap[tabindex]:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
+
+/* A list opened pre-filtered from "Í dag" (?status=pending; harvest 2
+   lane 5) says so in a chip, with a way back to the whole list. */
+.filter-chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 3px 4px 3px 10px;
+  font-size: 13px; border-radius: 999px; white-space: nowrap;
+  background: var(--bg-hover); color: var(--text-primary); border: 1px solid var(--border);
+}
+.filter-chip__clear {
+  inline-size: 24px; block-size: 24px; border-radius: 50%; border: 0; cursor: pointer;
+  background: transparent; color: var(--text-secondary); font-size: 16px; line-height: 1;
+}
+.filter-chip__clear:hover, .filter-chip__clear:focus-visible { background: var(--bg-surface); color: var(--text-primary); }
+
+/* ── Phone width: nothing in an admin page scrolls the PAGE sideways ────────
+   The role × route harness (e2e/roles, harvest 2 lane 9, 2026-09-26) opened
+   every admin route at 375px and found eight that scrolled sideways, mostly
+   for two reasons shared by many screens. Same fix as the roles page's title
+   row (fix-roles-phone-overflow-2026-09-26), made general:
+     • a title row or toolbar that never wrapped — its buttons and search box
+       pushed past the edge (accounts, projects, customers, orders, ledger;
+       the till's scan field widened its one-column grid);
+     • a data table wider than the phone with no scroll box of its own (VAT,
+       books settings, projects, customers). Such a table scrolls INSIDE
+       itself here; a table already in an .admin-table-wrap is untouched, and
+       wider screens are unchanged. */
+@media (max-width: 640px) {
+  .admin-shell .admin-header,
+  .admin-shell .admin-shop__header,
+  .admin-shell .admin-header__actions,
+  .admin-shell .admin-shop__header-actions,
+  .admin-shell .admin-shop__header-controls,
+  .admin-shell .books-actions { flex-wrap: wrap; gap: var(--sp-3); }
+  .admin-shell .admin-header { align-items: flex-start; }
+  .admin-shell .admin-header > *,
+  .admin-shell .admin-shop__header > *,
+  .admin-shell .books-pos > *,
+  .admin-shell .scan-box { min-width: 0; }
+  /* The till's one column: `1fr` alone lets the scan field's min-content
+     widen the whole grid past the phone. */
+  .admin-shell .books-pos { grid-template-columns: minmax(0, 1fr); }
+  .admin-shell .admin-shop__search { min-width: 0; flex: 1 1 12rem; }
+  .admin-shell .pos-scan .scan-box { flex-basis: 100%; }
+  .admin-shell table.admin-table:not(.admin-table-wrap *),
+  .admin-shell table.admin-shop__table:not(.admin-table-wrap *) { display: block; max-width: 100%; overflow-x: auto; }
+}

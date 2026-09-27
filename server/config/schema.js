@@ -5559,6 +5559,510 @@ END; $$ LANGUAGE plpgsql`,
          ON product_variants (barcode) WHERE barcode IS NOT NULL`,
     ],
   },
+  {
+    // Time-limited logins (login-expiry-2026-09-26, roadmap R2b, D-020): on
+    // the demo instance a seller makes a login for a prospect after a guided
+    // demo, and it must stop working after N days. NULL = never expires, so
+    // every existing account keeps working unchanged.
+    //
+    // No index: the column is only ever read off a row already fetched by
+    // primary key (Lucia's session join, the sign-in lookups), never searched.
+    //
+    // Additive (invariant 14): the previous release neither reads nor writes
+    // the column, and its user SELECTs that use `users.*` just carry one more
+    // attribute it ignores. NOTE: rolling back to the previous image re-opens
+    // expired logins for the length of the rollback — the old code ignores
+    // the column (the values stay, and apply again on roll-forward). Rollback
+    // of the schema: ALTER TABLE users DROP COLUMN expires_at once no release
+    // reads it.
+    // Reference copy: server/migrations/114_user_expires_at.sql
+    name: '114_user_expires_at',
+    statements: [
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ`,
+    ],
+  },
+  {
+    // The customer's order note — the checkout "athugasemd" field (harvest 2
+    // lane 4b, 2026-09-26; ported from icelandicstore #213). Free text the
+    // buyer types at checkout, written once by shopController
+    // .createCheckoutSession through Order.createWithItems (trimmed, capped at
+    // 1000 characters there — Order.normaliseNote), read only by staff on the
+    // admin order page. It is NOT in Order's COLUMNS list, so the public
+    // by-session and "my orders" payloads never carry it. NULL = no note, as
+    // for every order before this.
+    //
+    // Harvested from icelandicstore, whose databases already hold
+    // `orders.notes TEXT` (same DDL, from its 072_order_notes_attachments,
+    // which also creates order_attachments): IF NOT EXISTS makes this a no-op
+    // there, so ice needs no `aliases` entry for it (docs/MIGRATIONS.md — its
+    // migration did more than this one).
+    // No length CHECK: the cap is the writer's, and ice's column carries
+    // longer machine-written markers (its Invoice Merger) a CHECK would refuse.
+    //
+    // Additive (invariant 14): the previous release neither reads nor writes
+    // the column (its INSERT names its columns, its SELECTs use COLUMNS or
+    // o.* for staff only). Rollback of the schema: ALTER TABLE orders DROP
+    // COLUMN notes once no release reads it.
+    // Reference copy: server/migrations/115_order_notes.sql
+    name: '115_order_notes',
+    statements: [
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS notes TEXT`,
+    ],
+  },
+  {
+    // A display name for admin roles (harvest 2 lane 3, 2026-09-26; the pattern
+    // is icelandicstore #421's company_roles.label — ice 134_company_role_label
+    // is on company_roles, a different table, so it is NOT an alias of this).
+    // The slug in `name` stays the primary key and the FK target of users.role
+    // and user_roles.role_name, and is never renamed; `label` is what people
+    // read ("Bókari"), typed freely with Icelandic letters, from which the
+    // server derives the slug of a new role (server/utils/roleName.js).
+    //
+    // Unique ignoring case among the roles that have one, so the permissions
+    // grid can never show two columns with the same heading.
+    //
+    // Backfill (only WHERE label = ''): the text before " — " in the role's
+    // description when there is one of 2–30 characters (the seeded
+    // "Sölufólk — aðgangur að …" → "Sölufólk"), else the name title-cased
+    // ("admin" → "Admin"). Derived from each database's own rows, so no product
+    // copy is written here (invariant 4); a candidate another role already
+    // holds is skipped and that role keeps '' (the UI falls back to the slug).
+    // The built-in admin/moderator/user are named by i18n on screen anyway.
+    //
+    // Expand-only (invariant 14): the release still serving during a swap
+    // selects an explicit column list without `label` and inserts rows that
+    // take the '' default, which the partial index ignores. A constant default
+    // is metadata-only, no table rewrite. Rollback: DROP INDEX
+    // roles_label_lower_uniq; ALTER TABLE roles DROP COLUMN label — once no
+    // release reads it.
+    // Reference copy: server/migrations/116_role_label.sql
+    name: '116_role_label',
+    statements: [
+      `ALTER TABLE roles ADD COLUMN IF NOT EXISTS label TEXT NOT NULL DEFAULT ''`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS roles_label_lower_uniq
+         ON roles (lower(label)) WHERE label <> ''`,
+      `DO $$
+       DECLARE r RECORD; cand TEXT;
+       BEGIN
+         FOR r IN SELECT name, description FROM roles WHERE label = '' ORDER BY is_system DESC, name LOOP
+           cand := '';
+           IF position(' — ' IN r.description) > 0 THEN
+             cand := btrim(split_part(r.description, ' — ', 1));
+           END IF;
+           IF char_length(cand) < 2 OR char_length(cand) > 30 THEN
+             cand := left(initcap(btrim(regexp_replace(r.name, '[_-]+', ' ', 'g'))), 30);
+           END IF;
+           IF char_length(cand) >= 2
+              AND NOT EXISTS (SELECT 1 FROM roles WHERE lower(label) = lower(cand)) THEN
+             UPDATE roles SET label = cand WHERE name = r.name AND label = '';
+           END IF;
+         END LOOP;
+       END $$`,
+    ],
+  },
+  {
+    // A customer's own postal address (harvest 2 lane 3, 2026-09-26; ported
+    // from icelandicstore #336, where it is `114_user_address`). The admin
+    // Customers screen edits one customer's contact details in place
+    // (PATCH /api/v1/admin/customers/:id); until now there was nowhere to keep
+    // an address for a person. Column names and types are ice's EXACTLY, so an
+    // icelandicstore database that already applied its 114_user_address is
+    // aliased onto this entry (product-migrations/ice.js) instead of re-running.
+    // All nullable, IF NOT EXISTS; nothing on the previous release reads them.
+    // Expand-only (invariant 14). Rollback: DROP the five columns once no
+    // release reads them.
+    // Reference copy: server/migrations/117_user_address.sql
+    name: '117_user_address',
+    statements: [
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS address1 TEXT`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS address2 TEXT`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS city     TEXT`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS zip      TEXT`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS country  TEXT`,
+    ],
+  },
+  {
+    // Goods receiving + the batch handle on stock movements
+    // (harvest2-lane6a-2026-09-26; ported from icelandicstore #23, ice's
+    // 080_goods_receipts). A supplier delivery is a RECEIPT: the lines the
+    // supplier's file says are coming, a scan log of what physically arrived,
+    // and — at finalise — ONE audited stock batch (Inventory.applyBatch,
+    // reason 'receipt') in the same transaction that marks it finalized.
+    //
+    //   goods_receipts       one delivery; draft → finalized | cancelled.
+    //   goods_receipt_lines  the expected rows (supplier text, OUR code as the
+    //                        file had it, expected qty, optional unit cost),
+    //                        matched to a product/variant by SKU then barcode;
+    //                        received_qty is re-derived from the scans.
+    //   goods_receipt_scans  append-only scan log; a scan with no line is
+    //                        "not on the invoice".
+    //   inventory_adjustments.batch_id / goods_receipt_id — every row of one
+    //                        applyBatch call shares a batch_id (a stock count
+    //                        is one batch), and a receipt's rows name it.
+    //
+    // Column names mirror ice's 080 so ice's databases already hold the three
+    // tables: there every CREATE is a no-op (IF NOT EXISTS) and only the
+    // engine's own columns are added (goods_receipt_lines.sku and the two
+    // inventory_adjustments columns). No alias, for that reason: ice's 080 did
+    // MORE than this entry (suppliers, eta/etd, confidence, variance_status and
+    // a wider status CHECK), so this one runs there and adds what 080 lacks.
+    // NOT taken from ice: the suppliers table (the engine keeps supplier text
+    // on the receipt), the fuzzy description matcher and the intermediate
+    // matched/receiving/reconciling/finalizing states — the engine finalises in
+    // one transaction under the receipt's row lock, so it needs no claim state.
+    //
+    // Additive (invariant 14): new tables, and two nullable columns the
+    // previous release neither reads nor writes (its INSERT names its columns).
+    // lock_timeout keeps a busy inventory_adjustments from stalling a boot; the
+    // indexes are partial on columns that are NULL on every existing row.
+    // Reference copy: server/migrations/118_goods_receipts.sql
+    name: '118_goods_receipts',
+    statements: [
+      `SET LOCAL lock_timeout = '5s'`,
+      `CREATE TABLE IF NOT EXISTS goods_receipts (
+         id                   TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+         supplier_name        TEXT        NOT NULL,
+         reference            TEXT,
+         status               TEXT        NOT NULL DEFAULT 'draft'
+                                          CHECK (status IN ('draft', 'finalized', 'cancelled')),
+         currency             TEXT        NOT NULL DEFAULT 'ISK',
+         note                 TEXT,
+         created_by           TEXT        REFERENCES users(id) ON DELETE SET NULL,
+         finalized_by         TEXT        REFERENCES users(id) ON DELETE SET NULL,
+         finalized_at         TIMESTAMPTZ,
+         created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+         updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+       )`,
+      `CREATE INDEX IF NOT EXISTS idx_goods_receipts_created ON goods_receipts (created_at DESC)`,
+      `DROP TRIGGER IF EXISTS trg_goods_receipts_updated_at ON goods_receipts`,
+      `CREATE TRIGGER trg_goods_receipts_updated_at
+         BEFORE UPDATE ON goods_receipts
+         FOR EACH ROW EXECUTE FUNCTION set_updated_at()`,
+      `CREATE TABLE IF NOT EXISTS goods_receipt_lines (
+         id                   TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+         receipt_id           TEXT        NOT NULL REFERENCES goods_receipts(id) ON DELETE CASCADE,
+         supplier_description TEXT,
+         supplier_ref         TEXT,
+         barcode              TEXT,
+         expected_qty         INTEGER     NOT NULL DEFAULT 0,
+         received_qty         INTEGER     NOT NULL DEFAULT 0,
+         unit_cost            INTEGER,
+         product_id           TEXT        REFERENCES products(id) ON DELETE SET NULL,
+         variant_id           TEXT        REFERENCES product_variants(id) ON DELETE SET NULL,
+         match_status         TEXT        NOT NULL DEFAULT 'unmatched'
+                                          CHECK (match_status IN ('matched','unmatched','manual','skipped','new_product')),
+         sort_order           INTEGER     NOT NULL DEFAULT 0,
+         created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+       )`,
+      `ALTER TABLE goods_receipt_lines ADD COLUMN IF NOT EXISTS sku TEXT`,
+      `CREATE INDEX IF NOT EXISTS idx_goods_receipt_lines_receipt ON goods_receipt_lines (receipt_id, sort_order)`,
+      `CREATE INDEX IF NOT EXISTS idx_goods_receipt_lines_product ON goods_receipt_lines (product_id)`,
+      `CREATE TABLE IF NOT EXISTS goods_receipt_scans (
+         id              TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+         receipt_id      TEXT        NOT NULL REFERENCES goods_receipts(id) ON DELETE CASCADE,
+         receipt_line_id TEXT        REFERENCES goods_receipt_lines(id) ON DELETE SET NULL,
+         product_id      TEXT        REFERENCES products(id) ON DELETE SET NULL,
+         variant_id      TEXT        REFERENCES product_variants(id) ON DELETE SET NULL,
+         scanned_code    TEXT        NOT NULL,
+         qty             INTEGER     NOT NULL DEFAULT 1,
+         scanned_by      TEXT        REFERENCES users(id) ON DELETE SET NULL,
+         created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+       )`,
+      `CREATE INDEX IF NOT EXISTS idx_goods_receipt_scans_receipt ON goods_receipt_scans (receipt_id, created_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_goods_receipt_scans_line ON goods_receipt_scans (receipt_line_id) WHERE receipt_line_id IS NOT NULL`,
+      `ALTER TABLE inventory_adjustments ADD COLUMN IF NOT EXISTS batch_id TEXT`,
+      `ALTER TABLE inventory_adjustments ADD COLUMN IF NOT EXISTS goods_receipt_id TEXT REFERENCES goods_receipts(id) ON DELETE SET NULL`,
+      `CREATE INDEX IF NOT EXISTS idx_inventory_adjustments_batch
+         ON inventory_adjustments (batch_id) WHERE batch_id IS NOT NULL`,
+      `CREATE INDEX IF NOT EXISTS idx_inventory_adjustments_receipt
+         ON inventory_adjustments (goods_receipt_id) WHERE goods_receipt_id IS NOT NULL`,
+    ],
+  },
+  {
+    // Variants that work, and a colour per product photo (harvest 2 lane 6c,
+    // 2026-09-26; ported from icelandicstore #194 = ice 099_variant_archive
+    // and #182/#265 = ice 096_product_image_color). Numbered into the harvest
+    // order at the merge: after 118_goods_receipts, before 120_product_merge.
+    //
+    // 1. product_images.color — which variant colour a photo shows. The
+    //    storefront resolves variant colours against it server-side
+    //    (server/utils/colorMatch.js → `color_images` on the product payload)
+    //    and the product page swaps the photo when a colour is picked. NULL =
+    //    "not colour-specific" (a lifestyle shot), which is how every existing
+    //    photo reads. Ice has no index on it and neither do we: it is only ever
+    //    read with the product's own images.
+    //
+    // 2. product_variants.archived_at — "deleted, but an order still names it".
+    //    The admin variant grid used to "delete" by setting active = false,
+    //    which left the row holding the GLOBAL unique `sku` and its
+    //    (product_id, attributes) slot for ever: re-adding that size then 409'd
+    //    with no way out. A real delete now removes a variant nothing
+    //    references; one that is on an order (order_items ON DELETE RESTRICT)
+    //    or carries stock history (inventory_adjustments, ON DELETE CASCADE —
+    //    a delete would take the audit trail with it) is ARCHIVED instead:
+    //    archived_at set, active false, out of every list. Order history is
+    //    unaffected — order_items keeps its own variant_attributes snapshot.
+    //
+    // 3. The two unique rules become PARTIAL (WHERE archived_at IS NULL) so an
+    //    archived row stops reserving its SKU and its attribute combination.
+    //    Each partial index is CREATED before the old rule is DROPPED, so
+    //    there is no moment without uniqueness on live rows. The column-level
+    //    UNIQUE from 024 is found in pg_constraint rather than dropped by a
+    //    guessed name (product_variants_sku_key): an IF EXISTS on the wrong
+    //    name would no-op silently and leave the global rule in place (ice's
+    //    review finding on #194). `ON CONFLICT (product_id, attributes)` must
+    //    now name the predicate too — seed-shop.js does.
+    //
+    // Expand/contract (invariant 14): the previous release neither reads nor
+    // writes either column, and every SELECT it runs names its columns. Old
+    // code during the swap still soft-deletes (active = false), which the new
+    // indexes permit; it would LIST an archived row as an inactive variant
+    // until the swap completes — cosmetic, and only for a row archived in
+    // that window. Loosening a unique rule is not a contract: no release
+    // relies on a conflict the partial index no longer raises (archived rows
+    // exist only once this release writes them). A ROLLBACK to the previous
+    // image after this release has archived variants and re-used their SKUs
+    // is degraded, not broken: the old Product.resolveByCode (… LIMIT 1, no
+    // archive filter) can resolve a scanned code to the archived twin, and
+    // the old seed-shop.js (ON CONFLICT without the predicate) fails with
+    // 42P10 — a manual script. No minCompatibleVersion is needed. Rollback of the schema:
+    // DROP COLUMN product_images.color / product_variants.archived_at once no
+    // release reads them; restoring the global SKU rule would first need the
+    // duplicate SKUs of archived rows renamed.
+    //
+    // On icelandicstore every statement is a no-op (its databases hold 096 and
+    // 099 under their own names, same DDL, IF NOT EXISTS; the pg_constraint
+    // loop finds nothing left to drop), so ice needs no `aliases` entry.
+    // Reference copy: server/migrations/119_product_image_color.sql
+    name: '119_product_image_color',
+    statements: [
+      `ALTER TABLE product_images ADD COLUMN IF NOT EXISTS color TEXT`,
+      `ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS uniq_product_variants_sku_live
+         ON product_variants (sku) WHERE archived_at IS NULL`,
+      `DO $$
+         DECLARE c text;
+         BEGIN
+           FOR c IN
+             SELECT con.conname
+               FROM pg_constraint con
+               JOIN pg_attribute att
+                 ON att.attrelid = con.conrelid AND att.attnum = ANY (con.conkey)
+              WHERE con.conrelid = 'product_variants'::regclass
+                AND con.contype = 'u'
+                AND array_length(con.conkey, 1) = 1
+                AND att.attname = 'sku'
+           LOOP
+             EXECUTE format('ALTER TABLE product_variants DROP CONSTRAINT %I', c);
+           END LOOP;
+         END $$`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS uniq_product_variants_attrs_live
+         ON product_variants (product_id, attributes) WHERE archived_at IS NULL`,
+      `DROP INDEX IF EXISTS uniq_product_variants_attrs`,
+      `CREATE INDEX IF NOT EXISTS idx_product_variants_live
+         ON product_variants (product_id) WHERE archived_at IS NULL`,
+    ],
+  },
+  {
+    // Product merge (harvest 2 lane 6b, 2026-09-26; ported from icelandicstore
+    // #309/#311/#312/#315 — ice's 112_product_merges). A merged product is NOT
+    // deleted: it stays as an inactive row pointing at the product it was
+    // folded into (merged_into_id), so its URL can 301 and every history row
+    // that stays on it — inventory_adjustments, issued invoice lines, archived
+    // variants — keeps a parent. product_merges is the only record of what a
+    // merge moved; there is no un-merge (a wrong merge is a point-in-time
+    // restore, RUNBOOK).
+    //
+    // Names and DDL MIRROR ice's 112_product_merges statement for statement
+    // (the not-self CHECK in its guarded form, as ice edited it on 2026-09-14),
+    // so ice's product file aliases this entry to its 112 at graft time and
+    // every statement is a no-op there anyway (IF NOT EXISTS). Columns the
+    // engine's merge never fills (discard_qty / discard_value_isk — the engine
+    // always MOVES stock; added_axis / master_axis_value — no add-axis here)
+    // stay for that parity and hold their defaults.
+    //
+    // Additive (invariant 14): the previous release neither reads nor writes
+    // either object, and a NULL merged_into_id is exactly today's meaning.
+    // Rollback of the schema: DROP TABLE product_merges; ALTER TABLE products
+    // DROP COLUMN merged_into_id — once no release reads them.
+    // Reference copy: server/migrations/120_product_merge.sql
+    name: '120_product_merge',
+    statements: [
+      `SET LOCAL lock_timeout = '5s'`,
+      `ALTER TABLE products ADD COLUMN IF NOT EXISTS merged_into_id TEXT REFERENCES products(id) ON DELETE SET NULL`,
+      `DO $$ BEGIN
+         IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                         WHERE conname = 'products_merged_into_not_self'
+                           AND conrelid = 'products'::regclass) THEN
+           ALTER TABLE products ADD CONSTRAINT products_merged_into_not_self
+             CHECK (merged_into_id IS NULL OR merged_into_id <> id);
+         END IF;
+       END $$`,
+      `CREATE INDEX IF NOT EXISTS idx_products_merged_into ON products (merged_into_id) WHERE merged_into_id IS NOT NULL`,
+      `CREATE TABLE IF NOT EXISTS product_merges (
+        id                TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        master_id         TEXT        REFERENCES products(id) ON DELETE SET NULL,
+        merged_id         TEXT        REFERENCES products(id) ON DELETE SET NULL,
+        shape             TEXT        NOT NULL CHECK (shape IN ('variants', 'simple', 'add_axis')),
+        stock_mode        TEXT        NOT NULL CHECK (stock_mode IN ('move', 'discard')),
+        variant_map       JSONB       NOT NULL DEFAULT '[]'::jsonb,
+        added_axis        TEXT,
+        master_axis_value TEXT,
+        merged_name       TEXT        NOT NULL,
+        merged_slug       TEXT        NOT NULL,
+        merged_sku        TEXT,
+        merged_barcode    TEXT,
+        stock_moved       INTEGER     NOT NULL DEFAULT 0,
+        discard_qty       INTEGER     NOT NULL DEFAULT 0,
+        discard_value_isk INTEGER,
+        counts            JSONB       NOT NULL DEFAULT '{}'::jsonb,
+        warnings          JSONB       NOT NULL DEFAULT '[]'::jsonb,
+        lock_wait_ms      INTEGER,
+        ms                INTEGER,
+        merged_by         TEXT        REFERENCES users(id) ON DELETE SET NULL,
+        merged_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_product_merges_master ON product_merges (master_id, merged_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_product_merges_merged ON product_merges (merged_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_product_merges_sku ON product_merges (lower(merged_sku)) WHERE merged_sku IS NOT NULL`,
+    ],
+  },
+  {
+    // The order's VAT, snapshotted at checkout (harvest 2 lane 5, 2026-09-26;
+    // net sales on the sales report, ported in spirit from icelandicstore
+    // #414 — ice already stores orders.vat_total). Two nullable columns:
+    //   order_items.vat_rate — the rate the line was sold at (0 for exported
+    //     goods, a service keeps its rate), the SAME rule as the invoice;
+    //   orders.vat_total — the VAT inside orders.total, in the order's own
+    //     currency's minor units, so total − vat_total is net sales.
+    // Order.createWithItems fills both, in the checkout transaction, through
+    // the pure helper utils/orderVat.js that bookkeeping/invoiceService
+    // .buildLines also uses — so for an ISK order the snapshot IS what the
+    // invoice later books (tests/integration/orderVatSnapshot.test.js) —
+    // unless a product's rate changes between checkout and invoicing: the
+    // invoice still reads the CURRENT rate (owed, see the lane 5 fragment).
+    //
+    // Backfill (WHERE vat_total IS NULL): orders placed before this release
+    // get the VAT computed HERE, in SQL, from each product's CURRENT vat_rate
+    // (the only rate history there is), the discount spread over the lines and
+    // the shipping in proportion, shipping at 24 % unless the address is
+    // abroad. It is APPROXIMATE: a rate changed since the sale, and the
+    // króna-level largest-remainder allocation the invoice does, are not
+    // reproduced. Backfilled history is never booked from — the books read
+    // their own invoice lines.
+    //
+    // On icelandicstore (whose 087 already added orders.vat_total, filled by
+    // its own checkout) the backfill finds no NULL rows and is a no-op, and no
+    // `aliases` entry is needed: its migration did more than this one
+    // (docs/MIGRATIONS.md).
+    //
+    // Additive (invariant 14): the previous release neither reads nor writes
+    // either column. An order the OLD code writes during the swap keeps NULL,
+    // and the report falls back to the same approximation for a NULL
+    // (Order.salesReport). Rollback of the schema: DROP both columns once no
+    // release reads them.
+    // Reference copy: server/migrations/121_order_vat_snapshot.sql
+    name: '121_order_vat_snapshot',
+    statements: [
+      `ALTER TABLE order_items ADD COLUMN IF NOT EXISTS vat_rate SMALLINT
+         CHECK (vat_rate IS NULL OR vat_rate IN (0, 11, 24))`,
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS vat_total INTEGER`,
+      // 1. The line rates of the orders about to be backfilled.
+      `UPDATE order_items oi
+          SET vat_rate = CASE
+                WHEN UPPER(TRIM(COALESCE(NULLIF(o.shipping_address->>'country_code', ''),
+                                         NULLIF(o.shipping_address->>'country', ''), 'IS')))
+                     NOT IN ('IS', 'ISL', 'ICELAND', 'ÍSLAND')
+                 AND NOT COALESCE(p.is_bookable, FALSE) THEN 0
+                ELSE COALESCE(p.vat_rate, 24) END
+         FROM orders o, products p
+        WHERE o.id = oi.order_id AND p.id = oi.product_id
+          AND o.vat_total IS NULL AND oi.vat_rate IS NULL`,
+      // 2. The order's VAT: each line and the shipping after its proportional
+      //    share of the discount, VAT extracted per rate. Approximate (above).
+      `WITH base AS (
+         SELECT o.id, o.total::numeric AS total,
+                GREATEST(o.shipping - COALESCE(o.shipping_discount, 0), 0)::numeric AS ship,
+                UPPER(TRIM(COALESCE(NULLIF(o.shipping_address->>'country_code', ''),
+                                    NULLIF(o.shipping_address->>'country', ''), 'IS')))
+                  NOT IN ('IS', 'ISL', 'ICELAND', 'ÍSLAND') AS export,
+                COALESCE((SELECT SUM(oi.product_price_snapshot::numeric * oi.quantity)
+                            FROM order_items oi WHERE oi.order_id = o.id), 0) AS goods
+           FROM orders o
+          WHERE o.vat_total IS NULL
+       ), shares AS (
+         SELECT b.id, b.ship, b.export,
+                COALESCE(GREATEST(b.goods + b.ship - b.total, 0) / NULLIF(b.goods + b.ship, 0), 0) AS f
+           FROM base b
+       ), vat AS (
+         SELECT s.id,
+                COALESCE((SELECT SUM(ROUND(oi.product_price_snapshot::numeric * oi.quantity * (1 - s.f)
+                                           * oi.vat_rate / (100 + oi.vat_rate)))
+                            FROM order_items oi
+                           WHERE oi.order_id = s.id AND oi.vat_rate IS NOT NULL), 0)
+                + CASE WHEN s.export THEN 0 ELSE ROUND(s.ship * (1 - s.f) * 24 / 124) END AS vat
+           FROM shares s
+       )
+       UPDATE orders o SET vat_total = v.vat::int
+         FROM vat v
+        WHERE v.id = o.id AND o.vat_total IS NULL`,
+    ],
+  },
+  {
+    // ── 122: the pass-through service invoice (D-022, 2026-09-26) ─────────
+    // D-022 bills hosting beyond the tier's pattern at Azure cost + 15 % and
+    // AI above a 2.000 kr./mán allowance at cost + 15 %, with NO seller
+    // commission. Until now the only way to bill it was a `recurring` invoice
+    // with amount_net_isk overridden, which paid the seller 10 % of it (about
+    // 77 % of our markup). createServiceInvoice now has a fourth kind,
+    // `passthrough`; this entry gives it the same database guarantee the
+    // recurring month has (099): ONE per account per period, so the monthly
+    // AI allowance cannot be granted twice by two invoices for one month.
+    //
+    // Unlike 099's indexes this one frees the slot when the invoice is fully
+    // CREDITED as well as cancelled: a metered cost can be corrected (an
+    // Azure bill adjusted after the fact), and a full credit note plus a
+    // corrected invoice is how that is done without billing the month twice —
+    // the credited invoice nets to zero. A partial credit leaves the status
+    // 'issued', so the slot stays taken.
+    //
+    // The CHECK names the service_kind vocabulary for the first time (099 left
+    // it free text). NOT VALID on purpose: it does not scan existing rows, so a
+    // downstream holding some other value cannot fail its boot on this entry.
+    // It DOES bind every row written from now on, UPDATEs of old rows included:
+    // an old row with a value outside the list could no longer change status
+    // (a credit note). Only this engine and rekstrarkerfid write service_kind,
+    // both with exactly these values; check a new downstream with
+    // SELECT DISTINCT service_kind FROM invoices before it syncs 122. A later
+    // kind widens the list in the same release that starts writing the kind.
+    //
+    // Pure expand (invariant 14): the previous release writes only the four
+    // older values, never `passthrough`, so neither the index nor the CHECK
+    // can refuse anything it does. Rollback: DROP INDEX
+    // uniq_invoices_account_passthrough_period; ALTER TABLE invoices DROP
+    // CONSTRAINT invoices_service_kind_check.
+    // Reference copy: server/migrations/122_passthrough_invoice.sql
+    name: '122_passthrough_invoice',
+    statements: [
+      `SET LOCAL lock_timeout = '5s'`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS uniq_invoices_account_passthrough_period
+         ON invoices (account_id, service_period)
+         WHERE account_id IS NOT NULL
+           AND service_kind = 'passthrough'
+           AND service_period IS NOT NULL
+           AND status NOT IN ('cancelled', 'credited')`,
+      `DO $$ BEGIN
+         IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                         WHERE conname = 'invoices_service_kind_check'
+                           AND conrelid = 'invoices'::regclass) THEN
+           ALTER TABLE invoices ADD CONSTRAINT invoices_service_kind_check
+             CHECK (service_kind IS NULL OR service_kind IN
+               ('build_deposit', 'build_final', 'recurring', 'overage', 'passthrough'))
+             NOT VALID;
+         END IF;
+       END $$`,
+    ],
+  },
 ];
 
 module.exports = { migrations };

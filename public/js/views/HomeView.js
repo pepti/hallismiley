@@ -9,6 +9,7 @@ import { productSiteUrl } from '../utils/productSite.js';
 import { motionAllowed, onMotionChange } from '../utils/motion.js';
 import { getIdentity, publicNav, isHiddenRoute } from '../utils/identity.js';
 import { moduleEnabled } from '../utils/modules.js';
+import { formatDate } from '../utils/format.js';
 
 // The home hero clip and its still — the PRODUCT's, from identity.hero in
 // config/client.json (utils/identity.js; the engine default is Orange
@@ -592,7 +593,8 @@ export class HomeView {
     const catClass = cat => ['carpentry', 'tech', 'announcement'].includes(cat) ? cat : 'news';
     const fmtDate = iso => {
       if (!iso) return '';
-      return new Date(iso).toLocaleDateString('en-GB', {
+      // App-locale date (was toLocaleDateString('en-GB'); ice #324).
+      return formatDate(iso, {
         day: '2-digit', month: 'short', year: 'numeric',
       });
     };

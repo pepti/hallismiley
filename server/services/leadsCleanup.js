@@ -8,6 +8,8 @@
 
 const Lead = require('../models/Lead');
 const logger = require('../logger');
+// Aged-out enquiries must also leave the admin home's short answer cache.
+const { clearHomeCache } = require('./adminHomeCache');
 
 const INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 const RETENTION_DAYS = Number(process.env.LEAD_RETENTION_DAYS) || 730;
@@ -15,6 +17,7 @@ const RETENTION_DAYS = Number(process.env.LEAD_RETENTION_DAYS) || 730;
 async function pruneLeads() {
   try {
     const removed = await Lead.pruneOlderThan(RETENTION_DAYS);
+    if (removed) clearHomeCache();
     logger.info({ removed, retentionDays: RETENTION_DAYS }, 'leadsCleanup ran');
   } catch (err) {
     logger.error({ err: err.message }, 'leadsCleanup failed');

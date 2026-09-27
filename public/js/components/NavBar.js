@@ -6,6 +6,7 @@ import { CartIcon } from './CartIcon.js';
 import { moduleEnabled } from '../utils/modules.js';
 import { t, getLocale, switchLocale, href, SUPPORTED_LOCALES, forcedLocaleFor } from '../i18n/i18n.js';
 import { navigate } from '../navigate.js';
+import { closeMenus, installMenuCloser } from './navMenuCloser.js';
 
 const avatarPathByName = name => `/assets/avatars/${name || 'avatar-01.svg'}`;
 
@@ -28,7 +29,7 @@ export class NavBar {
   render() {
     const nav = document.createElement('nav');
     nav.className = 'lol-nav';
-    nav.setAttribute('aria-label', 'Main navigation');
+    nav.setAttribute('aria-label', t('nav.mainNavigation'));
     nav.innerHTML = this._navHtml();
 
     this._nav = nav;
@@ -63,6 +64,9 @@ export class NavBar {
     this._nav.querySelectorAll('[data-i18n-aria]').forEach(el => {
       el.setAttribute('aria-label', t(el.dataset.i18nAria));
     });
+    // querySelectorAll never returns the <nav> itself, so its own label is set
+    // here (ported from icelandicstore #399 — it was a hard-coded English literal).
+    this._nav.setAttribute('aria-label', t('nav.mainNavigation'));
     // Rebuild hrefs with new locale prefix
     this._nav.querySelectorAll('[data-route]').forEach(link => {
       if (link.tagName === 'A') link.href = navHref(link.dataset.route);
@@ -191,6 +195,12 @@ export class NavBar {
 
   _bindLangSwitcher(nav) {
     nav.querySelectorAll('.lol-nav__lang-opt').forEach(optBtn => {
+      // The buttons are built once, but this runs again on every authchange,
+      // userchange and locale update — without the mark the handlers stack and
+      // one click on IS fires updateProfile + switchLocale several times.
+      // Ported from icelandicstore #379 (navChrome.bindLangSwitcher).
+      if (optBtn.dataset.langBound) return;
+      optBtn.dataset.langBound = '1';
       optBtn.addEventListener('click', e => {
         e.stopPropagation();
         const newLocale = optBtn.dataset.locale;
@@ -293,15 +303,18 @@ export class NavBar {
       wrapper.appendChild(dropdown);
 
       userBtn.addEventListener('click', e => {
+        // This click never reaches the document closer, so close any OTHER
+        // open menu (top bar vs drawer) before toggling this one.
         e.stopPropagation();
+        closeMenus(dropdown);
         const open = dropdown.classList.toggle('open');
         userBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
       });
 
-      document.addEventListener('click', () => {
-        dropdown.classList.remove('open');
-        userBtn.setAttribute('aria-expanded', 'false');
-      });
+      // ONE document-level closer for every menu, installed on the first
+      // render (ported from icelandicstore #379) — a per-render listener
+      // piled up on each auth/user/locale change.
+      installMenuCloser();
 
       dropdown.querySelector('[data-signout]').addEventListener('click', async () => {
         await logout();

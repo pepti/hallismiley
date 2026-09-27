@@ -8,6 +8,7 @@ import { getCsrfHeaders }           from '../utils/api.js';
 import { getCSRFToken }             from '../services/auth.js';
 import { avatarPathByName }         from '../utils/avatar.js';
 import { t, href }                  from '../i18n/i18n.js';
+import { formatDate }               from '../utils/format.js';
 import { navigate }                 from '../navigate.js';
 // Shared DOMParser allowlist sanitizer (also used by AdminHandbookView).
 // This is client-side sanitisation — the server never renders article body
@@ -23,9 +24,10 @@ function _esc(str) {
     .replace(/"/g, '&quot;');
 }
 
+// App-locale date (was toLocaleDateString('en-GB'); ice #324).
 function _formatDate(iso) {
   if (!iso) return '';
-  return new Date(iso).toLocaleDateString('en-GB', {
+  return formatDate(iso, {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
   });
 }

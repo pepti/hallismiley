@@ -183,6 +183,20 @@ describe('POST /api/v1/contact — lead fields', () => {
     expect(res.status).toBe(400);
     expect(res.body.errors).toContain(tx('errors.contact.phoneTooLong'));
   });
+
+  // Same phone rule as every other phone field (utils/contactFormat.js, ported
+  // from icelandicstore #399). The envelope is unchanged: { errors: [...] }.
+  test('a phone of the wrong shape returns 400; a real number and a blank pass', async () => {
+    for (const phone of ['call me', '12']) {
+      const res = await request(app).post('/api/v1/contact').send({ ...validPayload(), phone });
+      expect(res.status).toBe(400);
+      expect(res.body.errors).toEqual([tx('errors.contact.phoneInvalid')]);
+    }
+    for (const phone of ['+354 555 1234', '5551234', '']) {
+      const res = await request(app).post('/api/v1/contact').send({ ...validPayload(), phone });
+      expect(res.status).toBe(200);
+    }
+  });
 });
 
 describe('POST /api/v1/contact — notification', () => {

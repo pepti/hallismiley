@@ -4,9 +4,9 @@
   "role": "personal",
   "upstream": "https://github.com/orange-smiley/orangesmiley.git",
   "upstreamBranch": "master",
-  "rev": "702af0f26caaa3965aeb353131f6f637d0b44a2c",
-  "syncedAt": "2026-09-24T19:35:11.711Z",
-  "syncedPr": 173,
+  "rev": "96f9818801ae1999afa50d41c2fa77da2c4e1d03",
+  "syncedAt": "2026-09-27T06:28:19.329Z",
+  "syncedPr": 174,
   "grafted": {
     "at": "2026-09-22",
     "legacyBase": "pepti/hallismiley@562c6376ccb7c01c6098407ffd98914bcf5c60ce",
@@ -51,6 +51,34 @@
       "regenerated": [
         "features/README.md"
       ]
+    },
+    {
+      "rev": "3e9d903d9faa7f4506a945c490a1011c09bfd662",
+      "date": "2026-09-26",
+      "upstreamCommits": 125,
+      "conflicts": 5,
+      "note": "sync — test-DB hygiene (hs_ prefix, TEST_PG_URL, sweep); docs-only conflicts; open: 3 theme-contrast cases (glacier/moss text-muted, aurora on-accent) for Halli",
+      "regenerated": [
+        ".engine-paths",
+        ".gitattributes"
+      ]
+    },
+    {
+      "rev": "cbee076b0fce5d2bf3993b36011ab3b589ff0331",
+      "date": "2026-09-27",
+      "upstreamCommits": 57,
+      "conflicts": 4,
+      "note": "sync (same branch + PR #174, extended) — the engine-sync gaps fix (moduleFlags reads the public IA from the seam, so the hs re-apply of its /thjonusta robots line is DROPPED; adminHome invoices-hidden; PLAN.md fragment guard; phone-nav overflow), security hygiene, harvest 2 lanes 5/6c/7a/9, passthrough invoice; ARCHITECTURE.md resolved by row (engine rows + booksRouteOrder pin, handbook keeps 090 only, CI row adds secret-cert-watch.yml); theme contrast fixed in themes.css hues (glacier/moss --text-muted, aurora --gold) — docs/history.d/2026-09-26-engine-sync-2026-09-26.md",
+      "regenerated": [
+        "features/README.md"
+      ]
+    },
+    {
+      "rev": "96f9818801ae1999afa50d41c2fa77da2c4e1d03",
+      "date": "2026-09-27",
+      "upstreamCommits": 2,
+      "conflicts": 4,
+      "note": "sync (same branch + PR #174) — the engine took the four fixes this sync reported (expenses page phone overflow via books-check--file; the role x route harness exempts identity.routes; the MCP tool list and the adminHome all-clear read the seam / park products): all four conflicts were the hs re-apply hunks, resolved to the engine side, so the three \"hallismiley re-apply (engine-sync 5)\" hunks are gone"
     }
   ]
 }

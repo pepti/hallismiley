@@ -10,6 +10,7 @@
 // the component renders nothing instead of erroring. All note text is escaped;
 // the server enforces per-note visibility + role.
 import { t } from '../i18n/i18n.js';
+import { formatDateTime } from '../utils/format.js';
 import { escHtml } from '../utils/escHtml.js';
 import { showToast } from './Toast.js';
 import { listCustomerNotes, createCustomerNote, updateCustomerNote, deleteCustomerNote } from '../services/adminCustomerNotes.js';
@@ -78,7 +79,8 @@ export class CustomerNotes {
   _fmt(iso) {
     if (!iso) return '';
     try {
-      return new Date(iso).toLocaleString(undefined, {
+      // App locale via the kit formatter (was the browser's own; ice #324).
+      return formatDateTime(iso, {
         day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
       });
     } catch { return ''; }

@@ -114,11 +114,71 @@ export function add(product, variant = null, qty = 1) {
       name: product.name,
       priceIsk,
       priceEur,
+      // The product's VSK rate (0/11/24) and whether it is a service, so the
+      // cart and checkout can show the VAT inside the total per rate — an
+      // exported good is zero-rated, a service keeps its rate (utils/vat.js,
+      // ported from icelandicstore #51). Rates live on the product, not the
+      // variant.
+      vatRate: product.vat_rate ?? null,
+      isService: !!product.is_bookable,
       qty,
       imageUrl: product.images?.[0]?.url || null,
     });
   }
   _save(items);
+}
+
+// Re-price the basket from a fresh /api/v1/shop/products payload.
+// Ported from icelandicstore #343.
+//
+// A line stores the price it was added at, and the server re-fetches every price
+// at checkout (A04: never trust client prices) — so a basket left open across a
+// catalogue price change would SHOW one figure and CHARGE another. The cart and
+// checkout call this with the payload they already fetch for availability, so
+// the page quotes what the next checkout will charge. Variant price wins over
+// the product's, exactly as `add` resolves it. The same pass fills in the VSK
+// rate and service flag on lines stored before lines carried them.
+//
+// Lines the payload does not mention (a product since deactivated) are left
+// alone — the stock check already flags those; a payload without prices never
+// wipes a stored one. Returns the lines whose PRICE changed ([] when none) so
+// the page can tell the customer, and emits once so open views repaint.
+export function syncPrices(products) {
+  if (!Array.isArray(products) || products.length === 0) return [];
+  const byProduct = new Map(products.map(p => [String(p.id), p]));
+  const items = _load();
+  const repriced = [];
+  let changed = false;
+  for (const line of items) {
+    const product = byProduct.get(String(line.productId));
+    if (!product) continue;
+    const variant = line.variantId
+      ? (product.variants || []).find(v => String(v.id) === String(line.variantId))
+      : null;
+    if (line.variantId && !variant) continue;
+    const priceIsk = variant?.price_isk ?? product.price_isk;
+    const priceEur = variant?.price_eur ?? product.price_eur;
+    let priceMoved = false;
+    if (priceIsk != null && Number(priceIsk) !== Number(line.priceIsk)) { line.priceIsk = priceIsk; priceMoved = true; }
+    if (priceEur != null && Number(priceEur) !== Number(line.priceEur)) { line.priceEur = priceEur; priceMoved = true; }
+    if (priceMoved) repriced.push(line);
+    if (product.vat_rate != null && line.vatRate !== product.vat_rate) { line.vatRate = product.vat_rate; changed = true; }
+    const svc = !!product.is_bookable;
+    if (line.isService !== svc) { line.isService = svc; changed = true; }
+    changed = changed || priceMoved;
+  }
+  if (changed) _save(items);
+  return repriced;
+}
+
+// The VAT-bearing lines of the basket in `currency`, for utils/vat.js
+// vatBreakdown: [{ gross, rate, isService }].
+export function vatLines(currency = getCurrency()) {
+  return _load().map(it => ({
+    gross: (currency === 'ISK' ? Number(it.priceIsk) : Number(it.priceEur)) * Number(it.qty || 0),
+    rate: it.vatRate,
+    isService: !!it.isService,
+  }));
 }
 
 export function updateQty(lineKey, qty) {

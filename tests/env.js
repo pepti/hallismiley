@@ -12,6 +12,13 @@ process.env.NODE_ENV        = 'test';
 // is derived here and never connected to.
 process.env.DATABASE_URL    = workerDbUrl(process.env.JEST_WORKER_ID || '1').url;
 process.env.DB_SSL          = 'false';
+// Uploads go to this run's temp folder, never the committed public/assets tree
+// (tests/lib/testUploads.js). Only when globalSetup pinned a base: the unit
+// tier has none and writes no uploads.
+{
+  const roots = require('./lib/testUploads').workerRoots(process.env.JEST_WORKER_ID);
+  if (roots) Object.assign(process.env, roots);
+}
 // Close idle DB connections fast: each suite file gets its own pool (Jest
 // module registry per file) and 4 workers run suites concurrently, so at the
 // production 30s idle timeout the lingering pools of finished suites sum past
@@ -39,7 +46,7 @@ process.env.ANTHROPIC_WIF_AUDIENCE = '';
 // mfa-optional-2026-09-23), so no suite needs this any more. It stays as a
 // belt-and-braces for a suite that switches an instance to `required`
 // (CLIENT_CONFIG_SECURITY_MFA_ENROLMENT, read per request by auth/mfaPolicy.js)
-// while minting admin sessions by the hundred — a switch production ignores.
+// while minting admin sessions by the hundred — a switch only development/test honour.
 // adminTotpEnforcement, the suite that IS about the mandatory rule, clears it.
 process.env.ADMIN_TOTP_EXEMPT = '*';
 // A fixed key so the encrypted-at-rest path (utils/secretBox.js) is what the

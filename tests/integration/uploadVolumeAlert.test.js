@@ -103,7 +103,7 @@ describe('uploadVolumeAlert — notifies, never blocks', () => {
 
 describe('POST /api/v1/admin/background/media — the upload still completes', () => {
   let adminCookie;
-  const BG_DIR = path.join(__dirname, '..', '..', 'public', 'assets', 'backgrounds');
+  const BG_DIR = require('../../server/config/paths').backgroundUploadDir();
   fs.mkdirSync(BG_DIR, { recursive: true });
   const before = new Set(fs.readdirSync(BG_DIR));
 
@@ -114,9 +114,9 @@ describe('POST /api/v1/admin/background/media — the upload still completes', (
   });
 
   afterAll(() => {
-    // Uploads land under UPLOAD_ROOT, which in test resolves to the COMMITTED
-    // public/assets tree — so a test that does not clean up leaves real files in
-    // the repo. Diff the directory rather than trusting the response shape: the
+    // Uploads land under UPLOAD_ROOT — this run's temp folder since 2026-09-26
+    // (tests/lib/testUploads.js), the committed public/assets tree before it.
+    // Clean up anyway. Diff the directory rather than trusting the response shape: the
     // upload handler's payload key is not part of this test's contract, and
     // guessing it wrong fails silently and litters every run.
     for (const name of fs.readdirSync(BG_DIR)) {

@@ -5,6 +5,7 @@
 // admin/moderator via an inline WYSIWYG edit mode, persisted to the
 // `shop_hero` key in site_content. Follows the pattern in ContactView.
 import { renderProductCard } from '../components/ProductCard.js';
+import { duplicateNameIds } from '../utils/duplicateNames.js';
 import { CurrencySelector } from '../components/CurrencySelector.js';
 import { ShopFilters, applyFilters, parseStateFromQs, stateToQs } from '../components/ShopFilters.js';
 import * as cart from '../services/cart.js';
@@ -277,7 +278,9 @@ export class ShopView {
       const container = wrap.querySelector(`.shop-landing__row-cards[data-section="${row.section}"]`);
       if (!container) continue;
       const products = (this._landingSections[row.section] || []).slice(0, LANDING_ROW_LIMIT);
-      for (const p of products) container.appendChild(renderProductCard(p));
+      // Distinct products sharing a name on this row get their SKU under it.
+      const dup = duplicateNameIds(products, p => p.name, p => p.id);
+      for (const p of products) container.appendChild(renderProductCard(p, { showSku: dup.has(String(p.id)) }));
     }
   }
 
@@ -311,8 +314,11 @@ export class ShopView {
       return;
     }
     grid.innerHTML = '';
+    // Distinct products sharing a name in the visible list get their SKU under
+    // it (utils/duplicateNames.js, ported from icelandicstore #399).
+    const dup = duplicateNameIds(this._filtered, p => p.name, p => p.id);
     for (const p of this._filtered) {
-      grid.appendChild(renderProductCard(p));
+      grid.appendChild(renderProductCard(p, { showSku: dup.has(String(p.id)) }));
     }
   }
 

@@ -12,16 +12,17 @@ Status: `live` · `hidden` (served, hidden from nav/sitemap/admin lines) ·
 `config/client.json` key path that gates the feature, when one exists.
 Downstream overrides go in `features/local.json`.
 
-## Engine features (53)
+## Engine features (58)
 
 | id | name (is / en) | domain | owner | status | flag | migrations | file |
 |---|---|---|---|---|---|---|---|
 | `admin-2fa` | Tvíþætt auðkenning / Admin 2FA (TOTP) | 1 | engine | live | `security.mfa.enrolment` | `082_admin_totp`, `107_totp_secret_enc`, `109_user_mfa_reminder` | [admin-2fa.md](admin-2fa.md) |
-| `auth-sessions` | Innskráning og lotur / Auth and sessions | 1 | engine | live | — | `002_auth_users`, `012_backfill_auth_columns`, `041_users_username_lower_unique` | [auth-sessions.md](auth-sessions.md) |
-| `rbac-roles` | Hlutverk og aðgangsstýring / Roles and RBAC | 1 | engine | live | — | `056_dynamic_roles`, `061_user_roles` | [rbac-roles.md](rbac-roles.md) |
+| `auth-sessions` | Innskráning og lotur / Auth and sessions | 1 | engine | live | — | `002_auth_users`, `012_backfill_auth_columns`, `041_users_username_lower_unique`, `114_user_expires_at` | [auth-sessions.md](auth-sessions.md) |
+| `rbac-roles` | Hlutverk og aðgangsstýring / Roles and RBAC | 1 | engine | live | — | `056_dynamic_roles`, `061_user_roles`, `116_role_label` | [rbac-roles.md](rbac-roles.md) |
 | `signup` | Nýskráning / Public sign-up | 1 | engine | live | `modules.signup.enabled` | — | [signup.md](signup.md) |
 | `social-login` | Innskráning með Google/Facebook / Social login | 1 | engine | dormant | — | `020_oauth_google`, `021_oauth_facebook` | [social-login.md](social-login.md) |
 | `users-admin` | Notendaumsjón / User administration | 1 | engine | live | — | `003_user_system`, `065_user_invited_at` | [users-admin.md](users-admin.md) |
+| `admin-home` | Í dag (heimasíða stjórnborðs) / Admin home (Í dag) | 2 | engine | live | — | — | [admin-home.md](admin-home.md) |
 | `admin-shell` | Stjórnborðsrammi / Admin shell | 2 | engine | live | — | `053_admin_nav_config`, `111_user_ui_prefs` | [admin-shell.md](admin-shell.md) |
 | `admin-ui-kit` | Stjórnborðs-íhlutasafn / Admin UI kit | 2 | engine | live | — | — | [admin-ui-kit.md](admin-ui-kit.md) |
 | `public-site` | Opinber vefur / Public site | 3 | engine | live | — | `017_home_stats_content` | [public-site.md](public-site.md) |
@@ -34,22 +35,24 @@ Downstream overrides go in `features/local.json`.
 | `market-import` | Innlestur markaðsgagna / Market data importer | 7 | engine | live | `modules.salesOps.enabled` | — | [market-import.md](market-import.md) |
 | `commission` | Söluþóknun / Commission | 8 | engine | live | `modules.salesOps.enabled` | `102_commission_settlement` | [commission.md](commission.md) |
 | `customer-accounts` | Viðskiptareikningar / Customer accounts | 8 | engine | live | `modules.salesOps.enabled` | `098_customer_accounts`, `100_customer_account_party` | [customer-accounts.md](customer-accounts.md) |
-| `customers-crm` | Viðskiptavinir og minnispunktar / Customers and notes | 8 | engine | live | `modules.shop.enabled` | `064_customer_notes` | [customers-crm.md](customers-crm.md) |
+| `customers-crm` | Viðskiptavinir og minnispunktar / Customers and notes | 8 | engine | live | `modules.shop.enabled` | `064_customer_notes`, `117_user_address` | [customers-crm.md](customers-crm.md) |
 | `staff-audit` | Aðgerðaskrá starfsfólks / Staff audit log | 8 | engine | live | — | — | [staff-audit.md](staff-audit.md) |
 | `bookkeeping-core` | Bókhaldskjarni / Bookkeeping core | 9 | engine | live | `modules.books.enabled` | `072_bookkeeping`, `073_books_expenses`, `075_books_reconciliation`, `101_books_deferred_revenue`, `103_books_vehicle_accounts` | [bookkeeping-core.md](bookkeeping-core.md) |
 | `books-intake` | Innhólf fylgiskjala / Books intake queue | 9 | engine | live | `modules.books.enabled` | `096_books_capture_spine` | [books-intake.md](books-intake.md) |
 | `books-replay` | Endurspilun bókhalds / Books replay | 9 | engine | live | `modules.books.enabled` | — | [books-replay.md](books-replay.md) |
 | `books-settings` | Bókhaldsstillingar / Books settings | 9 | engine | live | `modules.books.enabled` | — | [books-settings.md](books-settings.md) |
-| `invoices` | Reikningar / Invoices | 9 | engine | live | `modules.books.enabled` | `099_invoice_account_link` | [invoices.md](invoices.md) |
+| `invoices` | Reikningar / Invoices | 9 | engine | live | `modules.books.enabled` | `099_invoice_account_link`, `122_passthrough_invoice` | [invoices.md](invoices.md) |
 | `payroll` | Launakerfi / Payroll | 9 | engine | live | `modules.books.enabled` | `076_books_payroll_lifecycle`, `078_books_payroll_integrity` | [payroll.md](payroll.md) |
 | `peppol-outbound` | Peppol/UBL útflutningur / Peppol UBL outbound | 9 | engine | live | `modules.books.enabled` | `095_books_invoice_party_structured` | [peppol-outbound.md](peppol-outbound.md) |
 | `pos` | Kassi / Point of sale | 9 | engine | hidden | `modules.pos.enabled` | `077_books_pos`, `079_books_pos_idempotency` | [pos.md](pos.md) |
 | `vsk` | Virðisaukaskattur / VAT (VSK) returns | 9 | engine | live | `modules.books.enabled` | — | [vsk.md](vsk.md) |
 | `sales-handbook` | Handbók sölufólks / Sales handbook | 10 | engine | live | `modules.salesOps.enabled` | `090_sales_guides` | [sales-handbook.md](sales-handbook.md) |
 | `cart-checkout` | Verslun, karfa og greiðsla / Storefront, cart and checkout | 11 | engine | hidden | `modules.shop.enabled` | — | [cart-checkout.md](cart-checkout.md) |
+| `checkout-settings` | Stillingar greiðsluferlis / Checkout settings | 11 | engine | hidden | `modules.shop.enabled` | — | [checkout-settings.md](checkout-settings.md) |
 | `discounts` | Afslættir / Discounts | 11 | engine | hidden | `modules.shop.enabled` | `050_discounts`, `055_discount_types` | [discounts.md](discounts.md) |
-| `orders` | Pantanir / Orders | 11 | engine | hidden | `modules.shop.enabled` | `054_order_payment_fulfillment_tags` | [orders.md](orders.md) |
-| `shop-catalog` | Vörulisti / Shop catalog | 11 | engine | hidden | `modules.shop.enabled` | `022_ecommerce`, `023_product_taxonomy`, `024_product_variants`, `025_shop_content`, `045_shop_sections`, `048_product_codes`, `049_collections`, `057_product_bin`, `074_product_vat_rate`, `112_inventory_adjustments`, `113_variant_barcode` | [shop-catalog.md](shop-catalog.md) |
+| `goods-receiving` | Vörumóttaka / Goods receiving | 11 | engine | hidden | `modules.shop.enabled` | `118_goods_receipts` | [goods-receiving.md](goods-receiving.md) |
+| `orders` | Pantanir / Orders | 11 | engine | hidden | `modules.shop.enabled` | `054_order_payment_fulfillment_tags`, `115_order_notes`, `121_order_vat_snapshot` | [orders.md](orders.md) |
+| `shop-catalog` | Vörulisti / Shop catalog | 11 | engine | hidden | `modules.shop.enabled` | `022_ecommerce`, `023_product_taxonomy`, `024_product_variants`, `025_shop_content`, `045_shop_sections`, `048_product_codes`, `049_collections`, `057_product_bin`, `074_product_vat_rate`, `112_inventory_adjustments`, `113_variant_barcode`, `119_product_image_color`, `120_product_merge` | [shop-catalog.md](shop-catalog.md) |
 | `bio` | Persónuleg kynning / Personal bio (/halli) | 12 | engine | hidden | `modules.bio.enabled` | `011_halli_bio_content`, `039_halli_bio_cv_arrays`, `040_halli_bio_image_urls`, `044_halli_bio_code_snippet` | [bio.md](bio.md) |
 | `news` | Fréttir / News | 12 | engine | hidden | `modules.news.enabled` | `008_news`, `016_news_media` | [news.md](news.md) |
 | `party` | Veisla / Party (RSVP) | 12 | engine | hidden | `modules.party.enabled` | `009_user_party_access`, `010_party_tables`, `018_rsvp_custom_fields`, `019_rsvp_form_builder`, `026_party_invite_code`, `027_party_rsvp_form_patch_helper_fields`, `042_party_logistics_items`, `058_party_logistics_category`, `059_party_todos`, `060_party_access_requests`, `062_party_welcome_email`, `063_party_costs`, `066_party_rsvp_admin_status`, `067_party_rsvp_admin_companions`, `068_party_logistics_categories`, `069_party_plan`, `070_party_photo_album`, `071_party_photos_public` | [party.md](party.md) |
@@ -61,10 +64,12 @@ Downstream overrides go in `features/local.json`.
 | `change-requests` | Breytingarbeiðnir / Change requests | 16 | engine | live | — | `052_change_requests` | [change-requests.md](change-requests.md) |
 | `app-settings` | Almennar stillingar / General settings | 17 | engine | live | — | `047_app_settings` | [app-settings.md](app-settings.md) |
 | `landing-background` | Bakgrunnur forsíðu / Landing background | 17 | engine | hidden | — | `051_background_media`, `080_background_sections`, `085_landing_background_gradient`, `086_landing_background_scene`, `089_landing_background_video` | [landing-background.md](landing-background.md) |
+| `site-announcement` | Tímabundin tilkynning / Site announcement | 17 | engine | live | — | — | [site-announcement.md](site-announcement.md) |
 | `site-content` | Vefefni / Site content | 17 | engine | live | — | `005_site_content` | [site-content.md](site-content.md) |
 | `uploads-media` | Skráaupphal / Uploads and media | 18 | engine | live | — | — | [uploads-media.md](uploads-media.md) |
 | `email` | Tölvupóstur / Email | 19 | engine | live | — | — | [email.md](email.md) |
 | `client-config` | Stillingar tilviks / Instance config (module flags + identity) | 20 | engine | live | — | — | [client-config.md](client-config.md) |
+| `demo-instance` | Sýnikerfi / Demo instance | 20 | engine | live | — | — | [demo-instance.md](demo-instance.md) |
 | `platform-core` | Kjarni / Platform core | 20 | engine | live | — | `001_initial_schema`, `043_strip_stale_railway_references` | [platform-core.md](platform-core.md) |
 | `rate-limits-security` | Öryggislag / Security layer | 20 | engine | live | — | — | [rate-limits-security.md](rate-limits-security.md) |
 | `testing-infra` | Prófunarumgjörð / Testing infrastructure | 20 | engine | live | — | — | [testing-infra.md](testing-infra.md) |
@@ -82,4 +87,4 @@ Downstream overrides go in `features/local.json`.
 
 | id | name (is / en) | domain | owner | status | flag | migrations | file |
 |---|---|---|---|---|---|---|---|
-| `company-content` | Efni fyrirtækisins / Company content | 3 | os | live | — | `091_home_content_company`, `092_contact_content_company`, `104_sales_guides_services_page`, `os_001_sales_guides_d001_pricing` | [os/company-content.md](os/company-content.md) |
+| `company-content` | Efni fyrirtækisins / Company content | 3 | os | live | — | `091_home_content_company`, `092_contact_content_company`, `104_sales_guides_services_page`, `os_001_sales_guides_d001_pricing`, `os_002_contact_content_offering`, `os_003_sales_guides_d022_pricing`, `os_004_sales_guides_queue_spread`, `os_005_sales_guides_persona_hraunbaun` | [os/company-content.md](os/company-content.md) |

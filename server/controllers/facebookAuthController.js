@@ -21,6 +21,8 @@ const { trackedFetch } = require('../observability/trackedFetch');
 const { query: dbQuery }           = require('../config/database');
 const { userIsAdminAnywhere } = require('../utils/adminRole');
 const { lucia }                    = require('../auth/lucia');
+// Time-limited logins (migration 114): an expired account never signs in.
+const { isExpired, ACCOUNT_EXPIRED } = require('../auth/accountExpiry');
 const securityLogger               = require('../observability/securityLogger');
 const { loadArctic, isConfigured } = require('../auth/facebook');
 const { generateUniqueUsername, isSafeReturnTo } = require('../auth/oauthHelpers');
@@ -131,10 +133,11 @@ async function callback(req, res, next) {
 
     // 1. Existing Facebook-linked user.
     const { rows: byFacebook } = await dbQuery(
-      `SELECT id, disabled FROM users WHERE facebook_id = $1`,
+      `SELECT id, disabled, expires_at FROM users WHERE facebook_id = $1`,
       [facebookId],
     );
     if (byFacebook[0]?.disabled) return redirectWithError(res, 'account_disabled', req.locale);
+    if (byFacebook[0] && isExpired(byFacebook[0])) return redirectWithError(res, ACCOUNT_EXPIRED, req.locale);
     let userId = byFacebook[0]?.id ?? null;
 
     // 2. An account already exists with this email but is NOT linked to this

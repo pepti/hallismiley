@@ -12,7 +12,10 @@
 //   dev (e.g. roof boxes → apparel) and want a clean slate. NEVER run this
 //   against a production DB with admin-added products.
 //
-//   node server/scripts/seed-shop.js --reset
+//   node server/scripts/seed-shop.js --reset --allow-dev-db
+//
+//   Refused (server/scripts/targetGuard.js) unless the database is a local
+//   `_test` one, or the local dev one with --allow-dev-db.
 //
 // Re-runnable. Idempotent per (slug, attributes) via ON CONFLICT upserts.
 // See RUNBOOK.md for the prod-seeding workflow.
@@ -22,6 +25,7 @@ const fs   = require('fs');
 const path = require('path');
 const { pool } = require('../config/database');
 const { productUploadDir, UPLOAD_ROOT } = require('../config/paths');
+const { assertSafeTarget } = require('./targetGuard');
 
 const SIZES  = ['XS', 'S', 'M', 'L', 'XL'];
 const COLORS = ['black', 'white'];
@@ -371,14 +375,16 @@ async function seedVariants(productId, p) {
   for (const color of COLORS) {
     for (const size of SIZES) {
       const sku = `${p.slug}-${color}-${size.toLowerCase()}`;
-      // Upsert by (product_id, attributes). Opening stock is written on the
+      // Upsert by (product_id, attributes) — the LIVE-row unique index since
+      // migration 119 (an archived variant frees its slot), so the conflict
+      // target names its predicate. Opening stock is written on the
       // first insert only: a re-seed leaves an existing variant's on hand
       // alone, because every later movement belongs in inventory_adjustments
       // (models/Inventory.js — ProductVariant carries no upsert on purpose).
       const { rows } = await pool.query(
         `INSERT INTO product_variants (product_id, sku, attributes, price_isk, price_eur, stock, active)
          VALUES ($1, $2, $3::jsonb, NULL, NULL, $4, TRUE)
-         ON CONFLICT (product_id, attributes) DO UPDATE SET
+         ON CONFLICT (product_id, attributes) WHERE archived_at IS NULL DO UPDATE SET
            sku = EXCLUDED.sku, price_isk = NULL, price_eur = NULL, active = TRUE
          RETURNING *`,
         [productId, sku, JSON.stringify({ color, size }), STOCK_BY_SIZE[size] ?? 8]
@@ -394,6 +400,24 @@ async function main() {
   // the destructive deactivate-everything-else behavior used on local dev.
   const args = process.argv.slice(2);
   const resetMode = args.includes('--reset');
+
+  // --reset deactivates every product outside the lineup, so it goes through
+  // the shared destructive-script guard (server/scripts/targetGuard.js, harvest
+  // 2, 2026-09-26): a local `_test` database, or the local dev database with
+  // --allow-dev-db. The default upsert-only mode stays prod-safe and unguarded
+  // (RUNBOOK.md → Seeding the Shop runs it against production on purpose).
+  if (resetMode) {
+    const target = assertSafeTarget({
+      databaseUrl: pool.options?.connectionString || process.env.DATABASE_URL,
+      env: process.env,
+      allowDevDb: args.includes('--allow-dev-db'),
+    }, { label: 'seed-shop --reset', exit: () => {} });
+    if (!target.ok) {
+      process.exitCode = 1;
+      await pool.end();
+      return;
+    }
+  }
 
   console.log(`[seed-shop] UPLOAD_ROOT = ${UPLOAD_ROOT}`);
   if (resetMode) {

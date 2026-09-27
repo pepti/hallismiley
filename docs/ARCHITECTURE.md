@@ -1,8 +1,9 @@
 # Architecture — where things are, per domain
 
 The map a feature request starts from. Each domain below lists its files, the
-**rules that must hold** (each linking to the `docs/HISTORY.md` entry that
-explains why), and its history entries. `tests/unit/architectureIndex.test.js`
+**rules that must hold** (each linking to the history entry that explains
+why — a `docs/history.d/` fragment since 2026-09-26, the frozen archive
+`docs/HISTORY.md` before that), and its history entries. `tests/unit/architectureIndex.test.js`
 keeps this file honest: every path here must exist, every routes/controller/
 model/view file in the tree must be listed here, and every history link must
 resolve. Global stack rules live in `CLAUDE.md` and
@@ -51,7 +52,7 @@ tests/unit/               node-only Jest (no jsdom); read-the-source parity test
 tests/integration/        Jest against real Postgres (4 workers, one DB each — tests/workerDb.js)
 e2e/                      Playwright specs + lib/ helpers (isolated per-branch DB)
 scripts/                  repo tooling (check-i18n-keys, build-iceland-scenes, build-manifest…)
-docs/                     API, ARCHITECTURE (this), HISTORY, BOOKKEEPING-SYSTEM, SELF-UPDATE, mcp, SALES-STAFF, TESTING, DEPLOYMENT, SLO…
+docs/                     API, ARCHITECTURE (this), HISTORY (archive), history.d/ (one write-up per branch), BOOKKEEPING-SYSTEM, SELF-UPDATE, mcp, SALES-STAFF, TESTING, DEPLOYMENT, SLO…
 company/                  gitignored: plans, decisions, logs, market-research staging
 .claude/                  gitignored: agents, commands, rules (stack-invariants.md), hooks, worktrees
 ```
@@ -106,23 +107,35 @@ company/                  gitignored: plans, decisions, logs, market-research st
 
 | | |
 |---|---|
-| Routes | `server/routes/authRoutes.js` → `/auth` · `server/routes/userRoutes.js` → `/api/v1/users` · `server/routes/adminRoutes.js` → `/api/v1/admin` (users list/role/disable/approve/decline/delete, `totp/reset`, `new-password`, `email-health`) · `server/routes/adminRolesRoutes.js` → `/api/v1/admin/roles` |
+| Routes | `server/routes/authRoutes.js` → `/auth` · `server/routes/userRoutes.js` → `/api/v1/users` · `server/routes/adminRoutes.js` → `/api/v1/admin` (users list/role/disable/expiry/approve/decline/delete, `totp/reset`, `new-password`, `email-health`) · `server/routes/adminRolesRoutes.js` → `/api/v1/admin/roles` |
 | Controllers | `server/controllers/authController.js`, `googleAuthController.js`, `facebookAuthController.js`, `userController.js`, `adminController.js`, `adminRolesController.js` |
 | Models | `server/models/Role.js`, `server/models/UserRole.js` (users are written by the controllers directly) |
-| Services | `server/services/mfaService.js`, `server/services/tokenCleanup.js`; `server/utils/generatePassword.js`, `server/utils/username.js`, `server/utils/placeholderEmail.js` (name-only logins) |
-| Auth layer | `server/auth/lucia.js`, `middleware.js`, `roles.js`, `tokens.js`, `adminViews.js`, `requireView.js`, `mfaPolicy.js`, `google.js`, `facebook.js`, `oauthHelpers.js`; `server/utils/adminRole.js`, `server/utils/totp.js`, `server/utils/secretBox.js`; break-glass `server/scripts/reset-admin-totp.js` |
+| Services | `server/services/mfaService.js`, `server/services/tokenCleanup.js`; `server/utils/roleName.js` (role display name → slug, reserved names), `server/utils/generatePassword.js`, `server/utils/username.js`, `server/utils/placeholderEmail.js` (name-only logins) |
+| Auth layer | `server/auth/lucia.js`, `middleware.js`, `accountExpiry.js` (time-limited logins), `roles.js`, `tokens.js`, `adminViews.js`, `requireView.js`, `mfaPolicy.js`, `google.js`, `facebook.js`, `oauthHelpers.js`; `server/utils/adminRole.js`, `server/utils/totp.js`, `server/utils/secretBox.js`; break-glass `server/scripts/reset-admin-totp.js` |
 | Middleware | `server/middleware/softAuth.js`, `server/middleware/csrf.js` |
 | Views | `public/js/views/SignupView.js`, `ProfileView.js`, `ForgotPasswordView.js`, `ResetPasswordView.js`, `VerifyEmailView.js`, `AdminUsersView.js`, `AdminRolesView.js` |
-| Components | `public/js/components/LoginModal.js`, `totpFailure.js`, `mfaReminder.js` (the two-step reminder, mounted by `AdminSidebar.renderAdminShell` and `SellerAreaView`), `OneTimeCredentials.js` (the shown-once username + password) |
-| Client | `public/js/services/auth.js`, `sessionGuard.js`, `adminRoles.js`; `public/js/utils/passwordToggle.js`, `safeReturnTo.js`, `avatar.js`, `placeholderEmail.js` |
+| Components | `public/js/components/LoginModal.js`, `totpFailure.js`, `mfaReminder.js` (the two-step reminder, mounted by `AdminSidebar.renderAdminShell` and `SellerAreaView`), `OneTimeCredentials.js` (the shown-once username + password), `ExpiryPicker.js` ("Gildir til") |
+| Client | `public/js/services/auth.js`, `sessionGuard.js`, `adminRoles.js`; `public/js/utils/roleLabel.js` (the one role-name helper), `public/js/utils/passwordToggle.js`, `safeReturnTo.js`, `avatar.js`, `placeholderEmail.js` |
 | CSS | `public/css/user-system.css`, `admin-roles.css`, `mfa-reminder.css` |
-| Jest | `tests/integration/auth.test.js`, `auth.google.test.js`, `auth.facebook.test.js`, `auth.socialKillSwitch.test.js`, `users.test.js`, `adminRoles.test.js`, `adminTotp.test.js`, `adminTotpEnforcement.test.js`, `mfaReminder.test.js`, `security.test.js`, `adminOuterGuard.test.js`, `adminNameOnlyLogin.test.js`; `tests/unit/totp.test.js`, `totpFailure.client.test.js`, `mfaPolicy.test.js`, `mfaProtected.test.js`, `mfaProtectedClient.test.js`, `oauthHelpers.test.js`, `csrf.test.js`, `safeReturnTo.client.test.js`, `rateLimit.test.js`, `rateLimitDecide.test.js`, `rateLimitGuard.client.test.js`, `nameOnlyHelpers.test.js`, `generatePassword.test.js` |
-| e2e | `e2e/auth.spec.js`, `signup-flow.spec.js`, `profile.spec.js`, `admin-totp-enrolment.spec.js` (on the second, `required` e2e server), `mfa-reminder.spec.js` |
-| Migrations | 002, 003, 009, 012, 020, 021, 041, 056, 060, 061, 065, 082 (admin TOTP), 083/084 (per-account theme), 107 (TOTP secret sealed at rest, expand phase), 109 (`users.mfa_reminder_dismissed_at`, the two-step reminder's "don't show again") |
+| Jest | `tests/unit/roleName.test.js`; `tests/integration/auth.test.js`, `auth.google.test.js`, `auth.facebook.test.js`, `auth.socialKillSwitch.test.js`, `users.test.js`, `adminRoles.test.js`, `adminTotp.test.js`, `adminTotpEnforcement.test.js`, `mfaReminder.test.js`, `security.test.js`, `adminOuterGuard.test.js`, `adminNameOnlyLogin.test.js`, `authLoginMetrics.test.js`, `signupEmailNonBlocking.test.js`, `loginExpiry.test.js`; `tests/unit/adminUsersView.client.test.js`, `totp.test.js`, `totpFailure.client.test.js`, `mfaPolicy.test.js`, `mfaProtected.test.js`, `mfaProtectedClient.test.js`, `oauthHelpers.test.js`, `csrf.test.js`, `safeReturnTo.client.test.js`, `rateLimit.test.js`, `rateLimitDecide.test.js`, `rateLimitGuard.client.test.js`, `nameOnlyHelpers.test.js`, `generatePassword.test.js` |
+| e2e | `e2e/auth.spec.js`, `signup-flow.spec.js`, `profile.spec.js`, `admin-totp-enrolment.spec.js` (on the second, `required` e2e server), `mfa-reminder.spec.js`, `admin-user-expiry.spec.js` |
+| Route matrix | `tests/integration/adminRouteMatrix.test.js` — every staff route, read from `app.js` + the routers, refuses a plain `user` (403) and an anonymous caller (401/403) |
+| Migrations | 002, 003, 009, 012, 020, 021, 041, 056, 060, 061, 065, 082 (admin TOTP), 083/084 (per-account theme), 107 (TOTP secret sealed at rest, expand phase), 109 (`users.mfa_reminder_dismissed_at`, the two-step reminder's "don't show again"), 114 (`users.expires_at`, time-limited logins), 116 (`roles.label`, a role's display name) |
 | Features | [admin-2fa](../features/admin-2fa.md), [auth-sessions](../features/auth-sessions.md), [rbac-roles](../features/rbac-roles.md), [signup](../features/signup.md), [social-login](../features/social-login.md), [users-admin](../features/users-admin.md) |
 | Feature doc | `docs/API.md` (Authentication), `docs/ADMIN-2FA.md` (mandatory enrolment, the secret at rest, break-glass) |
 
 **Rules that must hold**
+- **Every staff route refuses a non-staff caller, and a test proves it**
+  ([harvest2-lane1a](history.d/2026-09-26-harvest2-lane1a-security.md#harvest2-lane1a-2026-09-26); modelled on icelandicstore #416 G6):
+  `adminRouteMatrix.test.js` parses every `app.use('/api/v1/admin…', router)` and
+  `app.use('/api/v1/system', router)` mount from `server/app.js`, walks each
+  router's `stack` for method + path (params → a dummy id), and asserts 403 for a
+  signed-in plain `user` and 401/403 for an anonymous caller on every one. A new
+  mount or route is covered without editing the test; a deliberate exception is an
+  entry in its `EXEMPT` map with the reason; the only automatic exemption is a
+  module this instance switched off (the module gate's 404, before auth). The
+  outer guard (`requireAuth` + `requireStaff` on `/api/v1/admin`) is not the only
+  gate: every router carries its own `requireView`/`requireRole`.
 - **Public signup is a module; signing in is not** ([signup-switch-2026-09-24](HISTORY.md#signup-switch-2026-09-24)):
   `modules.signup.enabled` (R4 catalogue, Verslun/Rekstur) owns `/signup`,
   `/auth/signup` and the availability checks; off, they are absent and a
@@ -174,7 +187,8 @@ company/                  gitignored: plans, decisions, logs, market-research st
   say why. Session payloads carry the same downgrade plus
   `mfa_enrolment_required`; the SPA's `mfaEnrolmentRequired()` is UX. An
   account that owes enrolment is always enrolment-eligible. `ADMIN_TOTP_EXEMPT`
-  is ignored under `NODE_ENV=production`; the break-glass is
+  is honoured ONLY under `NODE_ENV=development` or `test` — an allow-list, so
+  staging or any other label fails closed ([security-hygiene-2026-09-26](history.d/2026-09-26-fix-security-hygiene-2026-09-26.md#security-hygiene-2026-09-26)); the break-glass is
   `server/scripts/reset-admin-totp.js` ([harvest-rk-totp-2026-09-23](HISTORY.md#harvest-rk-totp-2026-09-23)).
 - The TOTP secret is sealed at rest (`utils/secretBox.js`, AES-256-GCM under
   `TOTP_ENC_KEY`, user id as associated data) in the EXPAND phase of migration
@@ -199,6 +213,34 @@ company/                  gitignored: plans, decisions, logs, market-research st
   [base-sync](HISTORY.md#base-sync).
 - `role.updated` is a staff-audit event; role grant/revoke, invitation and
   disable/enable log best-effort ([review-099](HISTORY.md#review-099)).
+- **Every role and account change on the admin surface writes a staff-audit
+  row** ([harvest2-lane1b](history.d/2026-09-26-harvest2-lane1b-defects.md#harvest2-lane1b-2026-09-26)), whichever screen made it: the Users-page role dropdown writes
+  `role.granted` / `role.revoked` (summary `via: 'users_page'`, one row per
+  role actually gained or dropped, written on the transaction's client before
+  COMMIT) exactly as the Members tab does; role
+  create/delete write `role.created` / `role.deleted`; a hard delete writes
+  `user.deleted` (username + role, never contact details). A new action name
+  goes into `staffAudit.ACTIONS` in the SAME change — `record()` refuses an
+  unknown name and `recordSafe` swallows the refusal, which is how
+  `user.totp_reset` and `user.password_replaced` never reached the log until
+  2026-09-26.
+- **Signup never waits on email** ([harvest2-lane1b](history.d/2026-09-26-harvest2-lane1b-defects.md#harvest2-lane1b-2026-09-26)): the verification send is detached
+  (`.catch` → pino warn), because the account is committed before it; the
+  response must not wait even emailService's own timeout (ported from
+  icelandicstore #199; `signupEmailNonBlocking.test.js` hangs the mailer).
+- **`auth_login_attempts_total{result}`** ([harvest2-lane1b](history.d/2026-09-26-harvest2-lane1b-defects.md#harvest2-lane1b-2026-09-26)) is incremented on every sign-in
+  outcome: `success` (session minted — `/login`, `/login/totp`, the party
+  magic link), `failure` (bad credentials, 2FA code or magic link), `locked`,
+  `refused` (right credential, account disabled/pending/declined, or an
+  admin on the magic link), `totp_required` (the
+  challenge was issued). A new login path counts its outcomes too.
+- **A cancelled `confirm()` says so** ([harvest2-lane1b](history.d/2026-09-26-harvest2-lane1b-defects.md#harvest2-lane1b-2026-09-26)) on the Users page (and the party
+  revoke): an `info` toast `admin.actionCancelled`, never a bare `return` —
+  a silent cancel reads as a dead button, and a browser told to block dialogs
+  returns false without showing one (icelandicstore #199).
+- **The Users page's Party column follows the party module** ([harvest2-lane1b](history.d/2026-09-26-harvest2-lane1b-defects.md#harvest2-lane1b-2026-09-26))
+  (`moduleEnabled('party')`): off, the header and the toggle cells are not
+  rendered.
 - `LoginModal` must not leak its document keydown listener across mounts
   ([ui-kit](HISTORY.md#ui-kit)).
 - **One outer door on `/api/v1/admin`**: `app.use('/api/v1/admin', requireAuth,
@@ -223,26 +265,113 @@ company/                  gitignored: plans, decisions, logs, market-research st
 - **MCP tokens follow the admin role**: demote, disable, or removal from the
   admin role revokes the user's live tokens (`McpToken.revokeAllForUser`) on
   top of the per-call owner check ([harvest-ice-a](HISTORY.md#harvest-ice-a-2026-09-24)).
+- **Time-limited logins** (`users.expires_at`, migration 114; NULL = never)
+  ([login-expiry-2026-09-26](history.d/2026-09-26-feat-login-expiry.md#login-expiry-2026-09-26)): the rule
+  lives in `server/auth/accountExpiry.js` and nowhere else. EVERY sign-in path
+  refuses an expired login — password, the 2FA step, the magic link, Google,
+  Facebook, the MCP owner check — with `AccountExpiredError` / `reason:
+  'account_expired'` (OAuth: `?error=account_expired`), and only AFTER the
+  credential itself checked out: a wrong password on an expired account is
+  answered exactly like any wrong password. A new sign-in path adds the same
+  check. EVERY session reader calls `accountExpiry.validateSession`, never
+  `lucia.validateSession` directly: an expired user reads as signed out
+  (`requireAuth` 401 `account_expired`, `/auth/session` `reason`) and all
+  their sessions are deleted. The check rides on the row Lucia's join
+  already loads (`expires_at` in `getUserAttributes`) — no extra query. An
+  admin sets an expiry on ANOTHER account only, in the future, audited
+  (`user.expiry_set` / `user.expiry_cleared`), and NEVER on an account with
+  admin powers (`utils/adminRole.js` `userHoldsAdminPowers`: `admin` anywhere,
+  or a role with `*`/`users`/`roles`; 409 `admin_account`) — every other
+  role stays time-limitable. The other direction holds too: GAINING admin
+  powers (`changeRole`, `addMember`, a role's `view_access` edit, the
+  bootstrap/setup-admin scripts) clears the account's expiry in the same
+  transaction as the grant, audited `user.expiry_cleared` reason `promoted`
+  (`accountExpiry.clearExpiryOnPromotion`) — a new grant path adds the same
+  call. The users list returns `admin_powers` and hides the expiry button on
+  those rows. Reviving an already-expired login revokes its MCP tokens first. An expired login gets no reset or verification token.
+  Rolling back to the previous image re-opens expired logins while it runs.
+- A typed client error carries an i18n `messageKey` and a string `reason`;
+  `middleware/errorHandler.js` translates the one and passes the other
+  through for 4xx only — an untyped error's shape is unchanged
+  ([login-expiry-2026-09-26](history.d/2026-09-26-feat-login-expiry.md#login-expiry-2026-09-26)).
+- **A role is created by its display name; its slug never changes**
+  ([harvest2-lane3](history.d/2026-09-26-harvest2-lane3-users.md#harvest2-lane3-2026-09-26)):
+  `POST /admin/roles { label }` — the server derives the slug with
+  `utils/roleName.js` (folded, `-2`/`-3` on a collision, insert-and-retry, never
+  check-then-insert) and keeps the typed text in `roles.label` (migration 116,
+  unique on `lower(label)` where non-empty). `{ name }` alone (a ready slug) is
+  still accepted. The label is editable (`PATCH { label }`, audited as
+  `role.updated` with `label_before`/`label_after`); `roles.name` is the FK
+  target of `users.role` and `user_roles` and is NEVER renamed. Labels are
+  NFKC-cleaned, stripped of control/bidi characters, Latin script only, 2–30
+  characters, and unique after folding — compared against every other role's
+  label, or its slug when it has none.
+- **Reserved role names are compared folded, for the label AND the slug**
+  ([harvest2-lane3](history.d/2026-09-26-harvest2-lane3-users.md#harvest2-lane3-2026-09-26)):
+  the built-ins (`admin`, `moderator`, `user`) and the back-office deny-list in
+  `roleName.js` (anything starting `admin`, administrator, staff, system,
+  kerfi, kerfisstjóri, stjórnandi, starfsmaður, starfsfólk, root, owner,
+  support, notandi…) are 409. The built-ins are named on screen by i18n
+  (`adminRoles.builtin.*`); their label is not editable (400).
+- **Every surface names a role through `public/js/utils/roleLabel.js`**
+  ([harvest2-lane3](history.d/2026-09-26-harvest2-lane3-users.md#harvest2-lane3-2026-09-26)) —
+  the Roles grid, the Members board, the Users-page dropdown, the Profile
+  badge. A slug on screen is a bug, except for a role nobody named.
+- **The `user` role can never GAIN a view**
+  ([harvest2-lane3](history.d/2026-09-26-harvest2-lane3-users.md#harvest2-lane3-2026-09-26)):
+  every account holds it (the trigger mirrors each primary role into
+  `user_roles`), so a view on it would be granted to every customer and make
+  each of them staff through `requireStaff`. `PATCH /admin/roles/user` with a
+  view the role does not already hold is 400 `cannotGrantUserRole`; shrinking
+  it is allowed. The grid shows the column all-off and locked.
+- **The Roles grid** ([harvest2-lane3](history.d/2026-09-26-harvest2-lane3-users.md#harvest2-lane3-2026-09-26)):
+  rows are the server's `grantableViews` (`offeredViewIds()` — switched-on
+  modules only; `roles` is never a row), grouped by sidebar group; columns are
+  roles; `admin` is all-on and locked. Changes collect in a draft and go out
+  as ONE PATCH per changed role through the audited update endpoint, sending
+  the role's full set — a held view of a switched-off module is kept. The save
+  bar counts the DISTINCT people the change reaches (`GET /admin/roles/members`;
+  a person holding two changed roles counts once). At ≤ 600px the grid shows
+  one role column, picked with the kit Combobox.
+- **Deleting a role somebody holds is 409 `roleInUse` with `count`**
+  ([harvest2-lane3](history.d/2026-09-26-harvest2-lane3-users.md#harvest2-lane3-2026-09-26))
+  (`UserRole.holderCount`: memberships plus primaries); the FK violation path
+  answers the same shape.
+- **The Profile badge names the roles the SESSION holds**
+  ([harvest2-lane3](history.d/2026-09-26-harvest2-lane3-users.md#harvest2-lane3-2026-09-26)):
+  `GET /api/v1/users/me` returns `roles: [{ name, label, is_system }]` from
+  `req.user.roles` (after the 2FA withholding), and `user` is only named when
+  it is the only role.
 
-**History**: [base-sync](HISTORY.md#base-sync) · [review-099](HISTORY.md#review-099) · [ui-kit](HISTORY.md#ui-kit) · [harvest-rk-totp-2026-09-23](HISTORY.md#harvest-rk-totp-2026-09-23) · [mfa-optional-2026-09-23](HISTORY.md#mfa-optional-2026-09-23) · [ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23) · [mfa-reminder-2026-09-23](HISTORY.md#mfa-reminder-2026-09-23) · [harvest-ice-a-2026-09-24](HISTORY.md#harvest-ice-a-2026-09-24) · [signup-switch-2026-09-24](HISTORY.md#signup-switch-2026-09-24)
+**History**: [base-sync](HISTORY.md#base-sync) · [review-099](HISTORY.md#review-099) · [ui-kit](HISTORY.md#ui-kit) · [harvest-rk-totp-2026-09-23](HISTORY.md#harvest-rk-totp-2026-09-23) · [mfa-optional-2026-09-23](HISTORY.md#mfa-optional-2026-09-23) · [ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23) · [mfa-reminder-2026-09-23](HISTORY.md#mfa-reminder-2026-09-23) · [harvest-ice-a-2026-09-24](HISTORY.md#harvest-ice-a-2026-09-24) · [signup-switch-2026-09-24](HISTORY.md#signup-switch-2026-09-24) · [login-expiry-2026-09-26](history.d/2026-09-26-feat-login-expiry.md#login-expiry-2026-09-26) · [harvest2-lane3-2026-09-26](history.d/2026-09-26-harvest2-lane3-users.md#harvest2-lane3-2026-09-26)
 
 ## 2. Admin shell — sidebar, dashboard, surface hiding, UI kit
 
 | | |
 |---|---|
-| Routes | `server/routes/adminNavRoutes.js` → `/api/v1/admin/nav-config` · `server/routes/userRoutes.js` → `PUT /api/v1/users/me/{page-width, page-width-motion, aside-width}` (the layout preferences) |
+| Routes | `server/routes/adminNavRoutes.js` → `/api/v1/admin/nav-config` · `server/routes/adminHomeRoutes.js` → `GET /api/v1/admin/home` (the "Í dag" read) · `server/routes/userRoutes.js` → `PUT /api/v1/users/me/{page-width, page-width-motion, aside-width}` (the layout preferences) |
 | Models | `server/models/AdminNavConfig.js` |
-| Views | `public/js/views/AdminView.js` (the company overview at `/admin`), `AdminProjectsView.js` (unlisted `/admin/projects` board) |
-| Components | `public/js/components/AdminSidebar.js` (`ADMIN_NAV`), `adminNavLayout.js`, `adminSurface.js` (`HIDDEN_ADMIN_VIEWS`), `adminTable.js`, `adminPager.js`, `FilterBar.js`, `Toast.js`, `ToastLog.js`, `ErrorDialog.js` (every error toast), `Lightbox.js`, `ChangesList.js`, `PageWidthControl.js`, `AsideWidthControl.js`, `widthMenu.js` |
-| Client | `public/js/services/adminNav.js`, `toastLog.js`, `buildInfo.js`, `pageWidth.js`; `public/js/utils/stickyHScroll.js`, `listState.js`, `localPref.js`, `debounce.js`, `format.js`, `pageTitle.js`, `downloadCsv.js`, `csv.js`, `escHtml.js`, `api.js` |
-| CSS | `public/css/admin-shell.css`, `admin-dashboard.css`, `admin-kit.css`, `layout.css`, `components.css`, `variables.css`, `reset.css` |
-| Jest | `tests/integration/adminNavConfig.test.js`, `admin.test.js`; `tests/unit/admin-surface-parity.test.js`, `admin-views-parity.test.js`, `adminTableKit.test.js`, `kitFormatters.test.js`, `pageTitle.test.js`, `debounce.test.js`, `csvClientParity.test.js`, `pageWidth.client.test.js`; `tests/integration/pageWidth.test.js` |
-| e2e | `e2e/admin.spec.js`, `admin-surface.spec.js`, `admin-list-kit.spec.js`, `admin-sidebar-scroll.spec.js`, `admin-nav-colors.spec.js`, `admin-page-width.spec.js` |
+| Services | `server/services/adminHome.js` (the home's per-view sources, one `Promise.allSettled`; `homeAccess`), `adminHomeCache.js` (the per-viewer answer cache; `clearHomeCache()` from the leads erasure and retention paths) |
+| Views | `public/js/views/AdminView.js` ("Í dag", the admin home at `/admin`), `AdminProjectsView.js` (the `/admin/projects` board, a Vefur line since 2026-09-26) |
+| Components | `public/js/components/AdminSidebar.js` (`ADMIN_NAV`), `adminNavLayout.js`, `adminSurface.js` (`HIDDEN_ADMIN_VIEWS`), `adminTable.js`, `adminPager.js`, `FilterBar.js`, `Toast.js`, `ToastLog.js`, `ErrorDialog.js` (every error toast), `Lightbox.js`, `ChangesList.js`, `PageWidthControl.js`, `AsideWidthControl.js`, `widthMenu.js`, `Combobox.js` |
+| Client | `public/js/services/adminNav.js`, `toastLog.js`, `buildInfo.js`, `pageWidth.js`; `server/utils/signupApproval.js` (the "awaiting approval" predicate the home and the user list share); `public/js/utils/stickyHScroll.js`, `listState.js`, `localPref.js`, `debounce.js`, `format.js`, `pageTitle.js`, `downloadCsv.js`, `csv.js`, `escHtml.js`, `api.js`, `dragFiles.js` |
+| CSS | `public/css/admin-shell.css`, `admin-dashboard.css`, `admin-idag.css` (the home; `idag-*` only, tokens only), `admin-kit.css`, `layout.css`, `components.css`, `variables.css`, `reset.css` |
+| Jest | `tests/integration/adminNavConfig.test.js`, `admin.test.js`, `adminHome.test.js`; `tests/unit/admin-surface-parity.test.js`, `admin-views-parity.test.js`, `adminTableKit.test.js`, `kitFormatters.test.js`, `pageTitle.test.js`, `debounce.test.js`, `csvClientParity.test.js`, `pageWidth.client.test.js`, `adminHomeCache.test.js`, `adminHomeTodo.client.test.js`; `tests/integration/adminHomeAttention.test.js`, `pageWidth.test.js`, `combobox.client.test.js`, `stickyHScroll.client.test.js`, `dragFiles.client.test.js`, `adminPageTitle.client.test.js` |
+| e2e | `e2e/admin.spec.js`, `admin-home.spec.js`, `admin-surface.spec.js`, `admin-list-kit.spec.js`, `admin-sidebar-scroll.spec.js`, `admin-nav-colors.spec.js`, `admin-page-width.spec.js`, `admin-combobox.spec.js` |
 | Migrations | 053 (nav config), 111 (per-account page width, Mjúk hreyfing, side-column width, cookie choice) |
-| Features | [admin-shell](../features/admin-shell.md), [admin-ui-kit](../features/admin-ui-kit.md) |
+| Features | [admin-shell](../features/admin-shell.md), [admin-home](../features/admin-home.md), [admin-ui-kit](../features/admin-ui-kit.md) |
 | Feature doc | — (this section) |
 
 **Rules that must hold**
+- **A refused admin screen leaves its URL, and no admin screen scrolls the page sideways on a phone** ([harvest2-lane9](history.d/2026-09-26-harvest2-lane9-ops.md#harvest2-lane9-2026-09-26)):
+  a role without an admin route's view (or the admin role, for `/admin/roles`,
+  `/admin/monitoring`, `/admin/mcp` — `ADMIN_ONLY_PATHS` in `router.js`) is sent
+  home by the router's early guard, never shown the home page under the admin
+  URL. At 375px nothing in `.admin-shell` widens the page: title rows and
+  toolbars wrap, a table without an `.admin-table-wrap` scrolls inside itself
+  (the phone block at the end of `admin-shell.css`), and grid tracks that hold
+  a chart or a wide child are `minmax(0, 1fr)`, never a bare `1fr`. The role ×
+  route harness (`e2e/roles`) checks every route both ways.
 - **Layout preferences live on the account** ([harvest-ice-b](HISTORY.md#harvest-ice-b-2026-09-24)): `users.page_widths` /
   `aside_widths` (`{ '<page key>' | '*': width }`) and `page_width_motion`
   (111) ride on every session payload like `theme`; a page's key is the
@@ -269,16 +398,77 @@ company/                  gitignored: plans, decisions, logs, market-research st
   keys are stable; saved per-admin layouts keep their old placement until Reset
   [r1](HISTORY.md#r1), [admin-reshape](HISTORY.md#admin-reshape). The 12-tint row colours ride the
   existing `admin_nav_config` JSONB — no migration [base-sync](HISTORY.md#base-sync).
-- `AdminProjectsView` at unlisted `/admin/projects` is gated on the `dashboard`
-  view OR editor [admin-reshape](HISTORY.md#admin-reshape).
+- `AdminProjectsView` at `/admin/projects` is gated on its own `projects`
+  view (owned by the `projects` module) OR editor; a Vefur sidebar line since
+  the home replaced the overview that linked to it
+  [admin-reshape](HISTORY.md#admin-reshape), [admin-home-idag-2026-09-26](history.d/2026-09-26-feat-admin-home-idag.md#admin-home-idag-2026-09-26).
 - Every admin view carries `destroy()` and a stale-paint sequence guard;
   unmapped enum values print themselves rather than a confidently wrong label
   [review-099](HISTORY.md#review-099).
 - The client CSV writer tracks the server's `PLAIN_NUMBER` exemption
   (`tests/unit/csvClientParity.test.js`) [ui-kit](HISTORY.md#ui-kit).
-- Dashboard cards sit over EXISTING endpoints, each gated on the view its
-  endpoint demands; dashboard-less users are forwarded to their first visible
-  view ([admin-reshape](HISTORY.md#admin-reshape), [sales-staff](HISTORY.md#sales-staff)).
+- **The admin home is ONE role-gated endpoint** ([admin-home-idag-2026-09-26](history.d/2026-09-26-feat-admin-home-idag.md#admin-home-idag-2026-09-26)):
+  `GET /api/v1/admin/home`, session + the `dashboard` view. Every block is
+  COMPUTED server-side only for a view the role holds — the views
+  `requireView.resolveViews` resolves (2FA-withheld), minus a switched-off
+  module's, minus (for a `'*'` holder only) the product's
+  `identity.surface.hiddenAdminViews`, the sidebar's rule. A key the role
+  cannot see is ABSENT from the JSON (never null, never 0); the client only
+  re-checks `canSeeView` before it links. Independent sources run in one
+  `Promise.allSettled`; a failing one drops its blocks, is logged, and the
+  answer is still 200 with `errors: [...]`. Amounts integer ISK, times ISO
+  UTC, no labels from the server (the words are `adminHome.*`). Setup (Fyrstu
+  skrefin) is admins only and derived, never stored; `null` once every step
+  is done. A 45 s per-viewer cache is allowed (the header prints "staðan kl.
+  HH:MM"), never polling: keyed on the viewer + resolved views + admin flag +
+  switched-off modules (`adminHomeCache.cacheKey`), never storing an answer
+  with `errors`, and cleared when a lead is erased or aged out (the feed
+  names enquirers). Dashboard-less roles are forwarded to their first
+  visible view, an editor with none to the projects board
+  ([admin-reshape](HISTORY.md#admin-reshape), [sales-staff](HISTORY.md#sales-staff)).
+- **An attention to-do counts exactly the rows its link opens, and an unread
+  one is "—", never 0** ([harvest2-lane5](history.d/2026-09-26-harvest2-lane5-reports.md#harvest2-lane5-2026-09-26),
+  icelandicstore #417): `TODO_LINKS` in `services/adminHome.js` gives each
+  counted kind its view and its FILTERED list — orders to fulfil →
+  `/admin/shop/orders?view=open` (`Order.ORDER_VIEWS.open`), sold out →
+  `/admin/inventory?status=out` (the Birgðavakt's `out` bucket, the SAME
+  `Inventory.watchRows` → `buildWatchReport` the page renders; `inventory` view),
+  sign-ups awaiting approval → `/admin/users?status=pending`
+  (`utils/signupApproval.js`, `users` view), open change requests →
+  `/admin/feedback?status=open`; the count and the list share ONE predicate
+  (`adminHomeAttention.test.js` holds each card to its list's row count). A
+  source that fails still sends its row, `{ failed: true, count: null }` —
+  only for a view the role holds — and the client prints "—" and "Náðist
+  ekki að lesa"; the VSK deadline (a number of days, not rows) is exempt.
+- **Sales channels (`salesToday.byChannel`) — the rule is to confirm with
+  Bókari/Halli**: web = shop orders (ISK) paid today (`orders` view);
+  wholesale = invoices issued today NOT created from an order (`invoices`);
+  pos = till receipts rung up today (`pos`). A channel the instance has but
+  the role lacks is omitted, never zeroed, and the figure says `partial`.
+  **The sales totals are gated by the CHANNEL views** (`orders` /
+  `invoices` / `pos`) — each is the screen that already shows those
+  documents — **not by the `sales` report view** (decision I1, security
+  review 2026-09-26); holding `sales` alone shows no sales figure.
+  The comparison is the same weekday last week up to the same time of day.
+  Till sales are aggregated, never listed in the feed. Change requests have
+  only open/resolved: the home says "N opnar", never "waiting on you"
+  ([admin-home-idag-2026-09-26](history.d/2026-09-26-feat-admin-home-idag.md#admin-home-idag-2026-09-26)).
+- **"Í dag" is its own feature, `admin-home`, so a product can fork it alone**
+  ([engine-sync-gaps-2026-09-26](history.d/2026-09-26-fix-engine-sync-gaps-2026-09-26.md#engine-sync-gaps-2026-09-26)):
+  a product whose `/admin` is its own overview (LedgerLink) records
+  `"admin-home": { "status": "forked", "note": "…" }` in `features/local.json`
+  and `e2e/admin-home.spec.js` skips there with the note — never
+  `"admin-shell"`, which would silence the sidebar's specs too. The endpoint
+  and its Jest suites keep running everywhere, and read the seam: a product
+  that hides `orders`, `pos` AND `invoices` from a `'*'` holder has no sales
+  channel, so no `salesToday` and no payments in the feed.
+- **On a phone the nav's brand column gives way, never its controls**
+  ([engine-sync-gaps-2026-09-26](history.d/2026-09-26-fix-engine-sync-gaps-2026-09-26.md#engine-sync-gaps-2026-09-26)):
+  at ≤ 1024px `.lol-nav__brand` shrinks and the wordmark ellipsises while
+  `.lol-nav__right` keeps its size. The brand used to be `flex: 0 0 auto`, so
+  the account button shrank below its content and its caret scrolled every
+  signed-in page sideways (1px at 375 on CI's Linux fonts with the TEST pill;
+  53px at 320 anywhere). `e2e/admin-roles-grid.spec.js` checks 375 and 320.
 - Kit contract: `listState` uses `replaceState` only, never `pushState`; page
   size is NOT in the URL; `adminPager.PAGE_SIZES` tops out at 200 because
   `leadsController` clamps `limit` to [1,200]; `sortableTh` emits a real
@@ -290,8 +480,41 @@ company/                  gitignored: plans, decisions, logs, market-research st
   above near the bottom ([harvest-2](HISTORY.md#harvest-2)).
 - Neutral status chips use `--text-secondary`; `--overlay` is a per-theme token
   ([review-099](HISTORY.md#review-099)).
+- **A free-text field with known values is the kit `Combobox`**, never a
+  native `<datalist>` (no affordance, and it filters itself empty once the field
+  holds a value). Object entries show `label`, hand `value` to `onPick`, may
+  carry display-only `meta` and hidden match `keywords`. A server-backed source
+  is async with `debounceMs`/`minQuery`, and a server that matches on fields
+  other than the label passes them as `keywords`. Every attach is detached in
+  the view's `destroy()`, and inputs that re-render attach lazily on focus
+  ([harvest2-lane4a](history.d/2026-09-26-harvest2-lane4a-uikit.md#harvest2-lane4a-2026-09-26)).
+- **A file download from a Blob goes through `downloadBlob`**, which revokes
+  the object URL after 30 s, never synchronously. Safari cancels a download
+  whose URL is revoked straight after `click()`
+  ([harvest2-lane4a](history.d/2026-09-26-harvest2-lane4a-uikit.md#harvest2-lane4a-2026-09-26)).
+- **A region that scrolls sideways is keyboard-focusable while it overflows**
+  (WCAG 2.1.1). `stickyHScroll` gives the wrap `tabindex="0"`, `role="region"`
+  and an aria-label only then, and re-measures on a ResizeObserver, on resize
+  and on `visibilitychange`
+  ([harvest2-lane4a](history.d/2026-09-26-harvest2-lane4a-uikit.md#harvest2-lane4a-2026-09-26)).
+- **A drop zone answers during the drag**. It checks by MIME with
+  `utils/dragFiles.js`, lets an untyped item through, still calls
+  `preventDefault`, and the drop handler re-checks and stays the authority
+  ([harvest2-lane4a](history.d/2026-09-26-harvest2-lane4a-uikit.md#harvest2-lane4a-2026-09-26)).
+- **An admin detail view names its subject in the tab**:
+  `view.documentTitle = adminPageTitle(label, getLocale())`. A view whose
+  `render()` does not await its load also sets `document.title` once it knows
+  it is still live
+  ([harvest2-lane4a](history.d/2026-09-26-harvest2-lane4a-uikit.md#harvest2-lane4a-2026-09-26)).
+- **Dates go through `formatDate`/`formatDateTime`** (`utils/format.js`, app
+  locale, Icelandic built by hand). A raw `toLocale*()` call anywhere else under
+  `public/js` fails `tests/unit/adminPageTitle.client.test.js`
+  ([harvest2-lane4a](history.d/2026-09-26-harvest2-lane4a-uikit.md#harvest2-lane4a-2026-09-26)).
+- `.form-input[readonly]` looks read-only (`--bg-hover`, `--text-secondary`),
+  and its text stays selectable
+  ([harvest2-lane4a](history.d/2026-09-26-harvest2-lane4a-uikit.md#harvest2-lane4a-2026-09-26)).
 
-**History**: [r1](HISTORY.md#r1) · [admin-reshape](HISTORY.md#admin-reshape) · [ui-kit](HISTORY.md#ui-kit) · [harvest-ice-b-2026-09-24](HISTORY.md#harvest-ice-b-2026-09-24)
+**History**: [r1](HISTORY.md#r1) · [admin-reshape](HISTORY.md#admin-reshape) · [ui-kit](HISTORY.md#ui-kit) · [harvest-ice-b-2026-09-24](HISTORY.md#harvest-ice-b-2026-09-24) · [admin-home-idag-2026-09-26](history.d/2026-09-26-feat-admin-home-idag.md#admin-home-idag-2026-09-26) · [harvest2-lane4a-2026-09-26](history.d/2026-09-26-harvest2-lane4a-uikit.md#harvest2-lane4a-2026-09-26)
 
 ## 3. Public site — home, /thjonusta, /um-okkur, /hafa-samband, SSR meta, sitemap, SEO
 
@@ -300,18 +523,35 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Routes | `server/routes/contactRoutes.js` → `/api/v1/contact` · `server/routes/sitemapRoutes.js` (`/sitemap.xml` with `<lastmod>`, `/llms.txt`) · `server/routes/manifestRoutes.js` (`/manifest.json`, named after the identity) · `server/routes/robotsRoutes.js` (`/robots.txt`, Disallow lines from `hiddenRoutes`; `public/robots.txt` is the engine default it replaces) |
 | Controllers | `server/controllers/contactController.js` |
 | Services | `server/services/indexNow.js`, `server/services/outboundAllowlist.js` |
-| Config / middleware | `server/config/publicSurface.js`, `clientConfig.js`, `identity.js` (the resolved `identity.*` + the head helpers), `appEnv.js`, `version.js`, `paths.js`; `server/middleware/ssrMeta.js` (`ROUTE_META`, `DEFAULT_META` page parts, `SERVICE_OFFERINGS`, JSON-LD incl. the Organization); `server/utils/canonicalHost.js` (hallismiley's `APP_URL` → host resolver; the engine's `app.js` resolves inline — see Ownership notes) |
+| Config / middleware | `server/config/publicSurface.js`, `clientConfig.js`, `identity.js` (the resolved `identity.*` + the head helpers), `appEnv.js`, `version.js`, `paths.js`; `server/middleware/ssrMeta.js` (`ROUTE_META`, `DEFAULT_META` page parts, `SERVICE_OFFERINGS`, JSON-LD incl. the Organization); `server/utils/indexability.js` (who may be indexed — robots.txt, the robots meta and the sitemap all read it); `server/utils/canonicalHost.js` (hallismiley's `APP_URL` → host resolver; the engine's `app.js` resolves inline — see Ownership notes) |
 | Views | `public/js/views/HomeView.js`, `ThjonustaView.js`, `UmOkkurView.js`, `ContactView.js`, `PrivacyView.js`, `TermsView.js`, `NotFoundView.js`; `HalliView.js` serves the hidden `/about`/`/halli` (`AboutView.js` is dead — see Ownership notes) |
-| Components | `public/js/components/NavBar.js` |
-| Client | `public/js/router.js` (lazy `VIEWS` table + `make()`), `routePatterns.json` (the route list the server 404s against; `server/utils/spaRoutes.js` reads it), `navigate.js`, `main.js`, `consent.js`; `public/js/utils/identity.js` (the client half of the identity seam), `reveal.js`, `motion.js`, `productSite.js`, `sanitizeHtml.js`, `slug.js`, `features.js` |
+| Components | `public/js/components/NavBar.js`, `navMenuCloser.js` (the one document-level account-menu closer) |
+| Client | `public/js/router.js` (lazy `VIEWS` table + `make()`), `routePatterns.json` (the route list the server 404s against; `server/utils/spaRoutes.js` reads it), `navigate.js`, `main.js`, `consent.js`; `public/js/utils/identity.js` (the client half of the identity seam), `reveal.js`, `motion.js`, `productSite.js`, `sanitizeHtml.js`, `slug.js`, `features.js`; `public/js/utils/contactFormat.js` + its server twin `server/utils/contactFormat.js` (the phone + Icelandic postcode shapes; also used by `validate.js` and the checkout) |
 | CSS | `public/css/home.css`, `business-pages.css`, `contact.css`, `video-section.css`, `fonts.css` |
-| Jest | `tests/integration/contact.test.js`, `sitemap.test.js`, `llms.test.js`, `ssrMeta.test.js`, `identityDownstream.test.js`, `spaStatus.test.js`; `tests/unit/routePatterns.test.js`, `routerLazyViews.test.js`; `tests/unit/clientConfig.test.js`, `identityConfig.test.js`, `appEnv.test.js`, `slug.test.js`, `slug.client.test.js`, `outboundAllowlist.test.js`, `version.test.js`, `buildManifest.test.js`; `canonicalHost.test.js` (hallismiley) |
+| Jest | `tests/integration/contact.test.js`, `contactContentOs002.test.js`, `sitemap.test.js`, `llms.test.js`, `ssrMeta.test.js`, `identityDownstream.test.js`, `spaStatus.test.js`, `indexability.test.js`; `tests/unit/routePatterns.test.js`, `routerLazyViews.test.js`, `indexability.test.js`, `navMenuCloser.client.test.js`, `contactFormat.test.js`; `tests/unit/clientConfig.test.js`, `identityConfig.test.js`, `appEnv.test.js`, `slug.test.js`, `slug.client.test.js`, `outboundAllowlist.test.js`, `version.test.js`, `buildManifest.test.js` |
 | e2e | `e2e/business-routes.spec.js`, `lazy-views.spec.js`, `contact.spec.js`, `navigation.spec.js`, `responsive.spec.js`, `responsive-screenshots.spec.js`, `editable-homepage.spec.js` |
 | Migrations | 005, 017 |
 | Features | [public-site](../features/public-site.md), [hallismiley-site](../features/hs/hallismiley-site.md) (hs); the engine's own product feature `features/os/company-content.md` is foreign here (inert, not linked) |
 | Feature doc | `docs/API.md` (Contact); `docs/SALES-STAFF.md` for what a submission becomes |
 
 **Rules that must hold**
+- **The nav never adds a listener per render** ([harvest2-lane1b](history.d/2026-09-26-harvest2-lane1b-defects.md#harvest2-lane1b-2026-09-26)): `_renderAuth` runs again on
+  every authchange, userchange and locale switch, so the account menu is
+  closed by ONE document click listener (`navMenuCloser.installMenuCloser`,
+  idempotent) and the language buttons carry a bind-once mark. A per-render
+  `document.addEventListener` piles up in a long-lived tab and pins detached
+  menus (ported from icelandicstore #379; `navMenuCloser.client.test.js`).
+- **Only production on a public host is indexable** ([harvest2-lane1a](history.d/2026-09-26-harvest2-lane1a-security.md#harvest2-lane1a-2026-09-26); ported from
+  icelandicstore #123): `server/utils/indexability.js` `isIndexableRequest(req)` is
+  false when `APP_ENV` is set to anything but `production`, or the request Host is an
+  infrastructure host (`*.azurewebsites.net`, localhost / `*.localhost`, a bare IPv4 or
+  IPv6 literal). Then `/robots.txt` is `User-agent: *` + `Disallow: /`, every page's
+  robots meta is `noindex, nofollow`, `/sitemap.xml` is a valid EMPTY urlset and
+  `/llms.txt` is a 404 envelope — the four read the one helper and send `Vary: Host`
+  (a demo instance's robots.txt is `Disallow: /` too). Keyed on the Host, never on
+  `APP_URL`, so it is right before and after a custom domain is bound. A suite that
+  asserts indexability sends the public Host (`new URL(process.env.APP_URL).host`);
+  supertest's default `127.0.0.1` is an infrastructure host.
 - **Unknown paths answer 404** ([harvest-ice-e](HISTORY.md#harvest-ice-e-2026-09-24)): the shell (same body, `noindex`)
   with status 404 for a path no SPA route matches (`public/js/routePatterns.json`
   via `server/utils/spaRoutes.js`, or a product route in `ROUTE_META`) and for a
@@ -329,6 +569,12 @@ company/                  gitignored: plans, decisions, logs, market-research st
   `routerLazyViews.test.js`. A module that cannot load goes to
   `recoverFromAssetFailure()` (reload onto a new release, else one reload,
   then `errors.pageLoadFailed`). `pageTitle` and module switches (R4) are unchanged.
+- **A legal page names the site it is on** ([legal-pages-site-host-2026-09-25](HISTORY.md#legal-pages-site-host-2026-09-25)):
+  `TermsView`/`PrivacyView` write `{siteHost}` and fill it from
+  `utils/identity.js` `siteHost()` (the canonical origin, APP_URL) — never a
+  host literal, since every product serves these views. The fill is a
+  replacer function (`replaceAll('{siteHost}', () => host)`), per the
+  replacement-pattern rule.
 - **The public IA is the product's** ([identity-seam-2](HISTORY.md#identity-seam-2-2026-09-23)):
   `/`, then `identity.surface.nav` (ordered `{ route, labelKey }` entries;
   `/thjonusta`, `/um-okkur`, `/hafa-samband` here), then the legal pages —
@@ -365,6 +611,19 @@ company/                  gitignored: plans, decisions, logs, market-research st
   service names — change them together; no `price` in structured data;
   `public/js/utils/productSite.js` is the one place that builds the product-site
   URL ([services-page](HISTORY.md#services-page)).
+- **The company site names no software it replaces, and does not describe
+  the product's stack** ([contact-page-company-2026-09-26](HISTORY.md#contact-page-company-2026-09-26)):
+  categories ("vefverslunarkerfi", "bókhaldskerfi"), not products, in copy
+  and in the contact form's platform select (`KNOWN_PLATFORMS` still accepts
+  the old product values). A contact-copy change ships with a product
+  migration for the seeded rows; `contactContentOs002.test.js` checks the
+  ContactView defaults and os_002 agree.
+- **One phone rule, one postcode rule, two twins** ([harvest2-lane4b](history.d/2026-09-26-harvest2-lane4b-shop-i18n.md#harvest2-lane4b-2026-09-26)):
+  `server/utils/contactFormat.js` (`PHONE_RE`, `isValidZip`) and its ESM twin
+  are the only definitions; `validate.js` (signup/profile phone), the contact
+  form (`errors.contact.phoneInvalid`, still `{ errors: [...] }`) and the
+  checkout address import them. `tests/unit/contactFormat.test.js` runs both
+  through one corpus.
 - Homepage = the hallismiley composition: dark video hero, light site below;
   the media-hero surfaces are fixed dark on EVERY theme (`home.css`), which is
   how invariant 15 is met. A new hero clip gets a NEW filename (the `public/`
@@ -474,7 +733,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Client | `public/js/theme-boot.js`, `public/js/services/themePrefs.js`, `ambiencePrefs.js`; `public/js/utils/chartTheme.js`, `motion.js` |
 | CSS | `public/css/themes.css`, `theme-switcher.css`, `iceland-scene.css`, `test-env.css` |
 | Scripts | `scripts/build-iceland-scenes.js`, `scripts/audit-text-contrast.js`, `scripts/self-host-fonts.js`, `scripts/recompress-images.js` |
-| Jest | `tests/integration/ambience.test.js`; `tests/unit/themePrefsAccount.client.test.js`, `themePrefsEnv.client.test.js`, `themeTokenDefined.test.js` (every `var(--x)` names a defined token) |
+| Jest | `tests/integration/ambience.test.js`; `tests/unit/themePrefsAccount.client.test.js`, `themePrefsEnv.client.test.js`, `themeTokenDefined.test.js` (every `var(--x)` names a defined token), `themeTokenContrast.test.js` (WCAG pairs on every theme; reader in `tests/themeTokens.js`) |
 | e2e | `e2e/iceland-scene.spec.js` |
 | Migrations | 083, 084 (user theme; 084 is SUPERSEDED here — `product-migrations/hs.js`), 086, 089 (landing background scene/video), 094 (three-theme set), 106 (theme CHECK dropped so a product may add ids) |
 | Features | [ambience](../features/ambience.md), [scene-engine](../features/scene-engine.md), [themes](../features/themes.md) |
@@ -534,23 +793,59 @@ company/                  gitignored: plans, decisions, logs, market-research st
 - The three themes grade the same photos via `--scene-*` tokens (Miðnætti is
   the hardest cut, for contrast) [scene-engine](HISTORY.md#scene-engine).
 - `landing_background` mode `video` is the hero default (089 reverted 086).
+- **Token contrast is measured on every picker theme**
+  (`tests/unit/themeTokenContrast.test.js`, reader `tests/themeTokens.js`,
+  with the theme set taken from `identity.theme`). The ≥ 4.5:1 pairs are:
+  - text-primary, text-secondary and text-muted on base, surface, elevated
+    and hover;
+  - `--accent-ink` on the same four surfaces;
+  - `.btn--primary`'s `--on-accent` label on `--gold`, on every
+    `--accent-gradient` stop and on its hover fill, `--accent-hover`.
 
-**History**: [scene-engine](HISTORY.md#scene-engine) · [base-sync](HISTORY.md#base-sync) (6C theme) · [iceland-v2](HISTORY.md#iceland-v2) · [harvest-ice-b-2026-09-24](HISTORY.md#harvest-ice-b-2026-09-24) · [engine-graft](HISTORY.md#engine-graft)
+  The ≥ 3:1 pairs are focus rings and state borders. A failing pair is fixed
+  by re-hueing the token VALUE in the theme where it fails, or, where
+  CLAUDE.md pins the value, by pointing the rule at the contract token that
+  exists for it. A threshold is never lowered. A filled control's hover is
+  `--accent-hover`, never `--gold-light`
+  ([harvest2-lane4a](history.d/2026-09-26-harvest2-lane4a-uikit.md#harvest2-lane4a-2026-09-26)).
+
+**History**: [scene-engine](HISTORY.md#scene-engine) · [base-sync](HISTORY.md#base-sync) (6C theme) · [iceland-v2](HISTORY.md#iceland-v2) · [harvest-ice-b-2026-09-24](HISTORY.md#harvest-ice-b-2026-09-24) · [harvest2-lane4a-2026-09-26](history.d/2026-09-26-harvest2-lane4a-uikit.md#harvest2-lane4a-2026-09-26) · [engine-graft](HISTORY.md#engine-graft)
 
 ## 5. i18n
 
 | | |
 |---|---|
 | Server | `server/config/i18n.js`, `server/i18n/index.js`, `server/i18n/en.json`, `server/i18n/is.json`; `server/middleware/locale.js` |
-| Services | `server/services/translator.js`, `autoTranslateFields.js`, `siteContentTranslate.js`; `server/services/anthropicAuth.js` (how every Claude call authenticates: workload identity or the key; boot self-check) |
+| Services | `server/services/translator.js`, `autoTranslateFields.js`, `siteContentTranslate.js`; `server/services/anthropicAuth.js` (how every Claude call authenticates: workload identity or the key; boot self-check); `server/services/aiGate.js` (the process-wide cap on concurrent paid AI calls, `AI_MAX_CONCURRENT`) |
 | Client | `public/js/i18n/i18n.js`, `public/js/i18n/en.json`, `public/js/i18n/is.json` |
 | Scripts | `scripts/check-i18n-keys.js` (`npm run check:i18n`), `scripts/backfill-is-translations.js`, `scripts/retranslate-party-en.js` |
-| Jest | `tests/integration/i18n.test.js`, `content.translate.test.js`, `news.translate.test.js`, `party.translate.test.js`; `tests/unit/translator.test.js`, `autoTranslateFields.test.js`, `localeLock.test.js`, `localeLockClient.test.js`, `i18nIdentity.test.js`, `plural.client.test.js`, `i18nLoadFailure.client.test.js`, `formatMoney.client.test.js`, `formatDate.client.test.js`; `tests/unit/anthropicAuth.test.js`, `anthropicWifWiring.test.js` |
+| Jest | `tests/integration/i18n.test.js`, `content.translate.test.js`, `news.translate.test.js`, `party.translate.test.js`; `tests/unit/translator.test.js`, `autoTranslateFields.test.js`, `localeLock.test.js`, `localeLockClient.test.js`, `i18nIdentity.test.js`, `plural.client.test.js`, `i18nLoadFailure.client.test.js`, `formatMoney.client.test.js`, `formatDate.client.test.js`; `tests/unit/anthropicAuth.test.js`, `anthropicWifWiring.test.js`, `aiGate.test.js` |
 | Migrations | 028–038 (eleven consecutive i18n migrations) |
 | Features | [i18n](../features/i18n.md) |
 | Feature doc | — |
 
 **Rules that must hold**
+- **Every paid Claude call takes an `aiGate` slot** ([harvest2-lane1b](history.d/2026-09-26-harvest2-lane1b-defects.md#harvest2-lane1b-2026-09-26); `AI_MAX_CONCURRENT`,
+  default 4; ported from icelandicstore #218's visionGate). Fan-out and
+  background callers (the translator's parallel batches) use
+  `withQueuedSlot` — FIFO wait, the call's own timeout starting only once the
+  slot is held — and treat `AiBusyError` like any failure (target locale left
+  empty; the translator never throws). A call a request awaits (`translate()`,
+  from `autoTranslateFields` before a save) waits at most 1 s, so wait + call
+  stay inside the 10 s shutdown grace; tree batches run in waves of
+  `maxConcurrent()` chunks and a BUSY batch is never retried per leaf (that
+  would multiply the calls the gate holds back). A request-path caller uses `withSlot`
+  and lets `AiBusyError` reach the central error middleware: 429 +
+  `Retry-After` + `reason: AI_BUSY`. It is resource protection, never a usage
+  budget: no per-IP limiter on AI paths (ice's owner decision). The free
+  boot self-check (`models.list`) is not gated. ice's shutdown handshake is
+  not ported — add it with the first AI call that can outlive server.js's
+  10 s grace.
+- **The translator salvages JSON wrapped in prose** ([harvest2-lane1b](history.d/2026-09-26-harvest2-lane1b-defects.md#harvest2-lane1b-2026-09-26); `parseJsonArray`, from
+  icelandicstore #216): the whole reply, then the outermost `[…]`, then an
+  outermost `{…}` holding exactly one array; the length check still decides.
+  A reply that still fails logs `stopReason` (pino) — `max_tokens` is a
+  truncated array, `end_turn` a model that ignored the format.
 - **Counted strings use `plural(n, 'x.one', 'x.many')`** ([harvest-ice-e](HISTORY.md#harvest-ice-e-2026-09-24)): the
   Icelandic rule is the last digit (1, 21, 101 singular; 11, 111 plural);
   both keys exist in both tables with the count as `{n}`, and
@@ -574,6 +869,12 @@ company/                  gitignored: plans, decisions, logs, market-research st
   both interpolations (`server/i18n/index.js`, `public/js/i18n/i18n.js`)
   pass a replacer function, so `$&`, `$'` and `$$` in a name or a config
   string are never expanded as replacement patterns.
+- **No English literal reaches a page through module state** ([harvest2-lane4b](history.d/2026-09-26-harvest2-lane4b-shop-i18n.md#harvest2-lane4b-2026-09-26)):
+  a default-copy object is BUILT at render through `t()` (ProductView's
+  `defaultChrome()`), never a module-level object of literals — the locale table
+  is not loaded when a module is first evaluated. Label maps hold locale KEYS
+  (`utils/colorLabels.js`). Static chrome outside `#app` (the skip link, the nav
+  landmark's `aria-label`) is re-translated on `localechange`.
 - **Tests assert the visitor default, not Icelandic** ([identity-seam-2](HISTORY.md#identity-seam-2-2026-09-23)):
   `tests/lib/locale.js` (`PUBLIC_DEFAULT_LOCALE`, `tx()`, `tClient()`,
   `localePrefix()`; `e2e/lib/locale.js` re-exports it) is where an engine
@@ -735,11 +1036,11 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Auth | `server/auth/accountScope.js`, `server/auth/commissionScope.js` |
 | Views | `public/js/views/AdminAccountsView.js`, `AdminAccountDetailView.js`, `AdminCommissionView.js`, `AdminStatementView.js`, `AdminCustomersView.js` |
 | Components | `public/js/components/CommissionStatement.js`, `CustomerNotes.js` |
-| Client | `public/js/services/accounts.js`, `commission.js`, `adminCustomers.js`, `adminCustomerNotes.js` |
+| Client | `public/js/services/accounts.js`, `commission.js`, `adminCustomers.js`, `adminCustomerNotes.js`; `public/js/utils/passthrough.js` (the pass-through invoice preview) |
 | CSS | `public/css/admin-accounts.css`, `admin-customers.css` |
 | Jest | `tests/integration/accounts.test.js`, `commission.test.js`, `commissionStatements.test.js`, `adminCustomers.test.js`, `adminCustomerNotes.test.js`, `staffAudit.test.js` |
 | e2e | `e2e/accounts.spec.js` (+ `e2e/lib/accounts.js`) |
-| Migrations | 064 (customer notes), 098, 099, 100, 102 |
+| Migrations | 064 (customer notes), 098, 099, 100, 102, 117 (`users.address1…country`, a customer's own address) |
 | Features | [commission](../features/commission.md), [customer-accounts](../features/customer-accounts.md), [customers-crm](../features/customers-crm.md), [staff-audit](../features/staff-audit.md) |
 | Feature doc | `docs/SALES-STAFF.md`; decisions D-003/D-005/D-019 in `company/DECISIONS.md` |
 
@@ -755,6 +1056,12 @@ company/                  gitignored: plans, decisions, logs, market-research st
   an admin, silently ([review-099](HISTORY.md#review-099)).
 - Lifecycle = `TRANSITIONS`; a skip is 409; every write lands in
   `staff_audit_log` on the SAME client; the log is immutable.
+- **Pass-through invoices never carry commission** ([passthrough-invoice](history.d/2026-09-26-feat-passthrough-invoice.md#passthrough-invoice-2026-09-26)):
+  D-022's hosting and AI costs are billed as `kind: 'passthrough'`, and the
+  commission hook runs for `invoiceService.COMMISSIONABLE_KINDS` (build,
+  recurring) ONLY — an allow-list, so a kind added later pays nobody until it
+  is added there on purpose. Never bill a pass-through as a `recurring`
+  invoice with `amount_net_isk` overridden: that pays the seller 10 % of it.
 - Commission: 15% build / 10% recurring, overage earns none (D-003); seller +
   rate snapshotted per invoice (`UNIQUE(invoice_id)`);
   payable is an AMOUNT (`PAYABLE_NOW_ISK`) netting credits and refunds with a
@@ -770,8 +1077,49 @@ company/                  gitignored: plans, decisions, logs, market-research st
 - The 6-month tail (contract 4.3) has no code — owner change moves future
   commission immediately; use a `manual_credit` adjustment until built.
 - `accounts` holders are 2FA-protected like admins (see domain 1).
+- `staffAudit.ACTIONS` is the closed vocabulary ([harvest2-lane1b](history.d/2026-09-26-harvest2-lane1b-defects.md#harvest2-lane1b-2026-09-26)): an action written anywhere
+  must be listed there in the same change (a missing name is refused by
+  `record()` and silently dropped by `recordSafe`). `user.deleted` rows name
+  their user by `entity_id`, which is not a foreign key, so they outlive it.
+- **One customer: read, edit, invite — held to a PLAIN customer**
+  ([harvest2-lane3](history.d/2026-09-26-harvest2-lane3-users.md#harvest2-lane3-2026-09-26)):
+  `GET`/`PATCH /api/v1/admin/customers/:id` and `POST /:id/invite` are gated
+  on the `customers` view (Halli's scope, 2026-09-26), declared after every
+  fixed path in the router so `/:id` never captures `invite-template`. The
+  model refuses anything but a plain customer (`Customer.findEditable` /
+  `EDITABLE`: role `user`, no extra `user_roles` grant, not a party guest —
+  the `deleteCustomers` guards) with a 404, never 403. That guard is what keeps
+  a non-admin holder of the view from re-pointing a STAFF login's email and
+  taking it over through forgot-password; any new one-customer route uses it.
+- **A customer edit** ([harvest2-lane3](history.d/2026-09-26-harvest2-lane3-users.md#harvest2-lane3-2026-09-26))
+  may change the EMAIL only with admin (`hasRole(req.user, 'admin')`, the
+  session's set); from a `customers`-view-only holder a changed email is 403
+  `email_admin_only` and nothing in the request is written — name, phone and
+  address need only the view (Halli may loosen this). It
+  changes only the keys sent (blank clears to NULL; the email cannot be blank),
+  validated by `validateCustomerContact`; the email is lowercased and must not
+  be another login's (case-insensitive, 409) or a `noemail.invalid`
+  placeholder; the country is a two-letter code, stored upper-case. An email
+  change sets `email_verified = FALSE` and clears any set-password/reset token
+  in flight and `invited_at` (the seller area's proof of a real address), in
+  the same UPDATE. The address lives on the person (`users.address1, address2, city,
+  zip, country`, migration 117 — icelandicstore's column names exactly, so ice
+  aliases its `114_user_address`). Audited `user.updated` with the NAMES of
+  the changed fields only.
+- **The per-customer invite never returns the set-password link**
+  ([harvest2-lane3](history.d/2026-09-26-harvest2-lane3-users.md#harvest2-lane3-2026-09-26)):
+  `POST /:id/invite` mints a fresh token and sends through
+  `utils/inviteSend.sendWelcomeInvite` ("invite sent means sent" —
+  `invited` only on a confirmed, un-redirected send); the answer says what
+  happened and nothing more, because a holder of the `customers` view who got
+  the link could set the customer's password. 409 once the customer has a
+  password, 400 without a real email. Audited `user.invited`
+  (`via: 'customer_invite'`, `sent`). On Add, "Send the invite now" is OFF by
+  default: `send_invite: false` creates the account, mails nothing, returns no
+  link and audits `user.created`; an absent flag keeps the old send-on-create
+  behaviour for API callers.
 
-**History**: [accounts-commission](HISTORY.md#accounts-commission) · [review-099](HISTORY.md#review-099) · [migrations-100-102](HISTORY.md#migrations-100-102)
+**History**: [accounts-commission](HISTORY.md#accounts-commission) · [review-099](HISTORY.md#review-099) · [migrations-100-102](HISTORY.md#migrations-100-102) · [harvest2-lane3-2026-09-26](history.d/2026-09-26-harvest2-lane3-users.md#harvest2-lane3-2026-09-26) · [passthrough-invoice-2026-09-26](history.d/2026-09-26-feat-passthrough-invoice.md#passthrough-invoice-2026-09-26)
 
 ## 9. Bookkeeping — invoices, VSK, Peppol, intake, settings, replay, payroll
 
@@ -786,21 +1134,47 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Client | `public/js/services/adminBookkeeping.js`; `public/js/utils/money.js`; `public/js/components/ScanInput.js` (the till's USB barcode scanner, harvested from icelandicstore) + `public/css/scan.css` |
 | Scripts | `server/scripts/books-replay.js`, `books-archive-export.js`, `books-backfill-orders.js`, `books-fetch-fx.js`, `seed-books-demo.js` |
 | CSS | `public/css/admin-bookkeeping.css` |
-| Jest | `tests/integration/adminBookkeeping.test.js`, `booksInvoice.test.js`, `booksExpenses.test.js`, `booksLedger.test.js`, `booksVatReturn.test.js`, `booksPeppolUbl.test.js`, `booksIntake.test.js`, `booksPos.test.js`, `booksPayroll.test.js`, `booksReconciliation.test.js`, `booksReports.test.js`, `booksReplay.test.js`, `booksBackfill.test.js`, `booksDeferredRevenue.test.js`; `tests/unit/booksVat.test.js`, `booksVatPeriod.test.js`, `booksCsv.test.js`, `booksDate.test.js`, `booksFx.test.js`, `booksPdf.test.js`, `booksPayroll.test.js`, `booksReplay.test.js`, `booksIntakeShape.test.js`, `booksControllerParse.test.js`, `ublInvoice.test.js`, `money.client.test.js`; `tests/unit/booksRouteOrder.test.js` (hallismiley: `docLimiter` before the view guard on `GET /documents/:id`) |
-| Migrations | 072–079, 095, 096, 099, 101, 103 |
+| Jest | `tests/integration/adminBookkeeping.test.js`, `booksInvoice.test.js`, `booksExpenses.test.js`, `booksLedger.test.js`, `booksVatReturn.test.js`, `booksPeppolUbl.test.js`, `booksIntake.test.js`, `booksPos.test.js`, `booksPayroll.test.js`, `booksReconciliation.test.js`, `booksReports.test.js`, `booksReplay.test.js`, `booksBackfill.test.js`, `booksDeferredRevenue.test.js`, `seedBooksDemo.test.js`, `passthroughInvoice.test.js`; `tests/unit/passthrough.test.js`, `booksVat.test.js`, `booksVatPeriod.test.js`, `booksCsv.test.js`, `booksDate.test.js`, `booksFx.test.js`, `booksPdf.test.js`, `booksPayroll.test.js`, `booksReplay.test.js`, `booksIntakeShape.test.js`, `booksControllerParse.test.js`, `ublInvoice.test.js`, `money.client.test.js`; `tests/unit/booksRouteOrder.test.js` (hallismiley: `docLimiter` before the view guard on `GET /documents/:id`) |
+| Migrations | 072–079, 095, 096, 099, 101, 103, 122 (`passthrough` one-per-period index + the `service_kind` CHECK) |
 | Features | [bookkeeping-core](../features/bookkeeping-core.md), [books-intake](../features/books-intake.md), [books-replay](../features/books-replay.md), [books-settings](../features/books-settings.md), [invoices](../features/invoices.md), [payroll](../features/payroll.md), [peppol-outbound](../features/peppol-outbound.md), [pos](../features/pos.md), [vsk](../features/vsk.md) |
 | Feature doc | `docs/BOOKKEEPING-SYSTEM.md`, `docs/BOOKS-PARALLEL-RUN.md`, `docs/ACCOUNTANT-QUESTIONS.md` |
 
 **Rules that must hold**
+- **The demo seed never touches real books** ([harvest2-lane1a](history.d/2026-09-26-harvest2-lane1a-security.md#harvest2-lane1a-2026-09-26); ported from
+  icelandicstore #427): `npm run seed:books` passes `server/scripts/targetGuard.js`
+  first (a local `_test` database, or the local dev one with `--allow-dev-db`; never
+  a `*_books` / ops / prod name, an Azure host or a deployed environment), and
+  `--wipe` finds the rows the seed created (demo orders → their invoices,
+  payments, credit notes and journal entries; the demo expenses by supplier +
+  invoice number + description + amount; the `demo/demo-*` receipts), REFUSES
+  with `UNSEEDED_BOOKS` — deleting nothing — while any other books row, VAT
+  return or intake item exists, and otherwise deletes exactly those ids in one
+  transaction (the trigger switch included, so a crash cannot leave the
+  immutability triggers off). Restarting the number series is safe only because
+  of the refusal. `seedBooksDemo.test.js` pins it.
 - Statutory documents are never deleted, only credited (505/2013); service
   invoices are deduplicated by partial unique indexes (one build half per
   account, one recurring per account per month; cancelled rows excluded;
   overage deliberately NOT deduplicated — it is metered), 23505 → 409; the
   client disables the submit button too, but the index is the guarantee
-  [review-099](HISTORY.md#review-099).
+  [review-099](HISTORY.md#review-099). One `passthrough` per account per
+  period (122) — the AI allowance is monthly — and there a FULLY credited
+  invoice frees the period as well as a cancelled one, so a corrected metered
+  bill is a full credit note plus a new invoice ([passthrough-invoice](history.d/2026-09-26-feat-passthrough-invoice.md#passthrough-invoice-2026-09-26)).
 - `createServiceInvoice`: build 50%/50% (D-005), recurring month with a
-  pro-rating override, overage; ex VSK + 24%; the same counter/lines/journal/
+  pro-rating override, overage, pass-through; ex VSK + 24%; the same counter/lines/journal/
   books-audit path as orders, with the account row locked [accounts-commission](HISTORY.md#accounts-commission).
+- **Pass-through arithmetic** ([passthrough-invoice](history.d/2026-09-26-feat-passthrough-invoice.md#passthrough-invoice-2026-09-26)):
+  `computePassthrough` is the one rule (the admin preview's
+  `utils/passthrough.js` is pinned to it by `tests/unit/passthrough.test.js`):
+  the AI allowance off the period's AI lines in order, never below zero; the
+  markup per line, `Math.round`; VSK once on the net total, allocated to the
+  lines by largest remainder so the lines sum to it. The markup and the
+  allowance are read from `billing.passthrough` (product config) — never a
+  literal in engine code. The net is credited to 4110 like the contract month
+  (ACCOUNTANT-QUESTIONS §12 is open on a separate account). `service_kind` is
+  a closed vocabulary since 122 (CHECK, NOT VALID): a new kind widens it in
+  the release that starts writing it.
 - The invoice keeps the buyer party AS AT ISSUE; the account holds the CURRENT
   value; `invoice_ready` (a kennitala) gates issuing, `peppol_complete` gates
   only the export; `peppol/party.js` is ONE rule with two callers; an
@@ -810,6 +1184,14 @@ company/                  gitignored: plans, decisions, logs, market-research st
   move; **2150 never goes debit**; release posts on the final build half;
   crediting a RELEASED deposit goes against `recognised_into_account`, never
   2150 [migrations-100-102](HISTORY.md#migrations-100-102).
+- **The order-invoice VAT core is shared with the checkout** ([harvest2-lane5](history.d/2026-09-26-harvest2-lane5-reports.md#harvest2-lane5-2026-09-26)):
+  `buildLines` translates unit prices, shipping and the total to ISK, then
+  calls `server/utils/orderVat.js` `computeOrderVat` (per-line rate, export
+  rule, proportional discount incl. shipping, sléttun at the largest line's
+  rate); the checkout snapshot (migration 121) calls the same core in the
+  order's currency. `tests/unit/orderVatParity.test.js` pins `buildLines` to
+  its pre-extraction output (`tests/fixtures/buildLinesGolden.json`) — a VAT
+  change that moves the golden is a change to what the books say.
 - Client money is minor units at the API boundary (`money.js`): the expense
   form once sent major units where the API takes minor, so USD 20.00 typed as
   `20` booked as USD 0.20.
@@ -827,7 +1209,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
   move stock — the engine's POS never did; that is a separate decision
   ([harvest-ice-c-2026-09-24](HISTORY.md#harvest-ice-c-2026-09-24)).
 
-**History**: [accounts-commission](HISTORY.md#accounts-commission) · [review-099](HISTORY.md#review-099) · [migrations-100-102](HISTORY.md#migrations-100-102) · [harvest-ice-c-2026-09-24](HISTORY.md#harvest-ice-c-2026-09-24) · `PLAN.md` Status (own books programme)
+**History**: [accounts-commission](HISTORY.md#accounts-commission) · [review-099](HISTORY.md#review-099) · [migrations-100-102](HISTORY.md#migrations-100-102) · [harvest-ice-c-2026-09-24](HISTORY.md#harvest-ice-c-2026-09-24) · [passthrough-invoice-2026-09-26](history.d/2026-09-26-feat-passthrough-invoice.md#passthrough-invoice-2026-09-26) · `PLAN.md` Status (own books programme)
 
 ## 10. Sales handbook — Handbók sölufólks
 
@@ -839,7 +1221,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Client | `public/js/services/salesGuides.js` |
 | Scripts | `server/scripts/seed-sales-guides.js` (Orange Smiley's company copy — ships inert here, never run; `features/local.json` hides the handbook) |
 | CSS | `public/css/admin-handbok.css` |
-| Jest | `tests/integration/salesGuides.test.js`, `salesGuidesServicesPage.test.js`, `salesGuidesD001.test.js` (both os-owned: they skip here as foreign via the feature gate) |
+| Jest | `tests/integration/salesGuides.test.js`, `salesGuidesServicesPage.test.js`, `salesGuidesD001.test.js`, `salesGuidesD022.test.js`, `salesGuidesQueueSpread.test.js` (the os-owned ones skip here as foreign via the feature gate) |
 | e2e | `e2e/sales-handbook.spec.js` (+ `e2e/lib/salesUser.js`) |
 | Migrations | 090 (the handbook's two later Orange Smiley product migrations — the 2026-09-13 services-page rewrite and the D-001 pricing one — are not applied here) |
 | Features | [sales-handbook](../features/sales-handbook.md) |
@@ -854,38 +1236,61 @@ company/                  gitignored: plans, decisions, logs, market-research st
   `updated_by IS NULL` ([services-page](HISTORY.md#services-page)).
 - A text change in `seed-sales-guides.js` ships with a product migration that
   makes the same change to seeded rows (the seed is `ON CONFLICT DO NOTHING`);
-  os_001 moved the guides to D-001 pricing and the demo instance, and
-  `salesGuidesD001.test.js` checks seed and migration agree
-  ([handbook-d001-2026-09-22](HISTORY.md#handbook-d001-2026-09-22)).
-- Guide prices follow D-001 (build fee + service contract + verkeiningar) and
-  carry DRÖG; demos go to `demo.rekstrarkerfi.is`, never this site
-  ([handbook-d001-2026-09-22](HISTORY.md#handbook-d001-2026-09-22)).
+  os_001 moved the guides to D-001 pricing and the demo instance, os_003 to
+  D-022; `salesGuidesD001.test.js` and `salesGuidesD022.test.js` check seed
+  and migrations agree step by step, the first seed → os_001 → os_003 → today's
+  seed ([handbook-d001-2026-09-22](HISTORY.md#handbook-d001-2026-09-22),
+  [handbook-d022-2026-09-26](history.d/2026-09-26-feat-handbook-d022.md#handbook-d022-2026-09-26)).
+- Guide prices follow D-022 (amends D-001): build fee 390/580/690 þ.kr. +
+  service contract 29/59/89 þ.kr./mán with 2/3/5 verkeiningar, einingaverð
+  6.000 kr., hosting and in-system AI beyond the included amount at cost +
+  15 %; all carry DRÖG. No D-001 contract figure (19/29/39, 5/10/20) may
+  reappear in a guide. Demos go to `demo.rekstrarkerfi.is`, never this site
+  ([handbook-d001-2026-09-22](HISTORY.md#handbook-d001-2026-09-22),
+  [handbook-d022-2026-09-26](history.d/2026-09-26-feat-handbook-d022.md#handbook-d022-2026-09-26)).
+- Samstarf, the fourth tier, has no listed price anywhere in the handbook:
+  the guides tell a seller to offer the free assessment instead of quoting a
+  tier, and the Samstarf copy carries no figure. It is DRAFT until Halli
+  approves it ([handbook-d022-2026-09-26](history.d/2026-09-26-feat-handbook-d022.md#handbook-d022-2026-09-26)).
+- No guide promises a verk waits for "next month's units": a verk bigger than
+  one month's quota is spread over several months or started now with the
+  rest at the einingaverð, the customer's choice agreed before work starts
+  (os_004; [handbook-queue-spread-2026-09-26](history.d/2026-09-26-fix-handbook-queue-spread.md#handbook-queue-spread-2026-09-26)).
 - Onboarding a hire is no code: `/admin/customers` → `solufolk` in `/admin/roles`.
 
-**History**: [sales-staff](HISTORY.md#sales-staff) · [services-page](HISTORY.md#services-page) · [handbook-d001-2026-09-22](HISTORY.md#handbook-d001-2026-09-22)
+**History**: [sales-staff](HISTORY.md#sales-staff) · [services-page](HISTORY.md#services-page) · [handbook-d001-2026-09-22](HISTORY.md#handbook-d001-2026-09-22) · [handbook-d022-2026-09-26](history.d/2026-09-26-feat-handbook-d022.md#handbook-d022-2026-09-26) · [handbook-queue-spread-2026-09-26](history.d/2026-09-26-fix-handbook-queue-spread.md#handbook-queue-spread-2026-09-26)
 
 ## 11. Shop — cart, checkout, orders, products, collections, bins, discounts (hidden surface)
 
 | | |
 |---|---|
-| Routes | `server/routes/shopRoutes.js` → `/api/v1/shop` · `adminShopRoutes.js` → `/api/v1/admin/shop` · `adminDiscountRoutes.js` → `/api/v1/admin/discounts` · `adminBinsRoutes.js` → `/api/v1/admin/bins` |
-| Controllers | `server/controllers/shopController.js`, `adminShopController.js`, `adminDiscountController.js`, `adminBinsController.js` |
-| Models | `server/models/Product.js`, `ProductVariant.js`, `Collection.js`, `Order.js`, `Discount.js`, `Bin.js`, `Inventory.js` (On hand / Committed / Available, the one audited stock writer, the lock order) |
-| Services | `server/services/stripeService.js`, `discountEngine.js`, `orderExport.js` (the orders list as .xlsx); `server/services/productImport/parseFile.js`, `headerMap.js`, `parseXlsx.js`, `parsePdf.js`, `headerHints.js`, `tradeLabels.js`, `variantCell.js`, `variantGroups.js` (the one reader for every product file, harvested from icelandicstore); `server/config/stripe.js`, `shipping.js`; `server/utils/qr.js`, `variantAxis.js` |
-| Views | `public/js/views/ShopView.js`, `ProductView.js`, `CartView.js`, `CheckoutView.js`, `CheckoutSuccessView.js`, `CheckoutCancelView.js`, `OrderHistoryView.js`, `AdminProductsView.js`, `AdminOrdersView.js`, `AdminOrderDetailView.js`, `AdminCollectionsView.js`, `AdminDiscountsView.js`, `AdminBinsView.js`, `AdminSalesView.js` |
-| Components | `public/js/components/ProductCard.js`, `ShopFilters.js`, `CartIcon.js`, `CurrencySelector.js`, `BarcodeScanner.js` |
-| Client | `public/js/services/cart.js`, `adminProducts.js`, `adminOrders.js`, `adminCollections.js`, `adminDiscounts.js`, `adminBins.js`; `public/js/utils/availability.js` (the basket's sold-out gate), `imageUrl.js` (the `.thumb.webp` URL) |
+| Routes | `server/routes/shopRoutes.js` → `/api/v1/shop` · `adminShopRoutes.js` → `/api/v1/admin/shop` · `adminDiscountRoutes.js` → `/api/v1/admin/discounts` · `adminBinsRoutes.js` → `/api/v1/admin/bins` · `adminInventoryRoutes.js` → `/api/v1/admin/inventory` (+ `GET /api/v1/admin/shop/reports/inventory` in `adminShopRoutes.js`) · `adminReceivingRoutes.js` → `/api/v1/admin/receiving` · `adminCheckoutSettingsRoutes.js` → `/api/v1/admin/checkout-settings` (view `checkout`) |
+| Controllers | `server/controllers/shopController.js`, `adminShopController.js`, `adminProductMergeController.js` (Products → Duplicates + the merge), `adminProductImportAiController.js` ("Read with AI", dark), `adminDiscountController.js`, `adminBinsController.js`, `adminInventoryController.js`, `adminReceivingController.js`, `adminCheckoutSettingsController.js` |
+| Models | `server/models/Product.js`, `ProductVariant.js`, `Collection.js`, `Order.js`, `Discount.js`, `Bin.js`, `Inventory.js` (On hand / Committed / Available, the one audited stock writer, the lock order, `applyBatch`), `GoodsReceipt.js`, `ProductMerge.js` (duplicate suggestions, `movedTo`, `resolveLive`), `SalesReports.js` (the insights + marketing queries beside the sales report) |
+| Services | `server/services/stripeService.js`, `discountEngine.js`, `orderExport.js` (the orders list as .xlsx), `checkoutRules.js` (the checkout settings, enforced: pause, field rules, minimum, the owner alert list); `server/services/productImport/parseFile.js`, `headerMap.js`, `parseXlsx.js`, `parsePdf.js`, `headerHints.js`, `tradeLabels.js`, `variantCell.js`, `variantGroups.js` (the one reader for every product file, harvested from icelandicstore — goods receiving reads the supplier file through it too), `aiExtract.js` + `aiLimits.js` (the AI PDF reader and its cost gate, dark by default); `server/services/pdfService.js` (the goods receipt PDF; the delivery note as a pick list), `variantAdd.js` (many variants of one product, all or none — the bulk route and MCP `add_variants`), `deliveryNote.js` (the delivery note's lines: live SKU/bin, size label, a picture each, at most four decodes at once); `server/services/productMerge/engine.js`, `planner.js`, `repointSpec.js` (the one-transaction product merge); `server/config/stripe.js`, `server/config/shipping.js` (the delivery price: `computeShippingPrice`, the settings-backed rates); `server/utils/qr.js`, `variantAxis.js`, `productDedupe.js` (the duplicate signals, pure), `inventoryStatus.js` (Inventory Watch buckets), `colorMatch.js` (which photo a variant colour shows — matched here only), `variantLabel.js` (an order line's size label), `skuCompare.js` (natural order for SKUs and bins), `orderVat.js` (the ONE order-VAT rule: the checkout snapshot and `invoiceService.buildLines`), `reportWindow.js` (the `?from&to` report window) |
+| Views | `public/js/views/ShopView.js`, `ProductView.js`, `CartView.js`, `CheckoutView.js`, `CheckoutSuccessView.js`, `CheckoutCancelView.js`, `OrderHistoryView.js`, `AdminProductsView.js`, `AdminProductDuplicatesView.js` (Products → Duplicates: suggestions, preview, merge), `AdminOrdersView.js`, `AdminOrderDetailView.js`, `AdminCollectionsView.js`, `AdminDiscountsView.js`, `AdminBinsView.js`, `AdminSalesView.js`, `AdminInventoryView.js`, `AdminStockCountView.js`, `AdminReceivingView.js`, `AdminReceivingDetailView.js`, `AdminCheckoutSettingsView.js` |
+| Components | `public/js/components/ProductCard.js`, `ShopFilters.js`, `CartIcon.js`, `CurrencySelector.js`, `BarcodeScanner.js`, `VariantGrid.js` (the product editor's variant table: add, edit, delete, arrange, "+ Add a colour"), `ProductImportAi.js` (the import modal's AI step; loads the vendored pdf-lib 1.17.1, MIT, a verbatim copy of the exact-pinned devDependency — `pdfLibVendor.test.js`) |
+| Client | `public/js/services/cart.js`, `adminProducts.js`, `adminOrders.js`, `adminCollections.js`, `adminDiscounts.js`, `adminBins.js`, `adminInventory.js`, `adminReceiving.js`, `adminCheckoutSettings.js`; `public/js/utils/availability.js` (the basket's sold-out gate), `imageUrl.js` (the `.thumb.webp` URL), `colorLabels.js` (colour names + picker labels as locale keys), `duplicateNames.js` (the SKU chip on a shared name), `vat.js` (the per-rate VAT display — twin of `server/utils/vat.js` + `invoiceService.buildLines`), `aiPdfChunks.js` (the AI read's chunk loop), `importMarkup.js` (cost + markup → ISK, rate → EUR), `stockUnits.js` (the stock screens' shared naming, reasons and count check), `public/js/utils/shipping.js` (the delivery price the cart/checkout show — twin of `server/config/shipping.js`), `checkoutSettings.js` (what the cart/checkout show of the checkout settings), `dateRanges.js` (the sales report's period presets + comparison windows, ported from icelandicstore #414); `public/js/utils/variantAxis.js` (twin of the server's), `colorMatch.js` (display twin: swatch fill, labels, the admin photo-colour picker — never the photo match), `variantArrange.js` (colour → size, XS → 2XL), `variantSort.js` (header-click sorting), `variantAddValue.js` (the "+ Add a colour" planner and paste reader) |
 | Scripts | `server/scripts/seed-shop.js`, `import-products-csv.js` |
-| CSS | `public/css/shop.css`, `admin-products.css`, `admin-orders.css`, `admin-collections.css`, `admin-discounts.css`, `admin-bins.css`, `admin-sales.css`, `barcode-scanner.css` |
-| Jest | `tests/integration/shop.test.js`, `discounts.test.js`, `adminOrderBulk.test.js`, `adminProductImportExport.test.js`, `sections.test.js`, `inventoryThreeNumbers.test.js`, `adminProductImportFile.test.js`, `adminOrderExport.test.js`; `tests/unit/discountEngine.test.js`, `shopFilters.test.js`, `bins-grid.test.js`, `qr.test.js`, `availability.client.test.js`, `productImportParseFile.test.js`, `productImportVariantCell.test.js`, `productImportVariantGroups.test.js`, `parsePdfWorker.test.js`, `imageUrl.test.js` (fixture `tests/fixtures/pdfFixture.js`) |
-| e2e | `e2e/admin-product-group.spec.js`, `cart-sold-out.spec.js` |
-| Migrations | 022–025, 045, 048, 049, 050, 054, 055, 057, 074, 112, 113 |
-| Features | [cart-checkout](../features/cart-checkout.md), [discounts](../features/discounts.md), [orders](../features/orders.md), [shop-catalog](../features/shop-catalog.md) |
+| CSS | `public/css/shop.css`, `admin-products.css`, `admin-product-merge.css`, `admin-product-import-ai.css`, `admin-orders.css`, `admin-collections.css`, `admin-discounts.css`, `admin-bins.css`, `admin-sales.css`, `barcode-scanner.css`, `admin-stock.css`, `admin-checkout-settings.css` (also the announcement screen's) |
+| Jest | `tests/integration/shop.test.js`, `shopPublicPrivacy.test.js`, `discounts.test.js`, `adminOrderBulk.test.js`, `adminProductImportExport.test.js`, `sections.test.js`, `inventoryThreeNumbers.test.js`, `adminProductImportFile.test.js`, `adminOrderExport.test.js`, `productMerge.test.js`, `adminProductImportAi.test.js`, `adminInventory.test.js`, `goodsReceipts.test.js`, `checkoutSettings.test.js`; `tests/unit/discountEngine.test.js`, `productDedupe.test.js`, `productMergePlanner.test.js`, `productImportAiExtract.test.js`, `aiPdfChunks.client.test.js`, `importMarkup.client.test.js`, `pdfLibVendor.test.js`, `shopFilters.test.js`, `bins-grid.test.js`, `qr.test.js`, `availability.client.test.js`, `productImportParseFile.test.js`, `productImportVariantCell.test.js`, `productImportVariantGroups.test.js`, `parsePdfWorker.test.js`, `imageUrl.test.js` (fixture `tests/fixtures/pdfFixture.js`), `colorLabels.client.test.js`, `duplicateNames.client.test.js`, `vatDisplay.client.test.js`, `cartPriceSync.client.test.js`, `inventoryStatus.test.js`, `shippingParity.test.js`, `checkoutRulesCoverage.test.js`, `checkoutSettings.client.test.js`, `colorMatch.test.js`, `variantArrange.client.test.js`, `variantSort.client.test.js`, `variantAddValue.client.test.js`, `variantAxisParity.test.js`, `variantLabel.test.js`, `skuCompare.test.js`, `deliveryNotePdf.test.js`; `tests/integration/adminShopVariants.test.js`, `archivedVariantStock.test.js`, harvest 2 lane 5: `tests/integration/orderVatSnapshot.test.js`, `adminSalesReport.test.js`, `tests/unit/orderVatParity.test.js` (fixtures `tests/fixtures/buildLinesFixtures.js` + `buildLinesGolden.json`), `dateRanges.client.test.js`, `reportWindow.test.js` |
+| e2e | `e2e/admin-product-group.spec.js`, `cart-sold-out.spec.js`, `admin-stock.spec.js`, `admin-product-duplicates.spec.js`, `checkout-settings.spec.js`, `admin-product-variants.spec.js`, `shop-colour-swatch.spec.js`, `admin-sales-report.spec.js` (lane 5: periods, deltas, insights, marketing, the attention links, themes, 375 px) |
+| Migrations | 022–025, 045, 048, 049, 050, 054, 055, 057, 074, 112, 113, 115 (`orders.notes`, the checkout note), 118 (goods receipts, the stock batch handle), 119 (`product_images.color`; `product_variants.archived_at` and the live-only SKU / option unique rules), 120 (`products.merged_into_id` + `product_merges`, the product merge), 121 (`order_items.vat_rate` + `orders.vat_total`, the VAT snapshot) |
+| Features | [cart-checkout](../features/cart-checkout.md), [discounts](../features/discounts.md), [orders](../features/orders.md), [shop-catalog](../features/shop-catalog.md), [goods-receiving](../features/goods-receiving.md), [checkout-settings](../features/checkout-settings.md) |
 | Feature doc | — (retail is hidden here; ENHANCEMENTS #22, #23, #25 landed by the 2026-09-24 ice harvest, #24 in part; #26 remains) |
 
 **Rules that must hold**
 - Hidden, never deleted: `/shop` in `publicSurface.js`, every admin line in
   `HIDDEN_ADMIN_VIEWS`; routes live, Stripe inert without keys.
+- **The public shop API carries no warehouse internals** ([harvest2-lane1a](history.d/2026-09-26-harvest2-lane1a-security.md#harvest2-lane1a-2026-09-26);
+  ported from icelandicstore #62 and #416 G5): `GET /api/v1/shop/products` and
+  `/:slug` strip `bin` (the shelf), `sku`, `barcode` and the raw stock figures
+  from every product and variant (`shopController` `PRODUCT_INTERNALS`) — the
+  storefront reads none of them, staff read them through `/api/v1/admin/shop`.
+  `GET /api/v1/shop/orders/mine` answers the `CUSTOMER_ORDER_FIELDS` ALLOW-list
+  (`customerOrderView`): no Stripe session / payment-intent ids, no
+  `stock_deducted_at`, no `tags`; a column added to `Order.COLUMNS` stays
+  staff-only until it is named there. `shopPublicPrivacy.test.js` pins both.
 - **Three numbers, one writer** ([harvest-ice-c-2026-09-24](HISTORY.md#harvest-ice-c-2026-09-24)):
   `stock` is On hand; Committed is DERIVED from PAID orders whose stock has
   not moved (`orders.stock_deducted_at IS NULL`; pending, cancelled, failed and
@@ -911,8 +1316,165 @@ company/                  gitignored: plans, decisions, logs, market-research st
 - Checkout `required` must be re-applied after `syncShipping()` ([ui-kit](HISTORY.md#ui-kit)).
 - The shop search box toggles its buttons with `[hidden]` and never repaints
   under the typist (`ShopFilters._syncSearchControls`).
+- **The VAT shown is the VAT the invoice books** ([harvest2-lane4b](history.d/2026-09-26-harvest2-lane4b-shop-i18n.md#harvest2-lane4b-2026-09-26)):
+  the cart, the checkout and the admin order page print "Þar af VSK n%" per
+  rate UNDER the total (prices are VAT-inclusive), from `public/js/utils/vat.js`
+  — a twin of `server/utils/vat.js` and of `invoiceService.buildLines` (line at
+  its product's rate, shipping 24 %, a discount spread in proportion, an order
+  shipped abroad zero-rated on goods and shipping, a service keeps its rate).
+  `tests/unit/vatDisplay.client.test.js` holds all three together; change one,
+  change the others. Never a fixed "includes 24% VAT" sentence. The rate
+  reaches the browser in the public catalogue (`Product.publicCols`, both
+  locales) and on `Order.listItems`.
+- **The basket is re-priced from the catalogue on every cart/checkout load**
+  (`cart.syncPrices`, ice #343): the charge is the server's current price, so
+  the page shows it and says which lines moved. A payload without prices never
+  wipes a stored one. Cart lines carry `vatRate` + `isService`; a line stored
+  before they did gets them from the same sync.
+- **An Icelandic shipping address needs a three-digit postnúmer; abroad the
+  postcode is free text**; a phone, when given, matches the shared `PHONE_RE`
+  (`validate.validateCheckoutContact` on `POST /shop/checkout`, the client
+  twin in `CheckoutView`; `utils/contactFormat.js`).
+- **The buyer's order note is staff-only** ([harvest2-lane4b](history.d/2026-09-26-harvest2-lane4b-shop-i18n.md#harvest2-lane4b-2026-09-26)):
+  `orders.notes` (migration 115) is written once, by `createCheckoutSession`
+  through `Order.createWithItems` (`Order.normaliseNote`: trimmed, cut at 1000
+  characters, blank → NULL), and read on the admin order page. It stays OUT
+  of `Order`'s `COLUMNS`, which back every customer-facing order payload.
+- **An order's VAT is snapshotted at checkout, by the invoice's own rule**
+  ([harvest2-lane5](history.d/2026-09-26-harvest2-lane5-reports.md#harvest2-lane5-2026-09-26)):
+  `Order.createWithItems` writes `order_items.vat_rate` and `orders.vat_total`
+  (migration 121) in the checkout transaction through `server/utils/orderVat.js`
+  `computeOrderVat` — the SAME core `invoiceService.buildLines` calls after it
+  translates to ISK — fed the line rows in `(created_at, id)` order, the
+  product's current rate and service flag, and the address's country, exactly
+  what `createFromOrder` reads. For an ISK order the snapshot equals the booked
+  VAT to the króna (`orderVatSnapshot.test.js`); EUR is snapshotted in cents.
+  `buildLines` output is pinned byte-for-byte to its pre-extraction golden
+  (`orderVatParity.test.js`) — never regenerate the golden from new code. A
+  rate the rule refuses leaves the snapshot NULL (logged); the sale is not
+  lost. History got an APPROXIMATE backfill (current rates, no largest-remainder
+  split); an order written by the previous release during a swap is read with
+  the same approximation (`Order.vatTotalSql`).
+- **The sales report counts a sale when it is PAID and never adds currencies**
+  ([harvest2-lane5](history.d/2026-09-26-harvest2-lane5-reports.md#harvest2-lane5-2026-09-26)):
+  `GET /admin/shop/reports?from&to[&compare_from&compare_to][&bucket]` —
+  `paid_at` in `[from, to)`, KPIs per currency, net = total − VAT (the
+  snapshot) as the headline, gross kept; buckets hour/day/week/month cut on
+  Atlantic/Reykjavik (the client zero-fills, `utils/dateRanges.js`); an empty,
+  backwards or unparsable window is a 400 `errors.admin.invalidDateRange`.
+  `?days=` (the previous release's call) keeps answering with the legacy keys.
+  `/reports/insights` and `/reports/marketing` are separate requests so the
+  sales block never waits; customer names only go to a viewer with the
+  `customers` or `orders` view, the traffic block only with `analytics`.
+- **An attention card counts exactly the rows its link opens**
+  ([harvest2-lane5](history.d/2026-09-26-harvest2-lane5-reports.md#harvest2-lane5-2026-09-26)):
+  the order list's `?view=open` is `Order.ORDER_VIEWS.open`, the predicate the
+  "Í dag" card counts with; the sold-out card counts the Inventory Watch's
+  `out` units (`/admin/inventory?status=out`, the lane 6a report itself). The
+  order list keeps its filter in the URL (`utils/listState.js`).
+- A name two different products share gets the SKU chip on the card
+  (`utils/duplicateNames.js`); rows of one product never collide.
+- **Deleting a variant deletes it — unless something still names it**
+  ([harvest2-lane6c](history.d/2026-09-26-harvest2-lane6c-variants.md#harvest2-lane6c-2026-09-26)):
+  `DELETE /products/:id/variants/:variantId` removes a variant nothing
+  references and ARCHIVES one an order line or the stock history names
+  (`archived_at` set, `active` false, shelf cleared) — decided and done in ONE
+  transaction under the variant's FOR UPDATE lock
+  (`ProductVariant.deleteOrArchive`), so no movement lands in between. Option
+  keys are written in the product's axis spelling on every write path. `hasReferences` reads
+  every foreign key onto `product_variants` from the catalogue — never a
+  hand-kept list — because `inventory_adjustments` is CASCADE and a delete
+  would take the audit trail with it. The SKU and the `(product_id,
+  attributes)` unique rules are partial on `archived_at IS NULL` (119), so an
+  archived row frees both; every LIST excludes archived rows, by-id lookups do
+  not (an old order still resolves its variant), `findBySku` prefers the live
+  row, and an `ON CONFLICT (product_id, attributes)` must name the predicate.
+  Variant routes are scoped to the product in the path (`findByIdForProduct`);
+  `validateVariant` checks the shape. **An archived variant is never matched,
+  counted or received**: `GoodsReceipt.matchCodes`, `Inventory.watchRows` /
+  `stockItems` / `variantRefs` / `searchItems` read live variants only, and
+  `applyLines` refuses one under `refuseArchived` (every count, "Fix stock" and
+  receipt batch) — never for order fulfilment, which must still move an
+  archived variant an order names. A draft receipt line whose variant was
+  archived after the match makes finalise a 409 `VARIANT_ARCHIVED` naming the
+  `lineIds` (re-match or skip them).
+- **Many variants are added whole or not at all**: `services/variantAdd.js`
+  behind `POST /products/:id/variants/bulk` (with `dry_run`) and MCP
+  `add_variants`; every problem comes back in one answer, SKUs and barcodes
+  are checked case-blind against the live catalogue as either code, the batch
+  is re-checked under advisory locks inside the transaction, stock starts at 0.
+  An archived variant's SKU is free on both paths. A merged-away product (120)
+  refuses both: the route guard, and `variantAdd` itself up front and under its
+  product lock (the MCP path). In a merge an archived variant is never a unit —
+  it stays archived on its source — and does not block its combination on the
+  survivor; a photo's `color` travels with the photo.
+- **Which photo a colour shows is decided on the server only**
+  (`utils/colorMatch.js` → `color_images` on the public product; exact, then
+  unambiguous token containment): the browser consumes the map and never
+  re-derives it (icelandicstore #265 shipped a browser matcher that missed
+  "French Navy (FRNA)" against a `navy` photo). The admin photo-colour picker
+  lists ACTIVE variant colours only (#270); the tag is stored folded. Swatch
+  fills are garment colours and literal by design; every surface around them
+  is tokens.
+- **Variant order is colour → size, XS → 2XL** (`utils/variantArrange.js`) on
+  the storefront picker, the admin grid and the detail panel; SQL order stays
+  SKU. Header sorting (`utils/variantSort.js`) is display only, remembered per
+  browser.
+- **The delivery note is a pick list**: lines walked by BIN, then SKU
+  (`utils/skuCompare.js`); a BIN and a SKU column; the size under the name in
+  the product's axis order and never twice (`utils/variantLabel.js`); a 120 px
+  picture per line from `productImages.printThumbnail`, at most four decodes at
+  once (`services/deliveryNote.js`), embedded once per PDF. A picture problem
+  costs the line its picture, never the PDF.
+- The product modal checks `res.ok` on every load it builds a save on: the
+  collection ids are sent only once the collection list actually loaded (an
+  empty set is otherwise "remove from every collection").
+- "Needs action" order pills (not paid, not sent, partly sent) are the
+  `--warning` ink on `--warning-dim`; no status pill carries a colour literal.
 - Bulk product edit (`POST /products/bulk`) sets type, subcategory, VAT rate,
   status and bin only — never name, price or stock.
+- **Merging duplicate products is ONE transaction** ([harvest2-lane6b](history.d/2026-09-26-harvest2-lane6b-merge-ai.md#harvest2-lane6b-2026-09-26),
+  migration 120; `services/productMerge/engine.js`): the suggestions and the
+  preview for staff with the `products` view, the merge itself ADMIN-ONLY
+  (`hasRole(req.user, 'admin')`, else 403 `merge_admin_only` — it cannot be
+  undone; Halli may loosen), CSRF, preview → apply with the preview's `expect` token (any change to a
+  row the merge reads → 409 `stale_preview`). Locks follow the stock lock order
+  — the orders that reference the products FOR UPDATE, then parent products,
+  variants, level products FOR UPDATE, each sorted — under a 3 s
+  `lock_timeout` (busy → 409 `merge_busy`). FOR UPDATE, not NO KEY UPDATE: it
+  blocks a checkout's order-line KEY SHARE, and `Order.createWithItems`
+  refuses a line on a merged product afterwards (409 `PRODUCT_MERGED`). Stock
+  moves ONLY through one `Inventory.applyLines` (`merge_out`/`merge_in`, net
+  zero; a zero-delta `merge` row per moved variant). Every FK to
+  products/variants has a policy in `repointSpec.js` and `assertCovers` checks
+  it against `pg_constraint` before any write — a new product FK with no
+  policy switches merging off (503 `schema_drift`); `productMerge.test.js`
+  fails CI until it gets one. Order lines follow their unit (their snapshots
+  keep what the order said); ISSUED invoice lines never change (only drafts
+  follow — the books' trigger would refuse it anyway); inventory history stays
+  where it happened. Nothing is deleted: the merged product becomes inactive
+  with `merged_into_id` and cleared codes, is hidden from every list, frozen
+  for writes (409 `product_merged` + `movedTo`), and its shop API and SSR URLs
+  answer **301 `no-store`** to the survivor (≤ 5 hops, only to a live product).
+  A retired SKU resolves to the live row it went to (import match, scanner).
+  There is no un-merge; `product_merges` is the record.
+- **"Read with AI" ships DARK and is a cost gate first** ([harvest2-lane6b](history.d/2026-09-26-harvest2-lane6b-merge-ai.md#harvest2-lane6b-2026-09-26)):
+  `PRODUCT_IMPORT_AI_ENABLED=true` AND Claude credentials, else `/ai-config`
+  says `enabled: false` and `/ai-extract` is 404. Route order on the paid call:
+  CSRF → flag (404) → today's page budget (429 `pageBudget`) → multer — a dark
+  or spent endpoint never buffers an upload; then pages counted server-side
+  (422 past the per-request or per-file cap), an `aiGate` slot within the
+  import's sub-cap (429 `AI_BUSY`), the charge, the read (502 refunds its
+  pages; a client that leaves → 499, never a 5xx). Budgets (`aiLimits.js`,
+  in memory per container): per request, per file, per user per UTC day, per
+  instance per UTC day. The model id is `PRODUCT_IMPORT_AI_MODEL` or the
+  engine's configured model (`translator.getModel`) — never a literal. The
+  model is a reader: a code or price the PDF's text layer does not print is
+  blanked and flagged, a cost is never a selling price (the preview's markup
+  and ISK-per-EUR rate price AI rows on the admin's say-so, from the rows as
+  read), nothing of our catalogue is sent, and an `__ai` row may only CREATE
+  through the unchanged preview → apply (`aiCreateOnly`). Logs carry counts,
+  tokens and timings, never rows.
 - **One reader for every product file** ([harvest-ice-d-2026-09-24](HISTORY.md#harvest-ice-d-2026-09-24)): `POST /products/import/parse-file`
   (multipart, memory-only, 10 MB, CSRF) reads the export's own CSV (csv-parse —
   a quoted line break survives), a supplier .xlsx (exceljs) or a generated PDF
@@ -945,8 +1507,78 @@ company/                  gitignored: plans, decisions, logs, market-research st
   `requireAuth`, `requireView('products')`, the limiters and (apply) CSRF, with
   `sanitizeBody` re-applied; `app.js` skips its global parser for that path.
   Never mount a large parser for an admin path at app level again ([ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23)).
+- **A batch of stock movements is ONE `Inventory.applyBatch` call** under a SAVEPOINT (a refused
+  batch rolls back to it even inside a caller's transaction; `maxLines` caps only the HTTP count) ([harvest2-lane6a](history.d/2026-09-26-harvest2-lane6a-stock.md#harvest2-lane6a-2026-09-26)):
+  its own transaction (or the caller's, which then holds only rows taken
+  BEFORE the stock rows), one `applyLines` call inside, so the module lock
+  order holds; every row carries the same `batch_id` (migration 118). It is
+  all or nothing: every line is checked under its lock and a line that would
+  go below zero, or a product-level line on a product WITH variant axes (checked
+  BEFORE any lock, so it never locks a parent after its variants), is
+  refused in one 409 naming every such line (`lines[]`) — never clamped to
+  0, never a partial write. One product/variant twice in a batch is a 400. A
+  `clientToken` is checked first and lands on one row (the unique
+  `client_token` index), so a re-sent batch is 409 `DUPLICATE_BATCH` and
+  moves nothing. `applyLines`
+  refuses a variant that does not belong to the product the line names.
+- **Inventory Watch** (`/admin/inventory`, view `inventory`; `GET
+  /api/v1/admin/shop/reports/inventory` is answered BEFORE the `/reports`
+  prefix's `sales` gate): one row per stocked unit (a product without
+  variant axes, or one active variant; bookable services never), velocity
+  from the order lines of PAID orders in the last 90 days, bucketed on
+  Available (`utils/inventoryStatus.js`, ice's thresholds). "Fix stock" is
+  `Inventory.correct`: parent FOR KEY SHARE, the row FOR UPDATE, the current
+  figure read under that lock, then `setAbsolute`. A count is a JSON number
+  or numeric string, whole, 0..100 000 000 (`Inventory.isWholeCount`, ice
+  #15) — never a boolean, an array or a blank.
+- **Goods receiving** (`/admin/receiving`, view `receiving`, migration 118):
+  the supplier file goes through `services/productImport/parseFile.js` with
+  the receipt's own column table (an order quantity IS the expected
+  quantity here); lines match by our code only, never guessed. Finalise locks
+  the `goods_receipts` row FIRST, then the stock rows through `applyBatch`
+  (reason `receipt`, `goods_receipt_id` on every row), and flips the status
+  in the same transaction — a second finalise waits, then finds
+  `finalized` (409, nothing moves). Stock moves by the scan log (received),
+  never by expected. Every line/scan write takes the receipt row, then
+  `Inventory.lockReferences` on the rows its foreign keys touch, before the
+  insert. No stock writer locks a receipt row, so the two orders cannot cycle. Receiving scans have their own per-user limiter (a pallet is
+  hundreds of POSTs); every other write is under `writeLimiter`.
+- **The checkout settings are enforced on the order path, never only on the page**
+  ([harvest2-lane7a](history.d/2026-09-26-harvest2-lane7a-checkout-settings.md#harvest2-lane7a-2026-09-26)):
+  every caller of `Order.createWithItems` runs `services/checkoutRules.js` in this order —
+  the ordering pause FIRST (503 `ORDERING_PAUSED`, the admin's message else
+  `errors.shop.orderingPaused`, before any order work, even before the Stripe-configured
+  check), then the field rules (phone / company / kennitala / note: a hidden value is
+  dropped — the phone cleared off the stored address, the note never written — a required
+  one missing is a 400 `FIELD_REQUIRED`, a kennitala must be 10 digits with a valid check
+  digit; company and kennitala are NOT stored on the order yet, so the admin API refuses
+  `required` for them — no buyer is made to type a national id that is dropped), then the minimum order value on the DB-trusted subtotal AFTER the order
+  discount, in ISK whatever the charge currency (a EUR basket by its lines' ISK prices,
+  scaled by the discount share; 400 `MIN_ORDER_VALUE` with `params.amount`).
+  `tests/unit/checkoutRulesCoverage.test.js` fails when a second order-create path
+  appears without them. The cart and the checkout show the same state
+  (`utils/checkoutSettings.js`) and disable checkout — UX only. The Stripe webhook is NOT
+  gated by the pause: a payment already under way completes.
+- **The delivery price is one rule in two places**: `server/config/shipping.js`
+  `computeShippingPrice` charges it and `public/js/utils/shipping.js` shows it, fed the
+  same rates by `/shop/config` (`tests/unit/shippingParity.test.js`). Pickup is free; a
+  flat-rate order at or above `shipping.free_over_isk` (0 = off) is free, measured on the
+  basket's ISK prices BEFORE discounts; the ISK rate is the `shipping.flat_rate_isk`
+  setting, whose default is `SHIPPING_FLAT_RATE_ISK` (so an instance charges what it did
+  until an admin saves); EUR stays `SHIPPING_FLAT_RATE_EUR`.
+- **The owner's paid-order alert never touches the webhook's answer**: it is read and
+  sent after the paid transition commits (`shopController.alertOwnerOfPaidOrder`), in its
+  own catch-all, and the SEND is not awaited; it goes through `emailService.deliver`
+  (EMAIL_ALLOWLIST, the demo no-send rule). Recipients: the admin list
+  (`checkout.order_notify_emails`, at most 5) else `ORDER_NOTIFY_EMAIL`. The list is
+  admin-only — `/shop/config` never carries it.
+- A checkout-settings save validates every group (checkout + shipping) before it writes
+  any, then writes them in ONE transaction (`Setting.applyWrites`); an unknown key is a
+  400, never a silent 200. The ordering pause also runs as route middleware
+  (`checkoutRules.orderingPauseGate`) before the body validators, and `/shop/config`
+  sends the pause message only while paused.
 
-**History**: [harvest-2](HISTORY.md#harvest-2) · [ui-kit](HISTORY.md#ui-kit) · [ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23) · [harvest-ice-c-2026-09-24](HISTORY.md#harvest-ice-c-2026-09-24) · [harvest-ice-d-2026-09-24](HISTORY.md#harvest-ice-d-2026-09-24)
+**History**: [harvest-2](HISTORY.md#harvest-2) · [ui-kit](HISTORY.md#ui-kit) · [ready-and-import-order](HISTORY.md#ready-and-import-order-2026-09-23) · [harvest-ice-c-2026-09-24](HISTORY.md#harvest-ice-c-2026-09-24) · [harvest-ice-d-2026-09-24](HISTORY.md#harvest-ice-d-2026-09-24) · [harvest2-lane6a-2026-09-26](history.d/2026-09-26-harvest2-lane6a-stock.md#harvest2-lane6a-2026-09-26) · [harvest2-lane6b](history.d/2026-09-26-harvest2-lane6b-merge-ai.md#harvest2-lane6b-2026-09-26) · [harvest2-lane6c-2026-09-26](history.d/2026-09-26-harvest2-lane6c-variants.md#harvest2-lane6c-2026-09-26) · [harvest2-lane5](history.d/2026-09-26-harvest2-lane5-reports.md#harvest2-lane5-2026-09-26) · [harvest2-lane7a-2026-09-26](history.d/2026-09-26-harvest2-lane7a-checkout-settings.md#harvest2-lane7a-2026-09-26)
 
 ## 12. News, projects, party, bio (hidden portfolio)
 
@@ -978,6 +1610,12 @@ company/                  gitignored: plans, decisions, logs, market-research st
 - Slug folding (ð/þ/æ/ö, `server/utils/slug.js` and its ESM twin
   `public/js/utils/slug.js`) applies on GENERATION only; stored slugs never change
   ([harvest-2](HISTORY.md#harvest-2)).
+- The projects board (`AdminProjectsView`, `/admin/projects`) is gated on the
+  `projects` admin view OR editor; the `projects` module owns that view, so
+  switching the module off removes it for everyone. Its Vefur sidebar line is
+  hidden from all-views holders on this product
+  (`identity.surface.hiddenAdminViews`, now in the engine defaults too); the
+  route stays live and the view grantable ([admin-home-idag-2026-09-26](history.d/2026-09-26-feat-admin-home-idag.md#admin-home-idag-2026-09-26)).
 
 - **hallismiley (engine-graft):** these were LIVE public surfaces (nav +
   sitemap) before the graft; the engine hides them and its tests pin the
@@ -991,7 +1629,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
   `requireAuth`. The news editor overlay is `position:fixed` and must not live
   under a transformed `.view` (`e2e/news-editor.spec.js`).
 
-**History**: [r1](HISTORY.md#r1) · [harvest-2](HISTORY.md#harvest-2) · [engine-graft](HISTORY.md#engine-graft)
+**History**: [r1](HISTORY.md#r1) · [harvest-2](HISTORY.md#harvest-2) · [engine-graft](HISTORY.md#engine-graft) · [admin-home-idag-2026-09-26](history.d/2026-09-26-feat-admin-home-idag.md#admin-home-idag-2026-09-26)
 
 ## 13. Monitoring — event logs, metrics, analytics
 
@@ -1000,18 +1638,32 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Routes | `server/routes/eventRoutes.js` → `/api/v1/events` (public beacon) · `adminEventRoutes.js` → `/api/v1/admin/events` · `analyticsRoutes.js` → `/api/v1/analytics` · `analyticsAdminRoutes.js` → `/api/v1/admin/analytics`; root `/health`, `/ready`, `/metrics`, `/csp-report` in `server/app.js` |
 | Controllers | `server/controllers/eventLogController.js`, `analyticsController.js` |
 | Models | `server/models/EventLog.js`, `Analytics.js` |
-| Services | `server/services/eventLogCleanup.js`, `analyticsSalt.js`, `uploadVolumeAlert.js`; `server/utils/maintenanceWindow.js` |
+| Services | `server/services/eventLogCleanup.js`, `analyticsSalt.js`, `uploadVolumeAlert.js`; `server/utils/maintenanceWindow.js`, `trafficChannel.js` (referrer host → Direct / Search / Social / Email / Referral, the marketing overview) |
 | Observability | `server/observability/appInsights.js` (SDK start, dark without a connection string), `aiClient.js`, `aiLogStream.js` (pino warn+ → traces/exceptions), `trackedFetch.js` (outbound fetch → dependencies); `server/middleware/eventLogOn5xx.js` (every 5xx → `event_logs`) |
 | Views | `public/js/views/AdminMonitoringView.js`, `AdminAnalyticsView.js` |
 | Client | `public/js/services/adminEvents.js`, `errorReporter.js`, `usage.js`; `public/js/analytics.js`, `public/js/consent.js`, `public/js/services/cookieConsent.js` (the banner's account side); `public/js/api/rateLimitDecide.js`, `rateLimitGuard.js` |
 | CSS | `public/css/admin-monitoring.css`, `analytics-admin.css` |
-| Jest | `tests/integration/eventLog.test.js`, `analytics.test.js`, `observability.test.js`, `uploadVolumeAlert.test.js`; `tests/unit/analyticsSalt.test.js`, `httpMetrics.test.js`, `loggerScrub.test.js`, `maintenanceWindow.test.js`, `aiLogStream.test.js`, `trackedFetch.test.js`, `cookieConsent.client.test.js`; `tests/integration/cookieConsent.test.js` |
+| Jest | `tests/integration/eventLog.test.js`, `analytics.test.js`, `observability.test.js`, `uploadVolumeAlert.test.js`; `tests/unit/analyticsSalt.test.js`, `httpMetrics.test.js`, `loggerScrub.test.js`, `loggerRedact.test.js`, `maintenanceWindow.test.js`, `aiLogStream.test.js`, `trackedFetch.test.js`, `cookieConsent.client.test.js`, `trafficChannel.test.js`; `tests/integration/cookieConsent.test.js` |
 | e2e | `e2e/admin-monitoring.spec.js`, `cookie-consent-account.spec.js` |
 | Migrations | 046 (analytics), 087 (event logs), 111 (`users.cookie_consent`) |
 | Features | [analytics](../features/analytics.md), [monitoring](../features/monitoring.md) |
 | Feature doc | `RUNBOOK.md` (Analytics, Health), `docs/SLO.md` |
 
 **Rules that must hold**
+- **A metric that is defined is incremented** ([harvest2-lane1b](history.d/2026-09-26-harvest2-lane1b-defects.md#harvest2-lane1b-2026-09-26)): `auth_login_attempts_total`
+  sat defined and unwired from the observability work until 2026-09-26; its
+  labels are listed in `server/observability/metrics.js` and pinned by
+  `tests/integration/authLoginMetrics.test.js` (the rule for its outcomes is
+  in domain 1). Declaring a series nobody writes makes a dashboard read zero
+  instead of "no data".
+- **Credentials are redacted at every depth pino can see** ([harvest2-lane1a](history.d/2026-09-26-harvest2-lane1a-security.md#harvest2-lane1a-2026-09-26); ported
+  from icelandicstore #382): pino's `*` matches exactly ONE level, so
+  `server/observability/logger.js` `REDACT` names each credential field at the top
+  level AND as `*.<field>` — password, password_hash, current_password /
+  new_password (+ camelCase), token, secret, totp_secret(_enc), kennitala — plus
+  `req.body.code` (the TOTP code; a bare `code` is an error code and stays).
+  A new credential-shaped field joins both lists; `tests/unit/loggerRedact.test.js`
+  builds a pino with the exported config.
 - **The cookie choice follows the account** ([harvest-ice-b](HISTORY.md#harvest-ice-b-2026-09-24)): a signed-in answer is
   `users.cookie_consent` (111, `PUT /api/v1/users/me/cookie-consent`);
   `consent.js` shows the banner only after `consent:ready` (fired by
@@ -1024,6 +1676,12 @@ company/                  gitignored: plans, decisions, logs, market-research st
   dictionary loads [harvest-2](HISTORY.md#harvest-2).
 - Big uploads always complete: detect and alert (`uploadVolumeAlert`), never
   rate-limit (Halli 2026-09-01).
+- **A marketing "visit" is one visitor's day** ([harvest2-lane5](history.d/2026-09-26-harvest2-lane5-reports.md#harvest2-lane5-2026-09-26)):
+  `visitor_token` is a daily hash, so a session is a (token, view_date) pair,
+  its channel the referrer of that day's FIRST page view, classified by
+  `server/utils/trafficChannel.js` (webmail before search; `internal` and no
+  referrer are Direct); bots are not visitors. Shown in the sales report's
+  marketing section to a viewer holding `analytics`.
 - Logs scrub secrets and the `q` param; `app.js` scrubs request URLs in its
   own lines ([review-099](HISTORY.md#review-099)).
 - `checkMemory` runs once a minute from `server.js` (base-sync 2026-09-13).
@@ -1108,10 +1766,10 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Routes | `server/routes/mcpRoutes.js` → `/api/v1/mcp` (`MCP_ENABLED` + bearer) · `mcpAdminRoutes.js` → `/api/v1/admin/mcp-tokens` (admin) · `mcpOAuthRoutes.js` → `/.well-known/oauth-*`, `/oauth/{register,authorize,token,revoke}`, `/api/v1/oauth/requests/:id` (consent, admin) |
 | Controllers | `server/controllers/mcpAdminController.js`, `mcpOAuthController.js` |
 | Models | `server/models/McpToken.js`, `McpOAuth.js` (clients + authorization requests/codes) |
-| Middleware / core | `server/middleware/mcpAuth.js`; `server/mcp/transport.js`, `registry.js`, `envTag.js`, `oauth.js` (the OAuth protocol rules), `owner.js` (the owner re-check), `server/mcp/tools/system.js`, `manage.js`, `products.js` (catalogue writes) |
+| Middleware / core | `server/middleware/mcpAuth.js`; `server/mcp/transport.js`, `registry.js`, `envTag.js`, `oauth.js` (the OAuth protocol rules), `owner.js` (the owner re-check), `server/mcp/tools/system.js`, `manage.js`, `products.js` (catalogue writes), `orders.js` (read: `sales_report`, `recent_orders`) |
 | Views | `public/js/views/AdminMcpSettingsView.js`, `ConnectClaudeView.js` (`/tengja/:id`, the consent page) |
 | Client | `public/js/services/adminMcp.js` |
-| Jest | `tests/integration/mcp.test.js`, `mcpOAuth.test.js`, `mcpWriteTools.test.js`, `mcpCatalogTools.test.js`; `tests/unit/mcpOAuth.test.js` · e2e `e2e/mcp-oauth.spec.js` |
+| Jest | `tests/integration/mcp.test.js`, `mcpOAuth.test.js`, `mcpWriteTools.test.js`, `mcpCatalogTools.test.js`, `mcpSalesTools.test.js`; `tests/unit/mcpOAuth.test.js`, `mcpValidateArgs.test.js` · e2e `e2e/mcp-oauth.spec.js` |
 | Migrations | 088, 110 |
 | Features | [mcp-connector](../features/mcp-connector.md) |
 | Feature doc | `docs/mcp.md` |
@@ -1152,11 +1810,28 @@ company/                  gitignored: plans, decisions, logs, market-research st
   a third gate after the scope double-gate. A created product is always a
   Draft; `update_product` never takes stock; `set_stock` goes through the
   audited writer with the token owner as the actor.
+- **Variant tools ride one switch** ([harvest2-lane6c](history.d/2026-09-26-harvest2-lane6c-variants.md#harvest2-lane6c-2026-09-26)):
+  `add_variants` (write) and `list_variants` (read — it writes nothing, but it
+  exists to serve `add_variants`) both need `mcp.write.variantCreate`, OFF by
+  default, so the default read surface stays the v1 system tools.
+  `add_variants` goes through `services/variantAdd.js` (the admin bulk route's
+  writer) and creates INACTIVE variants at stock 0.
+- **`validateArgs` refuses an unknown key at every level**: arrays
+  (`minItems` / `maxItems` / `items`) and nested objects (`properties`,
+  `required`, `additionalProperties` as a schema) since `add_variants`; props
+  are looked up with `Object.hasOwn` (an inherited name is not a schema).
 - **A token is only as good as its owner**: `mcpAuth` and the token endpoint
   re-resolve the owner on every call (`server/mcp/owner.js` — role set, then
   the 2FA policy); not an admin, or disabled → 401.
+- **A read tool that names a `view` follows the owner's admin views** ([harvest2-lane5](history.d/2026-09-26-harvest2-lane5-reports.md#harvest2-lane5-2026-09-26)):
+  `sales_report` (`sales`) and `recent_orders` (`orders`) are listed and
+  callable only when `owner.ownerViewAccess` — the admin home's `homeAccess`
+  rule: role views, minus switched-off modules, minus the product's hidden
+  admin views for an all-views holder — says the owner sees that screen here.
+  So a product that hides its shop (this one) lists neither. They return no
+  customer e-mail, address, phone, note or Stripe id.
 
-**History**: [harvest-1](HISTORY.md#harvest-1) · [mcp-oauth-2026-09-24](HISTORY.md#mcp-oauth-2026-09-24) · [mcp-write-tools-2026-09-24](HISTORY.md#mcp-write-tools-2026-09-24) · [harvest-ice-c-2026-09-24](HISTORY.md#harvest-ice-c-2026-09-24)
+**History**: [harvest-1](HISTORY.md#harvest-1) · [mcp-oauth-2026-09-24](HISTORY.md#mcp-oauth-2026-09-24) · [mcp-write-tools-2026-09-24](HISTORY.md#mcp-write-tools-2026-09-24) · [harvest-ice-c-2026-09-24](HISTORY.md#harvest-ice-c-2026-09-24) · [harvest2-lane6c-2026-09-26](history.d/2026-09-26-harvest2-lane6c-variants.md#harvest2-lane6c-2026-09-26) · [harvest2-lane5](history.d/2026-09-26-harvest2-lane5-reports.md#harvest2-lane5-2026-09-26)
 
 ## 16. Change requests — Breytingarbeiðnir
 
@@ -1202,17 +1877,18 @@ company/                  gitignored: plans, decisions, logs, market-research st
 
 | | |
 |---|---|
-| Routes | `server/routes/contentRoutes.js` → `/api/v1/content` (public reads, admin writes, `/:key/image`) · `adminGeneralSettingsRoutes.js` → `/api/v1/admin/general-settings` · `adminBackgroundRoutes.js` → `/api/v1/admin/background` |
-| Controllers | `server/controllers/contentController.js`, `adminGeneralSettingsController.js`, `adminBackgroundController.js` |
+| Routes | `server/routes/contentRoutes.js` → `/api/v1/content` (public reads, admin writes, `/:key/image`) · `adminGeneralSettingsRoutes.js` → `/api/v1/admin/general-settings` · `adminBackgroundRoutes.js` → `/api/v1/admin/background` · `announcementRoutes.js` → `/api/v1/announcement` (public) · `adminAnnouncementRoutes.js` → `/api/v1/admin/announcement` (view `announcement`) |
+| Controllers | `server/controllers/contentController.js`, `adminGeneralSettingsController.js`, `adminBackgroundController.js`, `announcementController.js`, `adminAnnouncementController.js` |
+| Utils | `server/utils/announcementWindow.js` (is the announcement live: the half-open Reykjavík window, what the public endpoint may say); `public/js/utils/focusTrap.js` (keyboard focus kept in a dialog) |
 | Models | `server/models/Setting.js`, `BackgroundLibrary.js` |
-| Views | `public/js/views/AdminGeneralSettingsView.js`, `AdminBackgroundView.js` |
-| Components | `public/js/components/BackgroundLibraryAdmin.js`, `LandingBackgroundAdmin.js` |
-| Client | `public/js/services/adminGeneralSettings.js`, `backgroundLibrary.js` |
-| CSS | `public/css/admin-general-settings.css`, `admin-background.css`, `background-library.css` |
-| Jest | `tests/integration/content.uploadImage.test.js`, `sections.test.js` |
-| e2e | `e2e/editable-homepage.spec.js`, `profile-background.spec.js` |
+| Views | `public/js/views/AdminGeneralSettingsView.js`, `AdminBackgroundView.js`, `AdminAnnouncementView.js` |
+| Components | `public/js/components/BackgroundLibraryAdmin.js`, `LandingBackgroundAdmin.js`, `CutoverNotice.js` (the announcement: dialog, then banner) |
+| Client | `public/js/services/adminGeneralSettings.js`, `backgroundLibrary.js`, `adminAnnouncement.js` |
+| CSS | `public/css/admin-general-settings.css`, `admin-background.css`, `background-library.css`, `site-announcement.css` |
+| Jest | `tests/integration/content.uploadImage.test.js`, `sections.test.js`, `siteAnnouncement.test.js`; `tests/unit/announcementWindow.test.js` |
+| e2e | `e2e/editable-homepage.spec.js`, `profile-background.spec.js`, `site-announcement.spec.js` |
 | Migrations | 047, 051, 080, 085, 086, 089 |
-| Features | [app-settings](../features/app-settings.md), [landing-background](../features/landing-background.md), [site-content](../features/site-content.md) |
+| Features | [app-settings](../features/app-settings.md), [landing-background](../features/landing-background.md), [site-content](../features/site-content.md), [site-announcement](../features/site-announcement.md) |
 | Feature doc | — |
 
 **Rules that must hold**
@@ -1221,8 +1897,21 @@ company/                  gitignored: plans, decisions, logs, market-research st
 - `landing_background` default is `video`; scene/gradient/photo/plain remain
   admin-selectable ([scene-engine](HISTORY.md#scene-engine)).
 - `background` is a hidden admin line (Vefur group) ([admin-reshape](HISTORY.md#admin-reshape)).
+- **The announcement's wording leaves the server only while it is live**
+  ([harvest2-lane7a](history.d/2026-09-26-harvest2-lane7a-checkout-settings.md#harvest2-lane7a-2026-09-26)):
+  `utils/announcementWindow.js` decides it — switched on AND start <= now < end (half-open,
+  wall-clock Reykjavík time, a blank bound open, a bound that does not parse fails CLOSED) AND
+  a heading in some language. Otherwise `GET /api/v1/announcement` answers exactly
+  `{ active: false }`, `Cache-Control: no-store`, and never an error. The admin's "live now"
+  chip is the same function. The API field is `message`, never `body` — `sanitizeBody`
+  passes an object under a key named `body` through unstripped.
+- **The announcement never shifts the page**: the dialog is an overlay (focus trapped,
+  `utils/focusTrap.js`); the banner is fixed-height, above the nav, and its slot is reserved
+  at boot when this browser last showed it (`CutoverNotice.reserveSlot`). Signed-out
+  visitors only; the dismissal is per browser under `site_announcement`, keyed on the
+  announcement's `id`, every storage access in try/catch.
 
-**History**: [r1](HISTORY.md#r1) · [admin-reshape](HISTORY.md#admin-reshape)
+**History**: [r1](HISTORY.md#r1) · [admin-reshape](HISTORY.md#admin-reshape) · [harvest2-lane7a-2026-09-26](history.d/2026-09-26-harvest2-lane7a-checkout-settings.md#harvest2-lane7a-2026-09-26)
 
 ## 18. Uploads and media
 
@@ -1232,7 +1921,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
 | Middleware | `server/middleware/upload.js`, `verifyImageBytes.js`, `sanitize.js`, `validate.js`; `server/utils/imageType.js`, `staticAsset.js` |
 | Services | `server/services/uploadVolumeAlert.js`, `productImages.js` (normalise on upload, lazy `.thumb.webp`) |
 | Config | `server/config/paths.js` |
-| Jest | `tests/integration/media.test.js`, `uploadImageBytes.test.js`, `newsMedia.test.js`, `uploadVolumeAlert.test.js`, `productImages.test.js`; `tests/unit/uploadPaths.test.js`, `uploadRoot.test.js`, `imageType.test.js`, `verifyImageBytes.test.js`, `sanitize.test.js`, `validate.test.js` |
+| Jest | `tests/integration/media.test.js`, `uploadImageBytes.test.js`, `newsMedia.test.js`, `uploadVolumeAlert.test.js`, `productImages.test.js`, `uploadWrapper.test.js`; `tests/unit/uploadPaths.test.js`, `uploadRoot.test.js`, `imageType.test.js`, `verifyImageBytes.test.js`, `sanitize.test.js`, `validate.test.js`, `uploadSingle.test.js` |
 | Migrations | 004, 016, 051 |
 | Features | [uploads-media](../features/uploads-media.md) |
 | Feature doc | `SECURE_SDLC.md` |
@@ -1247,6 +1936,29 @@ company/                  gitignored: plans, decisions, logs, market-research st
 - Brand assets carry the CORP (cross-origin resource policy) exemption
   [harvest-1](HISTORY.md#harvest-1). `avatarHint` must match the enforced 5 MB avatar limit [ui-kit](HISTORY.md#ui-kit).
 - Alert on volume, never block (domain 13).
+- **One upload wrapper, one destination helper** ([harvest2-lane1a](history.d/2026-09-26-harvest2-lane1a-security.md#harvest2-lane1a-2026-09-26); ported from
+  icelandicstore #141/#142/#150/#314). Every multer disk storage takes
+  `destination: ensureDestination(dir | (req, file) => dir)` from
+  `middleware/upload.js` — multer calls `destination()` inside busboy's handler, so
+  a bare `fs.mkdirSync` that throws (ENOSPC/EACCES on the uploads mount) is an
+  UNCAUGHT exception that exits the process; `ensureDestination` hands it to
+  multer's callback. The product-image, product-import, avatar and
+  background-media routes wrap multer in
+  `uploadSingle(builder, errorKeys, { tooLargeStatus })`: multer's own errors and
+  the fileFilter's `INVALID_TYPE` are translated `errors.upload.*` 4xx (by
+  `err.code`, falling back to `default`, then `errors.upload.failed`), and a
+  malformed multipart body (busboy's `Boundary not found`, `Malformed part
+  header`, `Unexpected end of form`, …) is a 400 `errors.upload.failed` — all in
+  the standard envelope; any other error goes to the central error middleware
+  (500); a client hang-up (`Request aborted` / `Request closed`) ends **499**,
+  logged at info — never a 5xx that burns the SLO. The product-image route runs
+  `requireProduct` BEFORE multer (404 for an unknown, path-shaped or NUL-bearing
+  id, nothing written); the controller unlinks the file if the row insert fails,
+  and a product deleted mid-upload (FK 23503) is that 404 too. NOT yet on the
+  wrapper (a new upload route uses it; these move when next touched): news,
+  projects, party photos, site-content images, books documents and goods
+  receiving — they still answer multer's raw text, though their disk builders
+  already use `ensureDestination`.
 - **Product images are normalised on upload** ([harvest-ice-d-2026-09-24](HISTORY.md#harvest-ice-d-2026-09-24)): EXIF auto-orient, long
   edge ≤ 2000 px, metadata stripped, same format; bytes sharp cannot decode are
   a localised 400 with nothing kept. Rewrite from a BUFFER, never a temp file
@@ -1269,9 +1981,9 @@ company/                  gitignored: plans, decisions, logs, market-research st
 
 | | |
 |---|---|
-| Services | `server/services/emailService.js` (`emailShell`), `outboundAllowlist.js`; `server/utils/inviteSend.js` (the invite reporting contract); templates use `server/i18n/` |
+| Services | `server/services/emailService.js` (`emailShell`, `deliver`), `mailTransport.js` (`EMAIL_TRANSPORT`: Resend or Microsoft Graph), `outboundAllowlist.js`; `server/utils/emailPalette.js` (the light palette, derived from the theme tokens); `server/utils/inviteSend.js` (the invite reporting contract); templates use `server/i18n/`; header logo in `public/assets/brand/` (`identity.email`) |
 | Routes | `GET /api/v1/admin/email-health` in `server/routes/adminRoutes.js` |
-| Jest | `tests/unit/outboundAllowlist.test.js`, `emailReplyTo.test.js`, `emailNameOnlyRecipient.test.js`; `tests/integration/inviteFeedback.test.js`; exercised by `tests/integration/auth.test.js`, `party.test.js`, `contact.test.js` |
+| Jest | `tests/unit/outboundAllowlist.test.js`, `emailReplyTo.test.js`, `emailNameOnlyRecipient.test.js`, `emailPalette.test.js`, `emailShell.test.js`, `emailGraphTransport.test.js`; `tests/integration/inviteFeedback.test.js`, `emailLogoAsset.test.js`; exercised by `tests/integration/auth.test.js`, `party.test.js`, `contact.test.js`; `tests/lib/renderAllEmails.js` drives every sender |
 | Migrations | 062 |
 | Features | [email](../features/email.md) |
 | Feature doc | `RUNBOOK.md`, `docs/DEPLOYMENT.md` (env) |
@@ -1282,7 +1994,8 @@ company/                  gitignored: plans, decisions, logs, market-research st
   `EMAIL_REPLY_TO` pointing at a real mailbox, added to every message that
   sets no replyTo of its own ([go-live](HISTORY.md#go-live)). Mail failures are loud; `EMAIL_ALLOWLIST` limits recipients outside
   prod ([harvest-1](HISTORY.md#harvest-1)).
-- The 7 server email strings carry the company brand ([r1](HISTORY.md#r1));
+- The server email strings carry the brand ([r1](HISTORY.md#r1)) through
+  `{siteName}` / `{legalName}` / `{siteHost}` since the identity seam;
   `emailShell` escapes its `<title>` (base-sync 2026-09-13).
 - **"Sent" means accepted for THE recipient**: the senders return the
   provider id or `false` (muted, or only placeholder recipients), never
@@ -1291,8 +2004,34 @@ company/                  gitignored: plans, decisions, logs, market-research st
   `EMAIL_ALLOWLIST` (`isRedirecting()`), otherwise the set-password link
   comes back (`no-store`), with `emailError` for staff eyes. `invited_at` is
   stamped only on a confirmed, un-redirected send ([harvest-ice-a](HISTORY.md#harvest-ice-a-2026-09-24)).
+- **The shell is the instance's own**: no brand, host or colour literal in
+  `emailService.js`. Name, host, legal line and From display name come from
+  `identity.brand` / `APP_URL` (`EMAIL_FROM` falls back to
+  `identity.organization.email`); the logo is `identity.email.logo`, a file in
+  `public/assets/brand/` (PNG/JPEG — not SVG) linked absolute under `APP_URL`,
+  alt text = the brand name. Senders paint with the palette roles `P.*` only
+  ([harvest2-lane2](history.d/2026-09-26-harvest2-lane2-email.md#harvest2-lane2-2026-09-26)).
+- **The palette is light and AA**: `utils/emailPalette.js` derives it at boot
+  from the first LIGHT theme (root, default, picker; a dark one is skipped),
+  resolved to literal hex, with `identity.email.palette` overrides; every text
+  colour is held to 4.5:1 on each surface it is painted on (a failure is
+  replaced and logged, never shipped). `emailPalette.test.js` measures every
+  colour in every rendered mail; translated `email.*` strings carry no colour
+  (the footer link's style is handed in as `{linkStyle}`).
+- **One transport switch**: `EMAIL_TRANSPORT=resend|graph` (default resend;
+  `services/mailTransport.js`). The `GRAPH_*` (or ice's `M365_*`) variables
+  alone never switch it. Every transport answers Resend's
+  `{ data: { id }, error }` behind `deliver()`, which stays the only way out
+  (placeholder drop, `EMAIL_ALLOWLIST` incl. dropping cc/bcc, ONE deadline
+  signal per message covering every call the transport makes, loud failure)
+  — no sender calls a transport directly, and a fan-out (the party
+  announcement) is bounded. Graph's id is the minted `client-request-id`;
+  `saveToSentItems` is false unless `GRAPH_SAVE_TO_SENT_ITEMS=true`.
+  Production's boot requires the selected transport's settings.
+- The email font stack is the theme's face plus the bare `sans-serif` tail —
+  no named system face (design rules).
 
-**History**: [harvest-1](HISTORY.md#harvest-1) · [r1](HISTORY.md#r1) · [go-live](HISTORY.md#go-live) · [harvest-ice-a-2026-09-24](HISTORY.md#harvest-ice-a-2026-09-24)
+**History**: [harvest-1](HISTORY.md#harvest-1) · [r1](HISTORY.md#r1) · [go-live](HISTORY.md#go-live) · [harvest-ice-a-2026-09-24](HISTORY.md#harvest-ice-a-2026-09-24) · [harvest2-lane2-2026-09-26](history.d/2026-09-26-harvest2-lane2-email.md#harvest2-lane2-2026-09-26)
 
 ## 20. Infrastructure and cross-cutting
 
@@ -1300,16 +2039,150 @@ company/                  gitignored: plans, decisions, logs, market-research st
 |---|---|
 | Release delivery | `server/middleware/versionedStatic.js` (`/js/_<tag>/`, `/css/_<tag>/`, immutable a year, 404 `no-store` under another tag), `server/utils/staticCacheControl.js` (unstamped JS/CSS/JSON `no-cache`); client `public/js/services/buildGuard.js`, `public/js/utils/buildCheck.js`, `public/js/utils/assetBase.js`, `public/js/components/UpdateBanner.js`; `tests/integration/versionedShell.test.js`, `tests/unit/versionedStatic.test.js`, `staticCacheControl.test.js`, `buildCheck.client.test.js`, `noAbsoluteJsUrls.test.js` · e2e `e2e/build-reload.spec.js` |
 | App | `server/app.js`, `server/server.js`, `server/config/database.js`, `server/middleware/errorHandler.js`, `server/middleware/forwardedFor.js`; `server/utils/safeEqual.js` (constant-time compare for header credentials — the `/metrics` bearer) |
+| Demo instance (R2b) | `server/config/demoInstance.js` (`DEMO_INSTANCE`, the reset hour, the `<html>` hand-off), `server/services/demoReset.js` (the rebuild, the nightly timer, first-boot seed), `server/demo/seed.js` (PRODUCT-OWNED seed; the engine stub seeds nothing), `server/routes/adminDemoRoutes.js` → `/api/v1/admin/demo` (status + reset), `public/js/components/DemoBanner.js`; the guards in `emailService.js`, `server/config/stripe.js`, the three MCP gates, `robotsRoutes.js`, `app.js`; `tests/integration/demoInstance.test.js`, `tests/integration/demoReset.test.js` (+ `tests/fixtures/demoResetRun.js`) |
+| TEST-stack sample rows | `server/services/testStackSeeder.js` (the gate: `APP_ENV` exactly `test`, not a demo instance, no production or real-books word (`prod`/`production`/`live`/`books`/`ops`) in any database host/name, `?host=`/`?dbname=` included; one transaction per dataset; never throws), `server/demo/testStackData.js` (PRODUCT-OWNED datasets; empty in the engine), `server/scripts/seed-test-stack.js` (`npm run seed:test-stack`, local only, behind `targetGuard.js`); `tests/unit/testStackSeeder.test.js`, `tests/integration/testStackSeeder.test.js` |
 | Module switches (R4) | `server/config/moduleCatalog.js` (what each switchable module owns: routes, API + upload prefixes, admin views, registry features, tiers), `server/config/modules.js` (the resolved state: the pre-auth `moduleGate`, `isDisabledRoute`, the `<script id="modules">` hand-off), `public/js/utils/modules.js` (its client half); `server/routes/adminModulesRoutes.js` → `/api/v1/admin/modules` (the admin's switches, R5b); `tests/unit/moduleCatalog.test.js`, `tests/integration/moduleFlags.test.js` · e2e `e2e/admin-modules.spec.js` |
 | Migrations tooling | `server/config/schema.js`, `server/scripts/migrate.js`, `bootstrap.js`, `setup-admin.js`, `seed.js`, `cleanup-duplicates.js`, `capture-site-screenshots.js` |
-| Tests infra | `tests/workerDb.js`, `tests/lib/featureGate.js` (the feature gate core), `tests/lib/locale.js` (the visitor-default helper), `e2e/global-setup.js`, `e2e/helpers.js`, `e2e/lib/dbUrl.js`, `e2e/lib/featureGate.js`, `e2e/lib/identity.js`, `e2e/lib/locale.js`; `scripts/drop-test-dbs.js` |
-| Jest | `tests/unit/schema-integrity.test.js`, `database.test.js`, `workerDb.test.js`, `featureGate.test.js`, `errorHandlerDeadlock.test.js`, `migrationIdempotent.test.js`, `ciSkippedShim.test.js`; `tests/integration/migrateRunner.test.js` |
-| CI / deploy | `.github/workflows/ci.yml` (lint · 3 Jest shards · the aggregator; triggers on `[master, main]`), `ci-skipped.yml` (docs-only PR shim), `deploy.yml` (hallismiley's, product-owned: `workflow_run` on green CI on `main` + `workflow_dispatch` — NOT the engine's dispatch-only one; its post-deploy check requires `X-App-Build` on `/ready` to be the shipped build since [engine-sync-4](HISTORY.md#engine-sync-4-2026-09-24)), `promote.yml` (product-owned; the engine's stable canary gate ported, inert — no channel armed), `trivy.yml` (hallismiley: scheduled, non-blocking image CVE scan); `scripts/merge-coverage.js`; `Dockerfile` |
+| Destructive-script guard | `server/scripts/targetGuard.js` (`checkTarget` / `assertSafeTarget`) — called first by `seed-books-demo.js`, `seed-shop.js --reset`, `cleanup-duplicates.js`, `books-replay.js`, `tests/globalSetup.js`, `scripts/drop-test-dbs.js`, `e2e/global-setup.js`; `tests/unit/targetGuard.test.js` |
+| Tests infra | `tests/workerDb.js`, `tests/lib/featureGate.js` (the feature gate core), `tests/lib/locale.js` (the visitor-default helper), `tests/lib/historyAnchors.js` (archive + fragment anchors, one namespace), `e2e/global-setup.js`, `e2e/helpers.js`, `e2e/lib/dbUrl.js`, `e2e/lib/featureGate.js`, `e2e/lib/identity.js`, `e2e/lib/locale.js`; the role × route harness `e2e/lib/routes.js` (routes derived from `router.js`), `e2e/lib/routeSmoke.js`, `e2e/lib/roleSession.js`, `e2e/lib/roleMatrix.js`, `e2e/roles/*.spec.js`, `tests/unit/roleRoutes.test.js`; `tests/lib/testDbSweep.js` (test-DB labels + the sweep), `tests/lib/testPg.js` (the throwaway test server seam); `scripts/drop-test-dbs.js`, `scripts/test-pg.js` |
+| Jest | `tests/unit/schema-integrity.test.js`, `database.test.js`, `workerDb.test.js`, `featureGate.test.js`, `errorHandlerDeadlock.test.js`, `errorHandlerAiBusy.test.js`, `migrationIdempotent.test.js`, `ciSkippedShim.test.js`, `workflowsParse.test.js`, `historyFragments.test.js`, `testDbSweep.test.js`; `tests/integration/migrateRunner.test.js`, `testDbSweep.test.js` |
+| CI / deploy | `.github/workflows/ci.yml` (lint · 3 Jest shards · the aggregator; triggers on `[master, main]`), `ci-skipped.yml` (docs-only PR shim), `deploy.yml` (hallismiley's, product-owned: `workflow_run` on green CI on `main` + `workflow_dispatch` — NOT the engine's dispatch-only one; its post-deploy check requires `X-App-Build` on `/ready` to be the shipped build since [engine-sync-4](HISTORY.md#engine-sync-4-2026-09-24)), `promote.yml` (product-owned; the engine's stable canary gate ported, inert — no channel armed), `trivy.yml` (hallismiley: scheduled, non-blocking image CVE scan), `secret-cert-watch.yml` (weekly TLS + Key Vault expiry watch; judging in `scripts/expiry-watch.js`, `tests/unit/expiryWatch.test.js`); `scripts/merge-coverage.js`; `Dockerfile` |
 | Migrations | 001, 043 (housekeeping) |
-| Features | [client-config](../features/client-config.md), [platform-core](../features/platform-core.md), [rate-limits-security](../features/rate-limits-security.md), [testing-infra](../features/testing-infra.md), [inert-engine-product-files](../features/hs/inert-engine-product-files.md) (hs) |
-| Feature doc | `RUNBOOK.md`, `SECURE_SDLC.md`, `docs/TESTING.md`, `docs/DEPLOYMENT.md` |
+| Features | [client-config](../features/client-config.md), [demo-instance](../features/demo-instance.md), [platform-core](../features/platform-core.md), [rate-limits-security](../features/rate-limits-security.md), [testing-infra](../features/testing-infra.md), [inert-engine-product-files](../features/hs/inert-engine-product-files.md) (hs) |
+| Feature doc | `RUNBOOK.md`, `SECURE_SDLC.md`, `docs/TESTING.md`, `docs/DEPLOYMENT.md`, `docs/history.d/README.md` |
 
 **Rules that must hold**
+- **Test runs never write into the working tree, and an image never carries local-only files** ([security-hygiene-2026-09-26](history.d/2026-09-26-fix-security-hygiene-2026-09-26.md#security-hygiene-2026-09-26)):
+  globalSetup gives each Jest run an upload base in the OS temp dir
+  (`tests/lib/testUploads.js`, `<product>-test-uploads-<pid>`, pinned in
+  `TEST_UPLOAD_BASE`); `tests/env.js` points `UPLOAD_ROOT`/`BOOKS_UPLOAD_ROOT` at a
+  per-worker folder under it; teardown removes it and the next setup sweeps a dead
+  run's. A test that checks a file on disk derives the path from
+  `server/config/paths.js` (`UPLOAD_ROOT`, `contentUploadDir()`…), never
+  `public/assets`. `.dockerignore` mirrors `.gitignore`'s local-only paths
+  (company/, keys/, *.pem, upload folders) so a local `docker build .` gets what CI
+  gets — never a folder that holds committed files the image needs
+  (`public/assets/backgrounds/`).
+- **Test databases live on the throwaway test server, carry the product's name and a label, and clean themselves up** ([test-db-hygiene](history.d/2026-09-26-feat-test-db-hygiene.md#test-db-hygiene-2026-09-26)):
+  `TEST_PG_URL` (process env or `.env`) is where Jest + e2e create them —
+  never a server holding a real database; `TEST_DATABASE_URL` /
+  `E2E_DATABASE_URL` stay explicit pins (CI). Names start with
+  `engine.json` `product` (never a literal — every downstream carries these
+  files) and end in `_test`; a test's own extra database comes from
+  `createExtraTestDb`/`extraTestDbUrl` so the run owns it. Every test DB is
+  labelled at creation (`COMMENT ON DATABASE`, JSON); globalSetup sweeps this
+  product's dead/old ones inside a PER-BASE advisory lock and never drops a DB
+  with a session or a non-derived name; teardown drops by pattern WITH (FORCE)
+  and fails loudly; an interrupt hands the drop to a detached cleaner.
+  `cleanTables()` DELETEs (FK closure, replica role, sequences reset) —
+  TRUNCATE cost 7× the wall time in both durability modes.
+- **Nothing creates a test database the run does not own** ([test-db-followups](history.d/2026-09-26-chore-test-db-hygiene-followups.md#test-db-followups-2026-09-26)):
+  a suite that needs a database of its own takes `createExtraTestDb(suffix)`
+  (the demo-reset test: `…_w<N>_demo_test` — the suffix is exactly `demo`,
+  the reset guard wants it as a word); the one deliberate exception, the
+  sweep's own integration test (`zzsw<pid>_…`, outside every product prefix
+  so the real sweep cannot meet it), drops dead-pid leftovers of itself on
+  the way in. The inventory is in `docs/TESTING.md`. `.wt/` (engine-sync
+  worktrees) is gitignored engine-wide.
+- **A suite never depends on the order the suites share a worker in**
+  ([engine-sync-gaps-2026-09-26](history.d/2026-09-26-fix-engine-sync-gaps-2026-09-26.md#engine-sync-gaps-2026-09-26)):
+  a worker's DB outlives each file, and `cleanTables()` empties only the
+  users FK closure — `products` and `roles` (among others) survive it. So a
+  suite (1) removes what it wrote in `afterAll` — `cleanTables()` for the
+  closure, by name or by a restored snapshot for the rest (adminHome: its
+  `home-*` products and roles, `app_settings`); (2) never deletes rows the
+  migrations seeded without putting them back (adminRoles snapshots `roles`
+  and restores it); (3) asserts whole-table counts only relative to what the
+  same table answers elsewhere, or scoped to its own rows or dates (booksPos's
+  receipt list, adminHomeAttention's sold-out card); (4) keeps FILESYSTEM
+  writes per worker — uploads go to the per-worker `UPLOAD_ROOT` under the
+  run's temp base (`tests/lib/testUploads.js`,
+  [security-hygiene-2026-09-26](history.d/2026-09-26-fix-security-hygiene-2026-09-26.md#security-hygiene-2026-09-26)),
+  because every worker restarts a serial id at 1. A suite in
+  the engine names no product: what a product hides comes from the seam
+  (`identity.surface.*`, `publicSurface`, `disabledAdminViews()`). Prove a fix
+  by running the pair in one worker in both orders (`--runInBand` with a
+  test sequencer that honours the given order).
+- **A demo instance throws its data away, never a real database** ([demo-instance-2026-09-26](history.d/2026-09-26-feat-demo-mode.md#demo-instance-2026-09-26)):
+  `DEMO_INSTANCE=true` is accepted only with `APP_ENV=demo` and `DEMO_DATABASE_NAME`
+  equal to the connected database (whose name carries "demo"); `server.js` exits at
+  boot otherwise. While on, email, payments (`isConfigured` AND `getStripe`), MCP and
+  IndexNow are off and crawlers are shut out. The reset snapshots the kept accounts
+  (`DEMO_KEEP_ROLES`, unexpired) as JSON in `demo_keep` BEFORE dropping `public`,
+  never as a renamed copy of the tables (unqualified `information_schema` checks in
+  migrations would see it); restores one statement per table in one transaction;
+  drops the snapshot only after the seed; recovers an interrupted reset at boot. A
+  `*_test` database only with `allowTestDatabase` (the reset test's own). The seed
+  file `server/demo/seed.js` is product-owned.
+- **A chunk's write-up is a new file, never an append** ([harvest2-lane0](history.d/2026-09-26-harvest2-lane0-history.md#harvest2-lane0-2026-09-26)):
+  `docs/history.d/YYYY-MM-DD-<branch, / as ->.md`, first line its `<a id>`
+  anchor, next non-empty line `## YYYY-MM-DD — <title>`; `docs/HISTORY.md` is
+  the frozen archive to 2026-09-26 and its index table covers it alone. The
+  archive's and the fragments' slugs are one namespace (a `history:` entry in
+  `features/*.md` is a bare slug) and must not repeat; a link names the file
+  it points into (`history.d/<file>.md#slug` from `docs/`,
+  `docs/history.d/<file>.md#slug` from `PLAN.md`) and must resolve there —
+  checked in every doc under docs/ and features/ plus the root PLAN, README
+  and CLAUDE files.
+  `historyFragments.test.js` + `architectureIndex.test.js` enforce both. The
+  guard that `PLAN.md` links a fragment at all binds the engine always, and a
+  downstream only once its own (product-owned) `PLAN.md` mentions
+  `history.d/` ([engine-sync-gaps-2026-09-26](history.d/2026-09-26-fix-engine-sync-gaps-2026-09-26.md#engine-sync-gaps-2026-09-26)).
+- **Every chunk is reviewed before it merges** ([harvest2-lane0](history.d/2026-09-26-harvest2-lane0-history.md#harvest2-lane0-2026-09-26)):
+  `/code-review` or the `invariant-reviewer` agent on the branch diff;
+  findings are fixed on the branch first (CLAUDE.md, Project rules).
+- **A typed "come back later" goes through the central error middleware** ([harvest2-lane1b](history.d/2026-09-26-harvest2-lane1b-defects.md#harvest2-lane1b-2026-09-26)):
+  an error with a safe client `status`, a `messageKey` and optionally
+  `retryAfterSeconds` / `reason` (aiGate's `AiBusyError` is the first) is
+  answered in the standard envelope with the key localised, `Retry-After`
+  set, and `{ reason, retryable: true }` for a 429. A 5xx never chooses its
+  own message, key or not (`errorHandlerAiBusy.test.js`).
+- **Every instance is on the weekly expiry watch** ([harvest2-lane9](history.d/2026-09-26-harvest2-lane9-ops.md#harvest2-lane9-2026-09-26); ice #90):
+  `.github/workflows/secret-cert-watch.yml` fails when a TLS certificate on a
+  `WATCH_HOSTS` host is inside 21 days (a managed certificate that far in failed
+  to renew) or a `WATCH_KEY_VAULTS` secret is inside 30 days or has no expiry
+  stamp; the judging lives in `scripts/expiry-watch.js` (unit-tested), the
+  workflow only gathers inputs. It reads secret METADATA only (Key Vault
+  Reader, never `secret show`). A half that is not armed (no hosts; no vaults
+  or no Azure secrets) is skipped with a warning, never red, so a downstream
+  without Azure stays green. The engine has no fleet manifest CI can read — the
+  repository variable IS the host list. Every workflow pins its actions to a
+  full commit sha (`workflowsParse.test.js`).
+- **A TEST stack's invented rows never ride a promote** ([harvest2-lane9](history.d/2026-09-26-harvest2-lane9-ops.md#harvest2-lane9-2026-09-26); ice #183):
+  sample rows a TEST stack wants and production must not get go in the
+  product-owned `server/demo/testStackData.js` (idempotent, natural keys,
+  labelled, non-destructive), never in a migration; `testStackSeeder` applies
+  them after `migrate()` on every boot only where `APP_ENV` is exactly `test`
+  (never judged by `NODE_ENV`), the instance is not a demo instance, and the
+  database host/name (libpq `?host=`/`?dbname=` too) carries no `prod`/
+  `production`/`live` word nor targetGuard's `books`/`ops`; one
+  transaction per dataset, and it never throws. By hand only on a local
+  database (`npm run seed:test-stack`, behind `targetGuard.js`). A demo
+  instance keeps its own seed (`server/demo/seed.js`).
+- **Every route is walked by every role, from the router's own list** ([harvest2-lane9](history.d/2026-09-26-harvest2-lane9-ops.md#harvest2-lane9-2026-09-26); ice #62):
+  `e2e/lib/routes.js` derives the routes, views and guards from `router.js`
+  `ROUTES` and fails when the parse disagrees with `routePatterns.json` or
+  names a view id `adminViews.js` lacks — a route is never added to a hand
+  list. A signed-in role's expectations come from its `roles.view_access` row;
+  a hidden feature or a switched-off module skips its routes with the reason.
+  Its accounts are its own (`e2erole_*`), seeded behind `targetGuard.js`,
+  signed in once per worker (storageState). Console noise it ignores is a
+  short, commented list; a 5xx is always a failure.
+- **A destructive script proves its target first** ([harvest2-lane1a](history.d/2026-09-26-harvest2-lane1a-security.md#harvest2-lane1a-2026-09-26); generalised
+  from icelandicstore #370's e2e fixtures guard): anything that deletes, truncates,
+  drops or rewrites rows calls `server/scripts/targetGuard.js` before its first
+  query (the pool is lazy, so a refusal opens no connection). An ALLOW-list:
+  every host local (localhost / 127.0.0.1 / ::1, `?host=` overrides included; an
+  `*.postgres.database.azure.com` host is named), every database name (path and
+  `?dbname=` / `?database=`) matching the caller's pattern (`_test`; `_replay`
+  for books:replay) or — only with an explicit `--allow-dev-db` — a plain
+  identifier that is not reserved for real records (`*_books`, `*_books_restore`,
+  `*_ops`, `*_prod`, `*_production`, `*_live`); and never `NODE_ENV=production`,
+  `APP_ENV=production|staging` or an App Service process (`WEBSITE_SITE_NAME` /
+  `WEBSITE_INSTANCE_ID`). `NODE_ENV` alone was never a guard: a shell holding a
+  live `DATABASE_URL` has it unset. `APP_ENV=test` is allowed (a downstream's dev
+  `.env` sets it). Known limit: the port is not judged. The one exemption is
+  `reset-admin-totp.js`, whose job is the real instance — its header says so.
 - **A module that is off is absent, not hidden** ([module-flags-2026-09-24](HISTORY.md#module-flags-2026-09-24)):
   `modules.preset` (`all` default · `vefur` · `verslun` · `rekstur`) plus
   `modules.<id>.enabled`; an explicit switch beats the preset. What a module
@@ -1408,6 +2281,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
   and runs the unit tier, because the engine's docs are tested content.
   The docs list must equal ci.yml's `pull_request.paths-ignore` and the
   detector's `case` (`ciSkippedShim.test.js`).
+- Every workflow under `.github/workflows` must parse as YAML with a name, a trigger and jobs whose steps each run or use something (`workflowsParse.test.js`). GitHub only reports a broken workflow when it is triggered — for the dispatch-only `deploy.yml`, at the moment of shipping. Never edit a file with `String.prototype.replace` and a STRING replacement: `$'`, `$&`, `$`` and `$1` in shell text are replacement patterns (the 2026-09-24 `deploy.yml` splice). Pass a function, or splice by index.
 - **A new `ADD CONSTRAINT` is re-runnable** ([harvest-ice-f](HISTORY.md#harvest-ice-f-2026-09-24)): inside a
   `pg_constraint`/`information_schema` existence check, or after a `DROP
   CONSTRAINT IF EXISTS` of the same name — `migrationIdempotent.test.js` reads
@@ -1477,7 +2351,7 @@ company/                  gitignored: plans, decisions, logs, market-research st
   the commit's check-runs and require `total_count > 0`
   ([stale-pr-checks](HISTORY.md#stale-pr-checks)).
 
-**History**: [build-status](HISTORY.md#build-status) · [base-sync](HISTORY.md#base-sync) · [harvest-1](HISTORY.md#harvest-1) · [harvest-2](HISTORY.md#harvest-2) · [go-live](HISTORY.md#go-live) · [engine-graft](HISTORY.md#engine-graft) · [docs-restructure-hs](HISTORY.md#docs-restructure-hs) · [engine-sync-4](HISTORY.md#engine-sync-4-2026-09-24) · [module-flags-2026-09-24](HISTORY.md#module-flags-2026-09-24) · [harvest-ice-f](HISTORY.md#harvest-ice-f-2026-09-24) · [harvest-ice-e](HISTORY.md#harvest-ice-e-2026-09-24)
+**History**: [build-status](HISTORY.md#build-status) · [base-sync](HISTORY.md#base-sync) · [harvest-1](HISTORY.md#harvest-1) · [harvest-2](HISTORY.md#harvest-2) · [go-live](HISTORY.md#go-live) · [engine-graft](HISTORY.md#engine-graft) · [docs-restructure-hs](HISTORY.md#docs-restructure-hs) · [engine-sync-4](HISTORY.md#engine-sync-4-2026-09-24) · [module-flags-2026-09-24](HISTORY.md#module-flags-2026-09-24) · [harvest-ice-f](HISTORY.md#harvest-ice-f-2026-09-24) · [harvest-ice-e](HISTORY.md#harvest-ice-e-2026-09-24) · [harvest2-lane0](history.d/2026-09-26-harvest2-lane0-history.md#harvest2-lane0-2026-09-26)
 
 ## 21. Seller area — the published copy on the public instance
 

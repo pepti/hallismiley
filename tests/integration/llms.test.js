@@ -25,9 +25,20 @@ const APP_URL = (process.env.APP_URL || 'https://www.orangesmiley.is').replace(/
 const urlOf = (locale, route) => (route === '/' ? `${APP_URL}/${locale}/` : `${APP_URL}/${locale}${route}`);
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+// Indexability is gated on the request Host (server/utils/indexability.js) and
+// supertest sends 127.0.0.1 — ask as the public host.
+const PUBLIC_HOST = new URL(APP_URL).host;
+
 describe('GET /llms.txt', () => {
   let res;
-  beforeAll(async () => { res = await request(app).get('/llms.txt'); });
+  beforeAll(async () => { res = await request(app).get('/llms.txt').set('Host', PUBLIC_HOST); });
+
+  test('a non-indexable instance does not hand it out (404 envelope)', async () => {
+    const off = await request(app).get('/llms.txt').set('Host', 'orangesmiley-web.azurewebsites.net');
+    expect(off.status).toBe(404);
+    expect(off.body).toEqual({ error: 'Not found', code: 404 });
+    expect(off.headers.vary).toMatch(/Host/);
+  });
 
   test('200, text/plain, cached like the sitemap', () => {
     expect(res.status).toBe(200);

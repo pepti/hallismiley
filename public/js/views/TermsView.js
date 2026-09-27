@@ -1,5 +1,6 @@
 import { t, href, getLocale } from '../i18n/i18n.js';
 import { mountSceneHeader } from '../scenes/sceneHeader.js';
+import { siteHost } from '../utils/identity.js';
 
 // Terms of service for the public company site (/terms).
 //
@@ -19,10 +20,10 @@ import { mountSceneHeader } from '../scenes/sceneHeader.js';
 
 const COPY = {
   is: {
-    updated: 'Síðast uppfært: 1. september 2026',
+    updated: 'Síðast uppfært: 25. september 2026',
     sections: [
       ['1. Gildissvið', `
-        <p>Þessi vefur (<strong>orangesmiley.is</strong>) er rekinn af Orange Smiley ehf.,
+        <p>Þessi vefur (<strong>{siteHost}</strong>) er rekinn af Orange Smiley ehf.,
         Hafnarfirði, Íslandi (kt. 470826-1500, VSK-nr. 162561). Með því að nota vefinn samþykkir þú
         þessa skilmála. Ef þú samþykkir þá ekki, biðjum við þig að nota ekki vefinn.</p>`],
       ['2. Hvað vefurinn er', `
@@ -37,8 +38,8 @@ const COPY = {
         Orange Smiley ehf. nema annað sé tekið fram. Efnið má ekki afrita, dreifa eða
         nýta í viðskiptalegum tilgangi án skriflegs leyfis.</p>
         <p>Þér er velkomið að deila tenglum á vefinn og vísa í hann.</p>
-        <p>Ljósmyndir af íslenskri náttúru á vefnum eru birtar með leyfi höfunda þeirra;
-        upplýsingar um hverja mynd eru í <a href="/assets/iceland/CREDITS.md">myndaskránni</a>.</p>`],
+        <p>Landslagsmyndirnar á vefnum eru gerðar af Orange Smiley ehf.; nánar í
+        <a href="/assets/iceland/CREDITS.md">myndaskránni</a>.</p>`],
       ['4. Fyrirspurnarform', `
         <p>Fyrirspurnarformið er ætlað raunverulegum erindum. Ruslpóstur, sjálfvirk
         skilaboð og móðgandi efni eru óheimil og kunna að vera tilkynnt til
@@ -62,10 +63,10 @@ const COPY = {
     ],
   },
   en: {
-    updated: 'Last updated: 1 September 2026',
+    updated: 'Last updated: 25 September 2026',
     sections: [
       ['1. Scope', `
-        <p>This website (<strong>orangesmiley.is</strong>) is operated by Orange Smiley ehf.,
+        <p>This website (<strong>{siteHost}</strong>) is operated by Orange Smiley ehf.,
         Hafnarfjörður, Iceland (reg. no. 470826-1500, VAT no. 162561). By using the site you accept
         these terms. If you do not accept them, please do not use the site.</p>`],
       ['2. What this site is', `
@@ -80,9 +81,8 @@ const COPY = {
         of Orange Smiley ehf. unless otherwise stated. It may not be reproduced, distributed
         or commercially exploited without written permission.</p>
         <p>You are welcome to link to the site and to reference it.</p>
-        <p>Photographs of Icelandic landscapes on this site are published under their
-        authors' licences; per-image details are in the
-        <a href="/assets/iceland/CREDITS.md">photo credits</a>.</p>`],
+        <p>The landscape images on this site are made by Orange Smiley ehf.; details in the
+        <a href="/assets/iceland/CREDITS.md">image credits</a>.</p>`],
       ['4. Contact form', `
         <p>The contact form is provided for genuine enquiries. Spam, automated messages and
         abusive content are prohibited and may be reported to the sender's service
@@ -110,6 +110,7 @@ const COPY = {
 export class TermsView {
   async render() {
     const copy = COPY[getLocale()] || COPY.is;
+    const host = siteHost();
     const view = document.createElement('div');
     view.className = 'view';
     view.innerHTML = `
@@ -118,7 +119,7 @@ export class TermsView {
           ${copy.sections.map(([heading, body]) => `
           <section class="legal-section">
             <h2>${heading}</h2>
-            ${body}
+            ${body.replaceAll('{siteHost}', () => host)}
           </section>`).join('')}
 
           <footer class="legal-footer-nav">

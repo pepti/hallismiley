@@ -8,6 +8,7 @@ const { allowedScopes } = require('../mcp/registry');
 const { t } = require('../i18n');
 
 function mcpEnabled() {
+  if (require('../config/demoInstance').isDemoInstance()) return false; // off on a demo instance
   return process.env.MCP_ENABLED === 'true';
 }
 
