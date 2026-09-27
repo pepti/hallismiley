@@ -207,7 +207,7 @@ async function restoreFromSnapshot(client) {
 
 // The product's seed. server/demo/seed.js is PRODUCT-OWNED: the engine ships
 // a stub that seeds nothing; a product replaces it (rekstrarkerfid: the
-// Kaffibrennslan Glóð business). Required lazily so a test can swap it.
+// Kaffibrennslan Hraunbaun business). Required lazily so a test can swap it.
 async function runProductSeed() {
   const seedPath = require.resolve('../demo/seed');
   delete require.cache[seedPath];

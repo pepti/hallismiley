@@ -18,6 +18,7 @@
 const logger = require('../logger');
 const securityLogger = require('../observability/securityLogger');
 const registry = require('./registry');
+const { ownerViewAccess } = require('./owner');
 const { identity } = require('../config/identity');
 
 const PROTOCOL_VERSION = '2025-06-18';
@@ -54,7 +55,9 @@ async function handleToolsCall(req, params) {
   const scopes = req.mcpToken.scopes || [];
   // Unknown and not-permitted are deliberately the same answer: a read-only
   // caller learns nothing about which write tools exist.
-  if (!tool || !registry.permitted(tool, scopes)) {
+  // A view-gated tool asks about the owner's admin views (harvest 2 lane 5).
+  const canView = tool && tool.view ? await ownerViewAccess(req.mcpToken.user_id) : null;
+  if (!tool || !registry.permitted(tool, scopes, canView)) {
     return { ...toolText({ error: `Unknown tool: ${name}` }), isError: true };
   }
   const args = (params && params.arguments) || {};
@@ -108,7 +111,9 @@ async function handlePost(req, res) {
       case 'ping':
         return res.json(rpcResult(msg.id, {}));
       case 'tools/list':
-        return res.json(rpcResult(msg.id, { tools: registry.listTools(req.mcpToken.scopes) }));
+        return res.json(rpcResult(msg.id, {
+          tools: registry.listTools(req.mcpToken.scopes, await ownerViewAccess(req.mcpToken.user_id)),
+        }));
       case 'tools/call':
         return res.json(rpcResult(msg.id, await handleToolsCall(req, msg.params)));
       default:

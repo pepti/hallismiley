@@ -3,6 +3,12 @@
 .halli-bio {
   --hb-pad:   clamp(80px, 12vw, 140px);
   --hb-max:   1200px;
+  /* The scroll-reveals start 56px to the side (.hb-reveal--left/--right), and a
+     transform counts toward the page's scrollable width: at 375px the page
+     scrolled sideways by ~73px until each block had revealed (the role × route
+     harness, harvest 2 lane 9). `clip` trims the overflow without making this
+     a scroll container, so nothing sticky inside it changes. */
+  overflow-x: clip;
 }
 
 /* ── Hero ─────────────────────────────────────────────────────────────────── */

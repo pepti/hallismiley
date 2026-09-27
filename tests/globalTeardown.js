@@ -25,6 +25,12 @@ module.exports = async function globalTeardown() {
   for (const [sig, fn] of Object.entries(handlers)) process.removeListener(sig, fn);
   delete globalThis.__testDbInterruptHandlers;
 
+  // This run's upload folder (tests/lib/testUploads.js); a killed run's is
+  // swept by the next globalSetup.
+  try { require('./lib/testUploads').remove(); } catch (err) {
+    process.stderr.write(`[jest] could not remove the test upload folder: ${err.message}\n`);
+  }
+
   // globalSetup pinned the resolved base into TEST_DATABASE_URL, so this
   // resolves to the same names it created.
   const baseUrl = baseTestUrl();

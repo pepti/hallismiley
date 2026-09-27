@@ -164,7 +164,7 @@ const GUIDES = [
 <h2>Við notum kerfið sjálf</h2>
 <p>Vefur Orange Smiley keyrir á sama kerfi og við seljum — kerfið sem viðskiptavinurinn kaupir er kerfið sem við rekum sjálf. Fyrsti viðskiptavinurinn er íslensk heildverslun sem flutti af Shopify yfir á kerfið.</p>
 <h2>Að sýna kerfið: sýnikerfið demo.rekstrarkerfi.is</h2>
-<p>Þegar þú sýnir viðskiptavini kerfið notarðu <strong>sýnikerfið demo.rekstrarkerfi.is</strong>: sérstakt eintak af Rekstrarkerfinu, bara til sýnis. Þú sýnir aldrei á orangesmiley.is og aldrei á kerfi annars viðskiptavinar. Í sýnikerfinu verða tilbúin gögn fyrir skáldað fyrirtæki, <em>Kaffibrennsluna Glóð</em>: vörur, pantanir, reikningar, eitt VSK-tímabil og ein breytingabeiðni í vinnslu. Gögnin verða endurstillt á hverri nóttu, svo þú mátt prófa hvað sem er — daginn eftir er allt eins og áður.</p>
+<p>Þegar þú sýnir viðskiptavini kerfið notarðu <strong>sýnikerfið demo.rekstrarkerfi.is</strong>: sérstakt eintak af Rekstrarkerfinu, bara til sýnis. Þú sýnir aldrei á orangesmiley.is og aldrei á kerfi annars viðskiptavinar. Í sýnikerfinu verða tilbúin gögn fyrir skáldað fyrirtæki, <em>Kaffibrennsluna Hraunbaun</em>: vörur, pantanir, reikningar, eitt VSK-tímabil og ein breytingabeiðni í vinnslu. Gögnin verða endurstillt á hverri nóttu, svo þú mátt prófa hvað sem er — daginn eftir er allt eins og áður.</p>
 <ul>
 <li><strong>Staðan núna:</strong> sýnikerfið er í smíðum og ekki komið í loftið. Þangað til talarðu við Halla áður en þú býður viðskiptavini sýningu (DRÖG — Halli staðfestir hvernig sýnt er fram að því).</li>
 <li><strong>Aðgangur:</strong> hver sölumanneskja fær eigin innskráningu sem er varin með kóða úr auðkenningarappi í símanum, auk lykilorðsins. Viðskiptavinur getur fengið tímabundinn aðgang eftir sýningu sem þú leiðir, aldrei á undan henni.</li>
@@ -621,7 +621,7 @@ if (require.main === module) {
 //   D-005 (50% at signing + 50% at go-live; contract monthly in advance from the
 //   go-live month; prices án VSK, 24% VSK on invoices), D-007 (12-month term from
 //   go-live, auto-renewing — a lawyer-review draft), D-020 (demo.rekstrarkerfi.is:
-//   Kaffibrennslan Glóð sample data, reset nightly, one TOTP login per seller,
+//   Kaffibrennslan Hraunbaun sample data, reset nightly, one TOTP login per seller,
 //   time-limited prospect logins after a guided demo, email/payments off, the
 //   shop → order → invoice → VSK → change-request path; not built yet).
 // - rekstrarkerfid public/js/i18n/is.json thjonusta.* (the live /verdskra copy:

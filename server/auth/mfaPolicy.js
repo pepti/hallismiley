@@ -53,13 +53,14 @@
  * sends the person to Prófíll → Tveggja þátta staðfesting. That part is UX;
  * this part is the gate.
  *
- * ESCAPE HATCH — non-production only, and only meaningful under `required`.
+ * ESCAPE HATCH — development/test only, and only meaningful under `required`.
  * ADMIN_TOTP_EXEMPT is a comma-separated
  * list of usernames (or `*`) that are not forced to enrol. It exists for the
  * Jest and Playwright suites, where dozens of admin sign-ins per minute cannot
  * pass TOTP's replay guard (one code per 30-second step), and for a developer's
- * local database. It is IGNORED when NODE_ENV=production, which includes the
- * Azure TEST stack; server.js warns at boot if it is set there. Break-glass for
+ * local database. It is honoured ONLY when NODE_ENV is development or test and
+ * ignored everywhere else — production (which includes the Azure TEST stack),
+ * staging, any other label; server.js warns at boot if it is set there. Break-glass for
  * a locked-out production admin is a script run with database access, not a
  * switch — docs/ADMIN-2FA.md.
  */
@@ -99,9 +100,14 @@ function exemptList() {
     .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
 }
 
+// Only a development or test process honours ADMIN_TOTP_EXEMPT — an allow-list,
+// not "anything but production": a stack started with NODE_ENV=staging (or any
+// other label) must not skip the second factor (Öryggisvörður N-5, 2026-09-26).
+const EXEMPT_ENVS = new Set(['development', 'test']);
+
 /** Read per call, like the rate limiters' `skip`, so a test can flip it. */
 function isExempt(user) {
-  if (process.env.NODE_ENV === 'production') return false;
+  if (!EXEMPT_ENVS.has(process.env.NODE_ENV)) return false;
   const list = exemptList();
   if (!list.length) return false;
   return list.includes('*') || list.includes(String(user?.username || '').toLowerCase());

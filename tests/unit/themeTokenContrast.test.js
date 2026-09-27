@@ -151,4 +151,49 @@ describe('theme token contrast', () => {
       expectOnlyTokens(colours, ['error', 'error-dim']);
     });
   });
+
+  // Harvest 2 lane 6c: the filled gold controls in shop.css / contact.css.
+  describe('filled --gold controls on the shop and contact pages', () => {
+    // brightness(f) scales the rendered pixels of the WHOLE button — its fill
+    // and its label — so the hover pair is both colours scaled, clamped at 255.
+    const brighten = (c, f) => ({ r: Math.min(255, c.r * f), g: Math.min(255, c.g * f), b: Math.min(255, c.b * f), a: c.a });
+
+    // The storefront's buy buttons keep their --bg-nav label and a
+    // brightness(1.15) hover: measured 2026-09-26 at ≥ 5.1 : 1 on every theme
+    // (Bjart's hover is the lowest), so they stay as they are — and are pinned
+    // here so a token change that breaks them fails before anyone sees it.
+    const BUY = ['shop-product__add-btn', 'shop-cart__checkout', 'shop-checkout__submit'];
+
+    each('--bg-nav on --gold, at rest and under the brightness(1.15) hover', (theme) => {
+      const ink = colour(theme, 'bg-nav');
+      const fill = colour(theme, 'gold');
+      expect(contrast(ink, fill)).toBeGreaterThanOrEqual(AA);
+      expect(contrast(brighten(ink, 1.15), brighten(fill, 1.15))).toBeGreaterThanOrEqual(AA);
+    });
+
+    test.each(BUY.map(c => [c]))('.%s colours only with --gold / --bg-nav and hovers with brightness(1.15)', (cls) => {
+      const { rules, colours } = ruleColours('shop.css', cls);
+      expect(rules.length).toBeGreaterThanOrEqual(1);
+      expectOnlyTokens(colours, ['gold', 'bg-nav']);
+      const hover = rules.filter(([sel]) => /:hover/.test(sel));
+      expect(hover.length).toBeGreaterThanOrEqual(1);
+      for (const [, , body] of hover) expect(body).toMatch(/filter:\s*brightness\(1\.15\)/);
+    });
+
+    // The inline-edit controls (lane 4a's leftover, fixed in lane 6c): an
+    // --on-accent label, an --accent-hover hover fill — never --gold-light
+    // under a near-white label (4.31 : 1 on Bjart).
+    test.each([
+      ['shop.css', 'shop-view__save-btn'], ['shop.css', 'shop-view__edit-btn'],
+      ['contact.css', 'contact-view__save-btn'], ['contact.css', 'contact-view__edit-btn'],
+      ['contact.css', 'availability__save-btn'],
+    ])('%s .%s: --on-accent label, --accent-hover hover fill', (file, cls) => {
+      const { rules } = ruleColours(file, cls, /cancel/);
+      const all = rules.map(([, , body]) => body).join(' ');
+      expect(all).not.toMatch(/--gold-light/);
+      expect(all).not.toMatch(/color:\s*var\(--bg-nav\)/);
+      const hover = rules.filter(([sel]) => /:hover/.test(sel));
+      expect(hover.some(([, , body]) => /background:\s*var\(--accent-hover\)/.test(body))).toBe(true);
+    });
+  });
 });

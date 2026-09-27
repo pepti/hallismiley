@@ -36,8 +36,12 @@
 
 /* Charts */
 .analytics__charts {
-  display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--sp-4); margin-bottom: var(--sp-6);
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-4); margin-bottom: var(--sp-6);
 }
+/* minmax(0, …), never a bare 1fr: a chart canvas is as wide as it was last
+   drawn, and a 1fr track (min = min-content) keeps that width, so after a
+   resize to a phone the chart held the page 960px wide and Chart.js could
+   never shrink it (the role × route harness, harvest 2 lane 9). */
 .analytics-card {
   background: var(--bg-surface); border: 1px solid var(--border-dim); border-radius: var(--radius-md);
   padding: var(--sp-4); box-shadow: var(--shadow-card);
@@ -50,7 +54,7 @@
 .analytics-chart { position: relative; height: 300px; }
 
 /* Tables */
-.analytics__tables { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--sp-4); }
+.analytics__tables { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-4); }
 .analytics-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
 .analytics-table th,
 .analytics-table td { padding: var(--sp-2) var(--sp-3); text-align: left; border-bottom: 1px solid var(--border-dim); }
@@ -70,6 +74,6 @@
 @media (max-width: 860px) {
   .analytics__kpis { grid-template-columns: repeat(2, 1fr); }
   .analytics__charts,
-  .analytics__tables { grid-template-columns: 1fr; }
+  .analytics__tables { grid-template-columns: minmax(0, 1fr); }
   .analytics-card { grid-column: auto; }
 }

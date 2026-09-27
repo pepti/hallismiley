@@ -1282,4 +1282,46 @@ async function sendLeadNotification({ submissionId, name, email, message, compan
   return true;
 }
 
+// ── New paid order → the owner (harvest2-lane7a) ────────────────────────────
+// Ported from icelandicstore #151's owner notification, trimmed to the B2C
+// order. `to` is the Admin → Afgreiðsla alert list (or ORDER_NOTIFY_EMAIL),
+// resolved by the caller (shopController.alertOwnerOfPaidOrder, which never
+// awaits this). Icelandic: the owner's language. Goes through deliver(), so
+// EMAIL_ALLOWLIST and the demo instance's no-send rule hold. Kept a separate
+// function, apart from the receipt, so the two can change independently.
+async function sendOrderOwnerAlert({ order, items, to }) {
+  const recipients = (Array.isArray(to) ? to : [to]).filter(Boolean);
+  if (!recipients.length) return false;
+  if (!isConfigured()) {
+    transportNotConfigured('orderAlert', { orderNumber: order.order_number });
+    return false;
+  }
+  const locale = 'is';
+  const subject = t(locale, 'email.orderAlert.subject', { orderNumber: order.order_number });
+  const customer = order.guest_email
+    ? `${order.guest_name || order.guest_email} <${order.guest_email}>`
+    : (order.user_email || t(locale, 'email.bookingNotification.unknownCustomer'));
+  const method = order.shipping_method === 'local_pickup'
+    ? t(locale, 'email.order.localPickup') : t(locale, 'email.order.shippingMethod');
+  // Painted with P (lane 2's light, AA-checked palette), never a literal.
+  const rows = (items || []).map(it => `
+      <tr>
+        <td style="padding:8px 0;color:${P.heading};font-size:14px;border-top:1px solid ${P.border};">${escapeHtml(it.product_name_snapshot)} × ${Number(it.quantity)}</td>
+        <td style="padding:8px 0;color:${P.text};font-size:14px;text-align:right;border-top:1px solid ${P.border};">${formatMoney(it.product_price_snapshot * it.quantity, order.currency, locale)}</td>
+      </tr>`).join('');
+  const html = emailShell(subject, `
+    <h2 style="margin:0 0 8px;font-size:22px;color:${P.heading};">${escapeHtml(t(locale, 'email.orderAlert.heading'))}</h2>
+    <p style="margin:0 0 24px;font-size:15px;color:${P.text};line-height:1.6;">${escapeHtml(t(locale, 'email.orderAlert.body', { orderNumber: order.order_number, customer, method }))}</p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;border-bottom:1px solid ${P.border};">${rows}</table>
+    <p style="margin:0 0 24px;font-size:14px;color:${P.text};">${escapeHtml(t(locale, 'email.order.total'))}:
+      <strong style="color:${P.accent};">${formatMoney(order.total, order.currency, locale)}</strong></p>
+    <p style="margin:0;font-size:13px;color:${P.muted};">${escapeHtml(`${APP_URL}/is/admin/shop/orders/${order.id}`)}</p>
+  `, locale);
+  const { data, error } = await deliver({ from: FROM, to: recipients, subject, html }, 'orderAlert');
+  if (error) throw new Error(`Email send error: ${error.message}`);
+  logger.info({ orderNumber: order.order_number, recipients: recipients.length, id: data && data.id }, '[EmailService] Owner order alert sent');
+  return true;
+}
+
 module.exports = { deliver, sendVerificationEmail, sendPasswordResetEmail, sendWelcomeInviteEmail, buildInviteEmailHtml, sendOrderReceipt, sendBookingNotification, sendRsvpNotification, sendRsvpConfirmation, sendPartyAnnouncement, sendPartyRequestNotification, sendPartyInviteEmail, sendPartyWelcomeEmail, sendLeadNotification, emailHealthCheck, isConfigured, isRedirecting };
+module.exports.sendOrderOwnerAlert = sendOrderOwnerAlert;

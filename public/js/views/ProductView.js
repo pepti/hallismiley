@@ -13,6 +13,11 @@ import { LOW_STOCK_THRESHOLD } from '../components/ProductCard.js';
 import { isAdmin, getCSRFToken } from '../services/auth.js';
 import { t, href, getLocale, adminLocaleBadgeHtml, checkUntranslated } from '../i18n/i18n.js';
 import { colorLabelKey, chooseAxisKey } from '../utils/colorLabels.js';
+// Harvest 2 lane 6c (ported from icelandicstore #182/#265/#352): swatches that
+// swap the photo, and the colour → size, XS → 2XL option order.
+import { colorKey } from '../utils/variantAxis.js';
+import { matchKnownKey, prettyColor } from '../utils/colorMatch.js';
+import { axisKind, compareAxisValues } from '../utils/variantArrange.js';
 
 // Default chrome — rendered when shop_product_chrome is missing or network fails.
 // Templates use {n} (stock count) — substituted client-side.
@@ -50,11 +55,29 @@ function _esc(s) {
 const AXIS_LABEL_KEYS = { size: 'shop.size', color: 'shop.color' };
 
 // A colour value's shopper name: the translated label for a known colour,
-// otherwise the value as the catalogue spells it.
+// otherwise the value title-cased WITHOUT its supplier code ("French Navy
+// (FRNA)" → "French Navy" — the code is warehouse noise to a shopper; ice #182).
 function colorLabel(value) {
   const key = colorLabelKey(value);
-  return key ? t(key) : String(value ?? '');
+  return key ? t(key) : (prettyColor(value) || String(value ?? ''));
 }
+
+// Swatch fills, so a colour choice shows the colour instead of naming it
+// (ported from icelandicstore #182). Literal on purpose: these are GARMENT
+// colours and must not move when the site theme does — the shirt is the same
+// navy on Bjart, Glóð and Miðnætti. They reach the page as the --swatch custom
+// property on a button that carries no text; every surface around it is
+// tokens (shop.css). A colour not listed renders the token surface.
+const COLOR_SWATCHES = {
+  black: '#14161a',
+  white: '#f2f1ee',
+  navy:  '#263a5c',
+  grey:  '#b7babe',
+  sage:  '#8cc6a3',
+  red:   '#d3242f',
+};
+const SWATCH_KEYS = Object.keys(COLOR_SWATCHES);
+const isColorAxis = (axis) => axisKind(axis) === 'color';
 
 // The picker's accessible name. Known axes have a whole sentence each ("Veldu
 // lit", "Veldu stærð") — the {axis} template put the noun in the nominative.
@@ -63,15 +86,14 @@ function chooseAxisLabel(axis) {
   return key ? t(key) : t('shop.chooseAxis', { axis: axisLabel(axis).toLocaleLowerCase(getLocale()) });
 }
 
-// Natural ordering for known axes. Any value not in the list gets a high index
-// so it falls to the end (but alphabetically among its peers).
-const AXIS_ORDER = {
-  size:  ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'],
-  color: ['black', 'white'],
-};
+// Natural ordering for known axes (sizes XS → 2XL with XXL = 2XL, the
+// shop-window colour order, supplier codes folded) lives in
+// ../utils/variantArrange.js — shared with the admin grid, so the product page
+// and the line lists cannot drift apart. It replaced this view's own
+// AXIS_ORDER table (lane 6c).
 
 function axisLabel(axis) {
-  const key = AXIS_LABEL_KEYS[String(axis).trim().toLowerCase()];
+  const key = AXIS_LABEL_KEYS[axisKind(axis)]; // "Color", "colour", "litur" → shop.color
   return key ? t(key) : (axis.charAt(0).toUpperCase() + axis.slice(1));
 }
 
@@ -86,16 +108,7 @@ function axisValues(product, axis) {
       values.push(val);
     }
   }
-  const order = AXIS_ORDER[axis];
-  if (order) {
-    values.sort((a, b) => {
-      const ai = order.indexOf(a);
-      const bi = order.indexOf(b);
-      const aRank = ai === -1 ? Number.MAX_SAFE_INTEGER : ai;
-      const bRank = bi === -1 ? Number.MAX_SAFE_INTEGER : bi;
-      return aRank - bRank || String(a).localeCompare(String(b));
-    });
-  }
+  if (axisKind(axis) !== 'other') values.sort((a, b) => compareAxisValues(axis, a, b));
   return values;
 }
 
@@ -150,6 +163,12 @@ export class ProductView {
       // Sensible default selection: first value on each axis.
       for (const axis of (this._product.variant_axes || [])) {
         this._selection[axis] = axisValues(this._product, axis)[0];
+        // Open on the photo of the colour that starts selected, so the first
+        // paint agrees with the swatch it highlights (ice #182).
+        if (isColorAxis(axis)) {
+          const idx = this._imageIdxForColor(this._selection[axis]);
+          if (idx !== -1) this._activeImageIdx = idx;
+        }
       }
     } catch (err) {
       const body = this._view.querySelector('#shop-product-body') || this._view;
@@ -253,8 +272,14 @@ export class ProductView {
 
             ${hasVariants ? axes.map(axis => `
               <div class="shop-product__variant" data-axis="${_esc(axis)}">
-                <p class="shop-product__variant-label">${_esc(axisLabel(axis))}</p>
-                <div class="shop-product__variant-chips" role="group" aria-label="${_esc(chooseAxisLabel(axis))}">
+                <p class="shop-product__variant-label">${_esc(axisLabel(axis))}${
+                  // The chosen colour, named beside the heading — a swatch
+                  // shows the shade, a shopper still wants the word (ice #182).
+                  isColorAxis(axis)
+                    ? `<span class="shop-product__variant-value" data-selected-for="${_esc(axis)}">${_esc(colorLabel(this._selection[axis] || ''))}</span>`
+                    : ''
+                }</p>
+                <div class="shop-product__variant-chips${isColorAxis(axis) ? ' shop-product__swatches' : ''}" role="group" aria-label="${_esc(chooseAxisLabel(axis))}">
                   ${axisValues(p, axis).map(val => this._variantChipHtml(axis, val)).join('')}
                 </div>
               </div>
@@ -299,12 +324,15 @@ export class ProductView {
     this._currencySelector = new CurrencySelector({ onChange: () => this._updatePriceAndStock() });
     this._view.querySelector('#shop-currency').appendChild(this._currencySelector.render());
 
-    // Variant chip clicks
-    this._view.querySelectorAll('[data-axis] .shop-product__variant-chip').forEach(btn => {
+    // Variant chip clicks. Both selectors matter: the colour axis renders as
+    // swatches, not chips (ice #182 — binding only the chip class left every
+    // colour inert until another axis repainted the row).
+    this._view.querySelectorAll('[data-axis] .shop-product__variant-chip, [data-axis] .shop-product__swatch').forEach(btn => {
       btn.addEventListener('click', () => {
         const axis = btn.closest('[data-axis]').dataset.axis;
         const value = btn.dataset.value;
         this._selection[axis] = value;
+        if (isColorAxis(axis)) this._showColorImage(value);
         // Re-render to update the "active" styling + price/stock/disabled states
         this._repaintChips();
         this._updatePriceAndStock();
@@ -345,7 +373,14 @@ export class ProductView {
       const qty = Math.max(1, Math.min(stock, Math.floor(Number(qtyInput.value) || 1)));
       cart.add(p, variant, qty);
       const confirm = this._view.querySelector('#shop-add-confirm');
-      const label = variant ? `${p.name} — ${variant.attributes.color ? colorLabel(variant.attributes.color) : ''}${variant.attributes.size ? ' / ' + variant.attributes.size : ''}` : p.name;
+      // Case-blind: a catalogue may spell the axes "Color"/"Size" (ice #182).
+      const attrs = variant?.attributes || {};
+      const attrOf = (kind) => attrs[Object.keys(attrs).find(k => axisKind(k) === kind)];
+      const vColor = attrOf('color');
+      const vSize  = attrOf('size');
+      const label = variant
+        ? `${p.name} — ${vColor ? colorLabel(vColor) : ''}${vSize ? (vColor ? ' / ' : '') + vSize : ''}`
+        : p.name;
       confirm.textContent = t('shop.addedToCart', { qty, label });
     });
 
@@ -361,28 +396,101 @@ export class ProductView {
       v.active && Object.entries(probe).every(([k, val]) => v.attributes?.[k] === val)
     );
     const disabled = !hasMatch;
-    const label = axis === 'color' ? colorLabel(value) : String(value).toUpperCase();
+
+    // The colour axis renders as the colour itself (ice #182): a swatch answers
+    // "what does it look like" in one glance, and it pairs with the photo swap,
+    // so picking a colour changes both the dot and the garment on screen.
+    if (isColorAxis(axis)) {
+      // The nearest palette entry, so "French Navy (FRNA)" gets the navy dot.
+      const key  = matchKnownKey(value, SWATCH_KEYS) || colorKey(value);
+      const fill = COLOR_SWATCHES[key];
+      const classes = [
+        'shop-product__swatch',
+        active ? 'active' : '',
+        disabled ? 'disabled' : '',
+        // Pale garments need a visible edge or the dot vanishes on the page.
+        (key === 'white' || key === 'grey') ? 'shop-product__swatch--pale' : '',
+      ].filter(Boolean).join(' ');
+      return `<button type="button" class="${classes}"
+                      ${fill ? `style="--swatch: ${_esc(fill)}"` : ''}
+                      data-value="${_esc(value)}"
+                      data-testid="variant-${_esc(axis)}-${_esc(value)}"
+                      title="${_esc(colorLabel(value))}"
+                      aria-label="${_esc(colorLabel(value))}"
+                      aria-pressed="${active}"
+                      ${disabled ? 'disabled' : ''}></button>`;
+    }
+
     const classes = [
       'shop-product__variant-chip',
       active ? 'active' : '',
       disabled ? 'disabled' : '',
-      axis === 'color' ? `shop-product__variant-chip--${value}` : '',
     ].filter(Boolean).join(' ');
     return `<button type="button" class="${classes}"
                     data-value="${_esc(value)}"
                     data-testid="variant-${_esc(axis)}-${_esc(value)}"
-                    ${disabled ? 'disabled' : ''}>${_esc(label)}</button>`;
+                    aria-pressed="${active}"
+                    ${disabled ? 'disabled' : ''}>${_esc(String(value).toUpperCase())}</button>`;
+  }
+
+  // The photo for a colour, if the SERVER matched one (product_images.color
+  // resolved against the variant colours in server/utils/colorMatch.js, sent as
+  // `color_images`). -1 when this colour has no confident photo — the gallery
+  // is then left alone. Do NOT re-derive the match here: a second matcher that
+  // drifted from the server's is what made "French Navy (FRNA)" miss its photo
+  // on icelandicstore's PROD (#265).
+  _imageIdxForColor(value) {
+    const key = colorKey(value);
+    if (!key) return -1;
+    const imageId = this._product.color_images?.[key];
+    if (imageId == null) return -1;
+    return (this._product.images || []).findIndex(img => img.id === imageId);
+  }
+
+  // Swap the cover to the chosen colour's photo, cross-fading rather than
+  // cutting (the fade is off under reduced motion — shop.css), once the new
+  // file has decoded so the fade never plays against a blank box.
+  _showColorImage(value) {
+    const idx = this._imageIdxForColor(value);
+    if (idx === -1) return;
+    this._activeImageIdx = idx;
+
+    const coverEl = this._view.querySelector('#shop-cover');
+    const img = coverEl?.querySelector('img');
+    const url = this._product.images[idx]?.url;
+    if (!coverEl || !url) return;
+
+    if (!img) {
+      coverEl.innerHTML = `<img src="${_esc(url)}" alt="${_esc(this._product.name)}"/>`;
+    } else if (img.getAttribute('src') !== url) {
+      const next = new Image();
+      next.onload = () => {
+        img.classList.add('is-swapping');
+        setTimeout(() => {
+          img.src = url;
+          img.classList.remove('is-swapping');
+        }, 140);
+      };
+      next.src = url;
+    }
+
+    this._view.querySelectorAll('#shop-thumbs [data-idx]').forEach(b =>
+      b.classList.toggle('active', Number(b.dataset.idx) === idx)
+    );
   }
 
   _repaintChips() {
     const axes = this._product.variant_axes || [];
     for (const axis of axes) {
-      const row = this._view.querySelector(`[data-axis="${axis}"] .shop-product__variant-chips`);
+      const row = this._view.querySelector(`[data-axis="${CSS.escape(axis)}"] .shop-product__variant-chips`);
       if (!row) continue;
       row.innerHTML = axisValues(this._product, axis).map(val => this._variantChipHtml(axis, val)).join('');
-      row.querySelectorAll('.shop-product__variant-chip').forEach(btn => {
+      const valueEl = this._view.querySelector(`[data-selected-for="${CSS.escape(axis)}"]`);
+      if (valueEl) valueEl.textContent = colorLabel(this._selection[axis] || '');
+      row.querySelectorAll('.shop-product__variant-chip, .shop-product__swatch').forEach(btn => {
         btn.addEventListener('click', () => {
           this._selection[axis] = btn.dataset.value;
+          if (isColorAxis(axis)) this._showColorImage(btn.dataset.value);
           this._repaintChips();
           this._updatePriceAndStock();
         });

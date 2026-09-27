@@ -58,12 +58,32 @@ describe('ADMIN_TOTP_EXEMPT', () => {
     expect(mfaPolicy.mustEnrol(admin({ username: 'other' }))).toBe(false);
   });
 
-  test('is IGNORED when NODE_ENV=production — which includes the Azure TEST stack', () => {
+  test('is IGNORED when NODE_ENV=production (the Azure TEST stack too) — see the allow-list test below', () => {
     process.env.NODE_ENV = 'production';
     for (const value of ['*', 'halli']) {
       process.env.ADMIN_TOTP_EXEMPT = value;
       expect(mfaPolicy.isExempt(admin())).toBe(false);
       expect(mfaPolicy.mustEnrol(admin())).toBe(true);
+    }
+  });
+
+  test('is honoured ONLY under development or test — any other NODE_ENV (staging, unset) fails closed', () => {
+    const saved = process.env.NODE_ENV;
+    try {
+      process.env.ADMIN_TOTP_EXEMPT = '*';
+      for (const env of ['development', 'test']) {
+        process.env.NODE_ENV = env;
+        expect(mfaPolicy.isExempt(admin())).toBe(true);
+      }
+      for (const env of ['staging', 'Production', 'dev', '']) {
+        process.env.NODE_ENV = env;
+        expect(mfaPolicy.isExempt(admin())).toBe(false);
+        expect(mfaPolicy.mustEnrol(admin())).toBe(true);
+      }
+      delete process.env.NODE_ENV;
+      expect(mfaPolicy.isExempt(admin())).toBe(false);
+    } finally {
+      process.env.NODE_ENV = saved;
     }
   });
 });

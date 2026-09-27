@@ -293,10 +293,31 @@ async function createInvoiceFromOrder(req, res, next) {
   } catch (err) { fail(res, err, next); }
 }
 
+// The cost lines of a `passthrough` invoice (D-022): [{ type, description,
+// cost_isk }]. Shape only — the service owns the arithmetic and re-checks the
+// type, the count and the description length (computePassthrough).
+function parsePassthroughLines(value) {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new BadRequest('lines must be a non-empty array of { type, description, cost_isk }');
+  }
+  if (value.length > 20) throw new BadRequest('lines may hold at most 20 cost lines');
+  return value.map((l, i) => {
+    if (!l || typeof l !== 'object' || Array.isArray(l)) throw new BadRequest(`lines[${i}] must be an object`);
+    const type = parseEnum(l.type, invoiceService.PASSTHROUGH_TYPES, `lines[${i}].type`);
+    if (!type) throw new BadRequest(`lines[${i}].type must be one of: ${invoiceService.PASSTHROUGH_TYPES.join(', ')}`);
+    return {
+      type,
+      description: parseText(l.description, `lines[${i}].description`, { maxLen: 120, required: true }),
+      costIsk: parseAmount(l.cost_isk, `lines[${i}].cost_isk`),
+    };
+  });
+}
+
 // POST /api/v1/admin/bookkeeping/invoices/service — the company's own revenue
 // (ENHANCEMENTS #18): a build-fee instalment, a month of the service contract,
-// or overage verkeiningar, issued to a customer ACCOUNT. Admin-only; the
-// commission hook runs inside the same transaction (invoiceService).
+// overage verkeiningar, or a month's pass-through costs (D-022), issued to a
+// customer ACCOUNT. Admin-only; the commission hook runs inside the same
+// transaction (invoiceService) and skips overage and pass-through.
 async function createServiceInvoice(req, res, next) {
   try {
     const body = req.body || {};
@@ -315,10 +336,11 @@ async function createServiceInvoice(req, res, next) {
     const units = body.units === undefined || body.units === '' ? null : Number(body.units);
     const unitPriceIsk = body.unit_price_isk === undefined || body.unit_price_isk === '' ? null : Number(body.unit_price_isk);
     const issuedAt = body.issued_at ? assertAccountingDate(body.issued_at, 'issued_at') : undefined;
+    const lines = kind === 'passthrough' ? parsePassthroughLines(body.lines) : null;
 
     const result = await ledger.withTransaction(client =>
       invoiceService.createServiceInvoice(client, {
-        accountId, kind, deposit, period, amountNetIsk, units, unitPriceIsk, issuedAt,
+        accountId, kind, deposit, period, amountNetIsk, units, unitPriceIsk, lines, issuedAt,
         createdBy: req.user.id,
         requestId: req.requestId || null,
       })

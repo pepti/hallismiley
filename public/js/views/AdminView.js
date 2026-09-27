@@ -172,6 +172,19 @@ const TODO = {
     detail: [i.detail?.latest ? t('adminHome.waiting.latest', { title: i.detail.latest }) : ''],
     go: t('adminHome.waiting.changeRequests.action'),
   }),
+  // Harvest 2 lane 5 (icelandicstore #417): sold-out goods and sign-ups
+  // awaiting approval. Their links open the list filtered to exactly the rows
+  // counted (/admin/inventory?status=out, ?status=pending).
+  out_of_stock: (i) => ({
+    title: countedTitle(i.count, 'adminHome.waiting.outOfStock.one', 'adminHome.waiting.outOfStock.many'),
+    detail: [(i.detail?.sample || []).join(', ')],
+    go: t('adminHome.waiting.outOfStock.action'),
+  }),
+  signups_pending: (i) => ({
+    title: countedTitle(i.count, 'adminHome.waiting.signups.one', 'adminHome.waiting.signups.many'),
+    detail: [i.detail?.oldestAt ? t('adminHome.waiting.signups.oldest', { date: dayMonth(parts(i.detail.oldestAt)) }) : ''],
+    go: t('adminHome.waiting.signups.action'),
+  }),
   bins_unshelved: (i) => {
     const sample = (i.detail?.sample || []);
     const more = i.count - sample.length;
@@ -183,14 +196,23 @@ const TODO = {
   },
 };
 
+// A to-do whose source could not be read (the server sends `failed: true`,
+// count null): its row stays, with "—" in the number column and the title
+// without a number — never a 0 that would read as "nothing waiting".
+function failedRow(i) {
+  const c = TODO[i.kind]({ ...i, count: 2, amount: 0, detail: {} });
+  return { ...c, n: null, detail: [], tag: t('adminHome.waiting.tag.unread') };
+}
+
 function renderTodo(todo) {
   const rows = (todo || []).filter(i => TODO[i.kind]).map((i) => {
-    const c = TODO[i.kind](i);
+    const c = i.failed ? failedRow(i) : TODO[i.kind](i);
     const detail = c.detail.filter(Boolean).join(' · ');
     const url = link(i.view, i.route);
     const tag = url ? 'a' : 'div';
-    return `<li><${tag} class="idag-todo__item${i.tone ? ` idag-todo__item--${escHtml(i.tone)}` : ''}"${url ? ` href="${escHtml(url)}" data-route="${escHtml(i.route)}"` : ''} data-kind="${escHtml(i.kind)}">
-      <span class="idag-todo__n">${c.n === null ? '' : escHtml(formatNumber(Number(c.n ?? i.count)))}</span>
+    const n = i.failed ? '—' : (c.n === null ? '' : formatNumber(Number(c.n ?? i.count)));
+    return `<li><${tag} class="idag-todo__item${i.tone ? ` idag-todo__item--${escHtml(i.tone)}` : ''}${i.failed ? ' idag-todo__item--unread' : ''}"${url ? ` href="${escHtml(url)}" data-route="${escHtml(i.route)}"` : ''} data-kind="${escHtml(i.kind)}"${i.failed ? ' data-failed="true"' : ''}>
+      <span class="idag-todo__n">${escHtml(n)}</span>
       <span class="idag-todo__body"><span class="idag-todo__title">${escHtml(c.title)}</span>${c.tag ? `<span class="idag-todo__tag">${escHtml(c.tag)}</span>` : ''}${detail ? `
         <span class="idag-todo__detail">${escHtml(detail)}</span>` : ''}</span>
       ${url ? `<span class="idag-todo__go" aria-hidden="true">${escHtml(c.go)} →</span>` : ''}

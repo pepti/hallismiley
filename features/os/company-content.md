@@ -12,8 +12,9 @@ paths:
   - tests/integration/salesGuidesD001.test.js
   - tests/integration/salesGuidesD022.test.js
   - tests/integration/salesGuidesQueueSpread.test.js
+  - tests/integration/salesGuidesPersona.test.js
   - tests/integration/contactContentOs002.test.js
-migrations: [091_home_content_company, 092_contact_content_company, 104_sales_guides_services_page, os_001_sales_guides_d001_pricing, os_002_contact_content_offering, os_003_sales_guides_d022_pricing, os_004_sales_guides_queue_spread]
+migrations: [091_home_content_company, 092_contact_content_company, 104_sales_guides_services_page, os_001_sales_guides_d001_pricing, os_002_contact_content_offering, os_003_sales_guides_d022_pricing, os_004_sales_guides_queue_spread, os_005_sales_guides_persona_hraunbaun]
 since: 2026-09-01
 origin: null
 history: [r1, sales-staff, services-page, handbook-d001-2026-09-22, handbook-d022-2026-09-26, handbook-queue-spread-2026-09-26]

@@ -89,8 +89,32 @@ beforeEach(async () => {
   await db.query(`DELETE FROM tax_deadlines WHERE note = 'adminHome test'`);
 });
 
+// The settings the setup test fills (general.*, books.seller_*) live outside
+// the cleanTables() closure: snapshot the table before the first test and put
+// it back after the last.
+let savedSettings;
+beforeAll(async () => {
+  savedSettings = (await db.query('SELECT * FROM app_settings')).rows;
+});
+
 afterAll(async () => {
   await db.query(`DELETE FROM tax_deadlines WHERE note = 'adminHome test'`);
+  // Leave what this file wrote behind it for nobody (docs/ARCHITECTURE.md
+  // §20): the last test's invoices, receipts (tenderless, numbered 900000+)
+  // and orders go with cleanTables() — they showed up in the next suite on
+  // the same worker that does not clean first (booksPos's receipt list,
+  // LedgerLink CI 36259126420); its products, roles and settings, which
+  // cleanTables() does not touch, go by name or are restored.
+  await cleanTables();
+  await db.query(`DELETE FROM products WHERE slug LIKE 'home-%'`);
+  await db.query(`DELETE FROM roles WHERE description = 'adminHome test'`);
+  Role.invalidateCache();
+  await db.query('DELETE FROM app_settings');
+  await db.query(
+    `INSERT INTO app_settings SELECT * FROM jsonb_populate_recordset(NULL::app_settings, $1::jsonb)
+     ON CONFLICT DO NOTHING`,
+    [JSON.stringify(savedSettings)]
+  );
 });
 
 describe('the gate', () => {
@@ -175,7 +199,7 @@ describe('an admin', () => {
     const lead = body.todo.find(i => i.kind === 'leads_new');
     if (lead) expect(lead.detail.latest).toBe('Heildsala fyrir nýtt kaffihús á Selfossi');
     const cr = body.todo.find(i => i.kind === 'change_requests_open');
-    if (cr) expect(cr).toEqual(expect.objectContaining({ count: 1, route: '/admin/feedback' }));
+    if (cr) expect(cr).toEqual(expect.objectContaining({ count: 1, route: '/admin/feedback?status=open' }));
     // Never a state the model does not have.
     expect(kinds).not.toContain('change_requests_awaiting');
 
@@ -313,7 +337,17 @@ describe('what the instance lacks', () => {
       expect(res.body.todo.map(i => i.kind)).not.toContain('orders_to_ship');
       expect(res.body.todo.map(i => i.kind)).not.toContain('bins_unshelved');
       expect(res.body.figures).not.toHaveProperty('openOrders');
-      expect(res.body.figures.salesToday.partial).toBe(false);
+      // The wholesale channel rides the `invoices` view: a product that hides
+      // (or switches off) that one too keeps no sales channel at all, so there
+      // is no figure and no payments feed — the rule of "books switched off"
+      // above. Read from the seam, never from a product name (LedgerLink hides it).
+      if (HIDDEN.has('invoices')) {
+        expect(res.body.figures).not.toHaveProperty('salesToday');
+        expect(res.body.recent.some(e => e.view === 'invoices')).toBe(false);
+      } else {
+        expect(res.body.figures.salesToday.byChannel.map(c => c.channel)).toEqual(['wholesale']);
+        expect(res.body.figures.salesToday.partial).toBe(false);
+      }
     }
   });
 });

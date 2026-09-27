@@ -40,4 +40,19 @@ describe('GitHub Actions workflows', () => {
       }
     }
   });
+
+  // Supply chain: a tag (`@v3`) can be moved to other code by whoever controls
+  // the action's repo; a full commit sha cannot. Every workflow here pins by
+  // sha with the tag as a comment — the rule, made a test when the expiry watch
+  // arrived (harvest 2 lane 9, 2026-09-26). Local actions (`./…`) are exempt.
+  test.each(files)('%s pins every action to a full commit sha', (file) => {
+    const doc = yaml.load(fs.readFileSync(path.join(DIR, file), 'utf8'));
+    const uses = [];
+    for (const job of Object.values(doc.jobs)) {
+      if (typeof job.uses === 'string') uses.push(job.uses);
+      for (const step of job.steps || []) if (typeof step.uses === 'string') uses.push(step.uses);
+    }
+    const unpinned = uses.filter((u) => !u.startsWith('./') && !/@[0-9a-f]{40}$/.test(u));
+    expect(unpinned).toEqual([]);
+  });
 });

@@ -140,6 +140,8 @@ Also set on any real instance:
 | `GRAPH_TENANT_ID`, `GRAPH_CLIENT_ID`, `GRAPH_CLIENT_SECRET`, `GRAPH_SENDER`, `GRAPH_SAVE_TO_SENT_ITEMS` | only with `EMAIL_TRANSPORT=graph`: send through Microsoft Graph `sendMail` from a Microsoft 365 mailbox in the CUSTOMER's tenant (icelandicstore #173). Needs an **Entra app registration in that tenant** with the application permission `Mail.Send` (admin consent), narrowed to the one mailbox by an Exchange application access policy (`New-ApplicationAccessPolicy -AccessRight RestrictAccess`). `GRAPH_SENDER` is the mailbox (default: the address in `EMAIL_FROM`); the secret is a Key Vault reference and lives at most 24 months — put its expiry on the watch. icelandicstore's names `M365_TENANT_ID` / `M365_CLIENT_ID` / `M365_CLIENT_SECRET` are read as a fallback. Messages are not saved to Sent Items unless `GRAPH_SAVE_TO_SENT_ITEMS=true`; the id a sender returns is the minted `client-request-id`, the value an Exchange message trace finds. `EMAIL_ALLOWLIST` applies exactly as on Resend |
 | `EMAIL_REPLY_TO` | where replies go — the sending domain has no inbox. Added to every message that does not set its own (lead notifications reply to the enquirer). Unset = no Reply-To |
 | `LEAD_NOTIFY_EMAIL` | inbox for `/hafa-samband` leads (defaults to `EMAIL_FROM`, which on production is not a mailbox — set it) |
+| `ORDER_NOTIFY_EMAIL` | optional, comma-separated: who gets the "new paid order" alert when Admin → Greiðsla's alert list is EMPTY. The admin list wins once saved; with neither, no alert is sent (since 2026-09-26, [lane 7a](history.d/2026-09-26-harvest2-lane7a-checkout-settings.md#harvest2-lane7a-2026-09-26)) |
+| `SHIPPING_FLAT_RATE_ISK` / `SHIPPING_FLAT_RATE_EUR` | the delivery price. **Since 2026-09-26 the ISK rate is an admin setting** (Admin → Greiðsla, with a free-over threshold): `SHIPPING_FLAT_RATE_ISK` (default 2500) is only the FALLBACK until an admin saves a price, so an instance charges exactly what it did before; after a save, the env value is ignored. `SHIPPING_FLAT_RATE_EUR` (default 1900 cents) stays env-only ([lane 7a](history.d/2026-09-26-harvest2-lane7a-checkout-settings.md#harvest2-lane7a-2026-09-26)) |
 | `CLIENT_CONFIG_MODULES_SELF_UPDATE_ENABLED` | `false` on orangesmiley.is until the release host exists (D-014); `config/client.json` points at a manifest URL nothing serves yet |
 | `DB_SSL` | TLS is **on by default in production**; `false` is the documented opt-out for a plain-TCP Postgres (CI only, never Azure) |
 | `METRICS_TOKEN` | bearer for `GET /metrics`; blank = localhost only (compared constant-time, `utils/safeEqual.js`) |
@@ -367,6 +369,28 @@ yearly books archive to media in Iceland is the compliance step, not a nicety.
 | Build identity | `GET /api/v1/system/version` (session with the `updates` view; answers 404 when `modules.selfUpdate.enabled` is off — which it is on orangesmiley.is until the release host exists; read the `gitSha` from `/ready` logs or the deploy run summary instead) | `gitSha` = the dispatched SHA |
 | Latest changes | Admin → Monitoring | the commits `generate-changes.js` stamped |
 | Release on the wire | any response header; view-source of a page | `X-App-Build` = `sha256(<sha>)[:12]`; the shell's `<meta name="app-build">` says the same and its scripts/stylesheets load from `/js/_<that tag>/…` and `/css/_<that tag>/…` (cached a year; any other tag 404s). A build without `GIT_SHA` reports `unknown` and is served unstamped — fix the build-args, the site still works (since 2026-09-24, [harvest-ice-e](HISTORY.md#harvest-ice-e-2026-09-24)) |
+
+### The expiry watch (`.github/workflows/secret-cert-watch.yml`)
+
+Every Monday 06:30 UTC (and on dispatch) the watch fails when a TLS
+certificate on an instance hostname expires within **21 days** (managed
+certificates renew ~45 days out, so that means the renewal failed) or a Key
+Vault secret expires within **30 days** or has **no expiry stamp**. Ported
+from icelandicstore #90 ([harvest2-lane9](history.d/2026-09-26-harvest2-lane9-ops.md#harvest2-lane9-2026-09-26));
+the judging is `scripts/expiry-watch.js` (unit-tested), the workflow only
+gathers the inputs. Arming is repository settings, no edit:
+
+| Setting | Kind | What |
+|---|---|---|
+| `WATCH_HOSTS` | repository variable | hostnames, space-separated — `www.orangesmiley.is orangesmiley.is` here. The engine has no fleet manifest CI can read, so this variable IS the host list; a downstream sets its own |
+| `WATCH_KEY_VAULTS` | repository variable | vault names, space-separated — `orangesm-prod-kv` here |
+| `AZURE_CLIENT_ID` / `AZURE_TENANT_ID` / `AZURE_SUBSCRIPTION_ID` | **repository** secrets | the deploy identity's OIDC login. The job runs in no environment, so its subject is `ref:refs/heads/master` (a federated credential exists for it, §6). The identity's Key Vault Reader role lists secret metadata and cannot read a value |
+| `ALERT_EMAIL_TO` / `ALERT_EMAIL_FROM` + `RESEND_API_KEY` | variables + secret (optional) | the digest email, deploy.yml's alert pattern; unset = the failed run is the alert (GitHub notifies) |
+
+Either half unset is skipped with a warning and the run stays green, so a repo
+without Azure is not red every week. The dispatch input `warn_days` overrides
+both thresholds — set it to 400 once after arming to see the alert path fire.
+Rotation steps: RUNBOOK → "Certificates and Key Vault secrets".
 
 ## 8. Rollback
 

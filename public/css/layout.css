@@ -368,8 +368,17 @@
    the company lockup now, but the row is just as tight.) */
 @media (max-width: 1024px) {
   .lol-nav { padding: 0 16px; }
-  .lol-nav__brand { min-width: 0; }
-  .lol-nav__right { width: auto; gap: 8px; }
+  /* On a phone the brand column gives way, never the controls (2026-09-26).
+     The brand was `flex: 0 0 auto`, so when the row ran out of room the right
+     cluster shrank instead: the account button squeezed below its content and
+     its caret poked past the viewport, scrolling every signed-in page
+     sideways — at 375px on CI's Linux fonts once the TEST pill sat in the
+     brand (e2e admin-roles-grid "on a phone"), at 320px anywhere. Now the
+     controls keep their size and the wordmark ellipsises. */
+  .lol-nav__brand { min-width: 0; flex: 0 1 auto; }
+  .lol-nav__logo { min-width: 0; }
+  .lol-nav__logo-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lol-nav__right { width: auto; gap: 8px; flex-shrink: 0; }
 
   .lol-nav__hamburger { display: flex; }
 

@@ -1,7 +1,8 @@
 // Product image post-processing (sharp). Harvested from icelandicstore
 // (ice@4694289 #240, #241, #242 — harvest-ice-d-2026-09-24); the press-room
-// `.card.webp` derivative and the delivery-note print thumbnail are ice-only
-// and not taken.
+// `.card.webp` derivative is ice-only and not taken. The delivery-note print
+// thumbnail (printThumbnail + sourcePathForUrl, ice #334) came with harvest 2
+// lane 6c (2026-09-26).
 //
 //  1. normaliseUpload() — runs on every product image the admin uploads.
 //     Auto-orients from EXIF (phone photos arrive rotated), caps the long edge
@@ -34,6 +35,7 @@ const { UPLOAD_ROOT } = require('../config/paths');
 
 const MAX_EDGE     = 2000; // px — long edge of a stored original
 const THUMB_EDGE   = 192;  // px — 48 px list cell @4x, 96 px form tile @2x
+const PRINT_EDGE   = 120;  // px — a ~40 pt picture on a printed delivery note (~215 dpi)
 const THUMB_SUFFIX = '.thumb.webp';
 const PRODUCTS_ROOT = path.join(UPLOAD_ROOT, 'products');
 
@@ -58,6 +60,27 @@ function resolveSource(dir, file) {
   const rel = path.relative(PRODUCTS_ROOT, src);
   if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return null;
   return src;
+}
+
+// Ported from icelandicstore #334 (ice@941cf51d; harvest 2 lane 6c).
+const PRODUCT_URL_RE = /^\/assets\/products\/([^/?#]+)\/([^/?#]+)$/;
+
+/**
+ * Absolute path of the stored original behind a `product_images.url`
+ * (`/assets/products/<dir>/<file>`). Null for an external URL or anything that
+ * does not resolve safely (the same resolveSource guard the thumbnail route uses).
+ */
+function sourcePathForUrl(url) {
+  const m = PRODUCT_URL_RE.exec(String(url || ''));
+  if (!m) return null;
+  let dir, file;
+  try {
+    dir  = decodeURIComponent(m[1]);
+    file = decodeURIComponent(m[2]);
+  } catch {
+    return null;
+  }
+  return resolveSource(dir, file);
 }
 
 function encoderFor(pipeline, mimetype) {
@@ -177,10 +200,39 @@ function thumbnailHandler(req, res, next) {
     });
 }
 
+/**
+ * A small JPEG Buffer for the delivery note (ported from icelandicstore #334):
+ * PRINT_EDGE px on its long edge, from the `.thumb.webp` — far cheaper to
+ * decode than a multi-MB original. A photo no page has shown yet has no
+ * thumbnail, so it is generated here exactly as the thumbnail route would (and
+ * then serves the grid too); if that fails the original is used. Transparent
+ * PNGs are flattened onto white so a cut-out garment does not print on black.
+ * Reads a Buffer (no libvips handle left open on the mount — see the header).
+ * Rejects when nothing can be read or decoded; the caller prints the line
+ * without a picture. Concurrency is the caller's (services/deliveryNote.js).
+ */
+async function printThumbnail(absPath) {
+  const thumb = thumbPathFor(absPath);
+  const input = await fsp.readFile(thumb).catch(() =>
+    generateThumbnail(absPath, thumb)
+      .then(() => fsp.readFile(thumb))
+      .catch(() => fsp.readFile(absPath)));
+  return sharp(input, { failOn: 'none' })
+    .timeout({ seconds: 10 })
+    .rotate()
+    .resize({ width: PRINT_EDGE, height: PRINT_EDGE, fit: 'inside', withoutEnlargement: true })
+    .flatten({ background: '#ffffff' })
+    .jpeg({ quality: 80 })
+    .toBuffer();
+}
+
 module.exports = {
   normaliseUpload,
   thumbnailHandler,
   thumbPathFor,
+  sourcePathForUrl,
+  printThumbnail,
+  PRINT_EDGE,
   MAX_EDGE,
   THUMB_EDGE,
   THUMB_SUFFIX,

@@ -4,8 +4,8 @@
   "role": "personal",
   "upstream": "https://github.com/orange-smiley/orangesmiley.git",
   "upstreamBranch": "master",
-  "rev": "3e9d903d9faa7f4506a945c490a1011c09bfd662",
-  "syncedAt": "2026-09-26T17:30:25.912Z",
+  "rev": "cbee076b0fce5d2bf3993b36011ab3b589ff0331",
+  "syncedAt": "2026-09-27T05:54:24.070Z",
   "syncedPr": 174,
   "grafted": {
     "at": "2026-09-22",
@@ -61,6 +61,16 @@
       "regenerated": [
         ".engine-paths",
         ".gitattributes"
+      ]
+    },
+    {
+      "rev": "cbee076b0fce5d2bf3993b36011ab3b589ff0331",
+      "date": "2026-09-27",
+      "upstreamCommits": 57,
+      "conflicts": 4,
+      "note": "sync (same branch + PR #174, extended) — the engine-sync gaps fix (moduleFlags reads the public IA from the seam, so the hs re-apply of its /thjonusta robots line is DROPPED; adminHome invoices-hidden; PLAN.md fragment guard; phone-nav overflow), security hygiene, harvest 2 lanes 5/6c/7a/9, passthrough invoice; ARCHITECTURE.md resolved by row (engine rows + booksRouteOrder pin, handbook keeps 090 only, CI row adds secret-cert-watch.yml); theme contrast fixed in themes.css hues (glacier/moss --text-muted, aurora --gold) — docs/history.d/2026-09-26-engine-sync-2026-09-26.md",
+      "regenerated": [
+        "features/README.md"
       ]
     }
   ]

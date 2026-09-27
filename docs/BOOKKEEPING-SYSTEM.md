@@ -343,9 +343,9 @@ settle. One total answers neither question.
 ### Service invoices and the build deposit (migrations 099 – 101)
 
 `invoiceService.createServiceInvoice()` issues a company's own service documents against a
-`customer_accounts` row: the build halves (50 % / 50 %), the recurring month, overage. Two
-partial unique indexes (099) make a double issue a 409 rather than a second statutory
-document. The buyer party comes from the account (100); the invoice keeps the value **as
+`customer_accounts` row: the build halves (50 % / 50 %), the recurring month, overage, and
+(122) a month's **pass-through** costs. Three partial unique indexes (099, 122) make a double
+issue a 409 rather than a second statutory document. The buyer party comes from the account (100); the invoice keeps the value **as
 at issue**.
 
 The first build half is a **prepayment**, not revenue (101): it is credited to
@@ -355,6 +355,27 @@ entry that issuing the final half posts in the same transaction. VSK does **not*
 into reitur A in the period the deposit invoice is dated (l. nr. 50/1988 13. gr.). The
 standing invariant: **2150 never goes debit**; crediting a released deposit goes against
 the account it was recognised into.
+
+**Pass-through costs (D-022, migration 122).** Kind `passthrough` bills hosting beyond the
+tier's standard pattern at Azure cost + markup, and AI inside the customer's system above a
+monthly allowance at cost + markup. The staff member enters each cost line ex VSK (`hosting`
+or `ai`, a description, the cost in ISK); `computePassthrough` takes the allowance off the
+period's AI lines in order (never below zero; a fully covered line stays on the invoice at
+0 kr. so the customer sees it), applies the markup per line with `Math.round`, and each
+line's text names its cost basis ("kostnaður 3.500 kr., þar af 2.000 kr. innifalið + 15 %").
+VSK is 24 % on the net total, rounded once and shared across the lines by largest remainder,
+so the invoice's VSK equals EN 16931's per-rate figure exactly. The markup and the allowance
+are **product config** (`billing.passthrough.markupBp` / `aiAllowanceIsk` in
+`config/client.json`; the schema defaults are D-022's 1500 bp and 2.000 kr.). The net goes
+to `4110 Sala þjónustu 24%` like the contract month — we buy the capacity in our own name and
+resell it at a markup, so it is our own taxable turnover (`docs/ACCOUNTANT-QUESTIONS.md` §12
+asks the accountant to confirm, and whether it wants a separate revenue account). One per
+account per period (migration 122), because the allowance is monthly; unlike the recurring
+index, a **fully credited** one frees the period, so a corrected Azure bill is handled by a
+full credit note and a new invoice. **It never records commission**: the commission hook
+runs for `COMMISSIONABLE_KINDS` (build, recurring) only. Before this kind existed, the only
+way to bill a pass-through was a `recurring` invoice with the net overridden, which paid the
+seller 10 % of it — about 77 % of the markup. Never bill it that way.
 
 ### Commission (migrations 098 and 102)
 

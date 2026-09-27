@@ -1006,7 +1006,70 @@ function validateCheckoutContact(req, res, next) {
   next();
 }
 
+// ── Product variant validation (ported from icelandicstore #194) ─────────────
+// POST  /api/v1/admin/shop/products/:id/variants
+// PATCH /api/v1/admin/shop/products/:id/variants/:variantId
+// Replaces the hand-rolled English checks that lived in createVariant and
+// gives PATCH the validation it never had. Engine delta: variants carry
+// price_eur too; bin is capped like the product editor's (40).
+const VARIANT_MAX_SKU     = 100;
+const VARIANT_MAX_BARCODE = 64;
+const VARIANT_MAX_BIN     = 40;
+const VARIANT_MAX_AXES    = 3;
+const VARIANT_MAX_KEY     = 50;
+const VARIANT_MAX_VALUE   = 100;
+
+function validateVariant(req, res, next) {
+  const b = req.body || {};
+  const errors = [];
+  const present = (v) => v !== undefined && v !== null && v !== '';
+  const posInt = (v) => Number.isInteger(Number(v)) && Number(v) > 0 && String(v).trim() !== '';
+
+  if (req.method === 'POST') {
+    if (!present(b.sku) || (typeof b.sku === 'string' && !b.sku.trim())) errors.push({ key: 'validation.variant.skuRequired' });
+    if (b.attributes === undefined) errors.push({ key: 'validation.variant.attributesRequired' });
+  } else if (b.sku !== undefined && (b.sku === null || (typeof b.sku === 'string' && !b.sku.trim()))) {
+    // PATCH: a SKU may change, never be emptied (the grid sends the cell as typed).
+    errors.push({ key: 'validation.variant.skuRequired' });
+  }
+  if (present(b.sku) && (typeof b.sku !== 'string' || b.sku.length > VARIANT_MAX_SKU)) {
+    errors.push({ key: 'validation.variant.skuMaxLength', params: { n: VARIANT_MAX_SKU } });
+  }
+  if (b.attributes !== undefined) {
+    const a = b.attributes;
+    if (a === null || typeof a !== 'object' || Array.isArray(a)) {
+      errors.push({ key: 'validation.variant.attributesObject' });
+    } else {
+      const keys = Object.keys(a);
+      if (keys.length === 0) errors.push({ key: 'validation.variant.attributesEmpty' });
+      else if (keys.length > VARIANT_MAX_AXES) errors.push({ key: 'validation.variant.attributesMaxKeys', params: { n: VARIANT_MAX_AXES } });
+      else if (keys.some(k => k.length > VARIANT_MAX_KEY)) {
+        errors.push({ key: 'validation.variant.attributeKeyMaxLength', params: { n: VARIANT_MAX_KEY } });
+      } else if (keys.some(k => typeof a[k] !== 'string' || a[k].trim() === '' || a[k].length > VARIANT_MAX_VALUE)) {
+        errors.push({ key: 'validation.variant.attributeValueString', params: { n: VARIANT_MAX_VALUE } });
+      }
+    }
+  }
+  // price_isk / price_eur are nullable — null means "inherit the product price".
+  for (const f of ['price_isk', 'price_eur']) {
+    if (present(b[f]) && !posInt(b[f])) errors.push({ key: 'validation.variant.pricePositive', params: { field: f } });
+  }
+  if (present(b.barcode) && (typeof b.barcode !== 'string' || b.barcode.length > VARIANT_MAX_BARCODE)) {
+    errors.push({ key: 'validation.variant.stringMaxLength', params: { field: 'barcode', n: VARIANT_MAX_BARCODE } });
+  }
+  if (present(b.bin) && (typeof b.bin !== 'string' || b.bin.trim().length > VARIANT_MAX_BIN)) {
+    errors.push({ key: 'validation.variant.stringMaxLength', params: { field: 'bin', n: VARIANT_MAX_BIN } });
+  }
+  if (b.active !== undefined && typeof b.active !== 'boolean') {
+    errors.push({ key: 'validation.variant.activeBoolean' });
+  }
+  // stock is checked by the controller's stockError (the audited writer's rule).
+  if (errors.length) return _fail(req, res, errors);
+  next();
+}
+
 module.exports = {
+  validateVariant,
   validateCheckoutContact,
   _isEmail: isEmail,
   validateCustomerContact,

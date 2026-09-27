@@ -127,7 +127,13 @@ engine commit absent from a downstream's `engine.json.rev..upstream/master`
   paths are never overwritten by a sync; `.gitattributes` marks them
   `merge=ours`.
 - **`package-lock.json`**: take theirs, then `npm install --package-lock-only`
-  (the tool does this).
+  (the tool does this). When `package.json` conflicted too, npm cannot read it
+  yet: the tool writes its state, stops with exit 3 and asks you to resolve
+  `package.json` and rerun with `--continue`, which regenerates the lock from
+  your resolution (site-factory, 2026-09-26). The lock is always regenerated
+  last, once every conflict is resolved; a failed regeneration is exit 3 as
+  well — fix the cause, then `--continue`. Every exit-3 message prints the
+  exact command, with `--repo <the worktree>` after a `--worktree` sync.
 - **`.engine-paths`, `.gitattributes`, `features/README.md`** are DERIVED —
   written by `scripts/features-index.js` from `features/**/*.md` — and differ
   per repo (a product's own feature paths), so they conflict on every sync.
@@ -224,6 +230,13 @@ appear in `.engine-paths`. (`publicSurface.js` and `adminSurface.js` DO sync
 since 2026-09-22: their lists come from `identity.surface.*`, so the files
 carry no product data any more.)
 
+Two engine STUBS a product replaces with its own data: `server/demo/seed.js`
+(the demo instance's sample story) and `server/demo/testStackData.js` (a TEST
+stack's invented rows, harvest2-lane9-2026-09-26). The engine's copies seed
+nothing; a downstream that fills either lists it in its `engine.json`
+`productPaths` in the same change, so a later edit to the engine's stub (its
+header, its contract) can never be resolved over the product's data.
+
 History is split (§6): `docs/history.d/` fragments DO sync (engine-owned,
 new files); a downstream's own `docs/HISTORY.md` archive does not, once it
 is listed in that downstream's `productPaths`.
@@ -270,9 +283,38 @@ the live database must print no `RUN` lines after boot.
 ### Teardown after a sync (2026-09-26)
 
 A sync leaves three things behind on the operator's machine; remove them once
-the PR is merged (or abandoned):
+the PR is merged (or abandoned). Since 2026-09-26 one command does steps 1 and
+2 ([test-db-followups-2026-09-26](history.d/2026-09-26-chore-test-db-hygiene-followups.md#test-db-followups-2026-09-26)):
 
-1. **Worktrees and clones.** `engine-sync.js` works in `<repo>/.wt/engine-sync-<date>`
+```
+node C:\Users\Notandi\claude\Projects\site-factory\engine-sync.js --repo <downstream> --cleanup <YYYY-MM-DD> [--dry-run]
+```
+
+It refuses a worktree with a sync in progress or tracked changes (`--force`
+overrides), fetches origin, unlinks a `node_modules` junction, runs `git worktree
+remove`, deletes the `engine-sync/<date>[-N]` branches git calls merged (`-d`,
+never `-D`; git measures a pushed branch against its own upstream, so it does
+NOT yet check that the PR merged — run it only after the merge, owed in
+site-factory), and runs the downstream's `npm run test:db:clean -- --gone --yes`
+with the same `TEST_PG_URL` the verification used — skipped, with a note, in a
+downstream whose `drop-test-dbs.js` has no `--gone` yet. The sync itself prints
+the command.
+
+**The verification runs on the throwaway test server.** A `.wt/` worktree has
+no `.env`, so `engine-sync.js` hands the downstream's npm scripts `TEST_PG_URL`
+(+ `TEST_PG_DATA`) from `--test-pg-url`, the environment, the downstream's
+`.env` or the engine checkout's `.env` (`ENGINE_CHECKOUT`, default
+`../orangesmiley`). It refuses a sync that would run tests with none found
+(`--allow-main-pg` overrides) and a `TEST_PG_URL` on `:5432`. `--worktree` also
+adds `/.wt/` to `.git/info/exclude`, and the engine's `.gitignore` lists `.wt/`
+since the same day, so a sync worktree never reads as stray untracked files.
+`--worktree` reads `engine.json` from `origin/<default>` (`git show`) — the
+commit the worktree is cut from — so the main checkout may sit on any branch,
+even one without an `engine.json` (2026-09-26).
+
+What `--cleanup` does, by hand:
+
+1. **Worktrees and clones.** `engine-sync.js --worktree` works in `<repo>/.wt/engine-sync-<date>`
    (or a temporary clone). Unlink a `node_modules` junction first —
    `cmd //c rmdir <worktree>\node_modules` — because `rm -rf` follows it and
    empties the SOURCE `node_modules`; then `git worktree remove <path>` (a

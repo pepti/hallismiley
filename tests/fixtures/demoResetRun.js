@@ -1,8 +1,9 @@
 'use strict';
 // Child-process half of tests/integration/demoReset.test.js. The reset drops
 // and rebuilds the public schema, so it runs in its own process against a
-// database the test created for it (DATABASE_URL = …/demo_reset_<pid>_test,
-// DEMO_DATABASE_NAME = the same) — never a Jest worker database. Prints one
+// database the test created for it (DATABASE_URL = the worker's extra
+// …_w<N>_demo_test from createExtraTestDb, DEMO_DATABASE_NAME = the same) —
+// never a Jest worker database itself. Prints one
 // JSON line with what survived.
 process.env.NODE_ENV = 'test';
 process.env.DEMO_INSTANCE = 'true';

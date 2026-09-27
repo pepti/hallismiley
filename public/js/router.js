@@ -34,6 +34,8 @@ const VIEWS = {
   AdminUsersView:           () => import('./views/AdminUsersView.js').then((m) => m.AdminUsersView),
   AdminAnalyticsView:       () => import('./views/AdminAnalyticsView.js').then((m) => m.AdminAnalyticsView),
   AdminGeneralSettingsView: () => import('./views/AdminGeneralSettingsView.js').then((m) => m.AdminGeneralSettingsView),
+  AdminCheckoutSettingsView: () => import('./views/AdminCheckoutSettingsView.js').then((m) => m.AdminCheckoutSettingsView),
+  AdminAnnouncementView:    () => import('./views/AdminAnnouncementView.js').then((m) => m.AdminAnnouncementView),
   AdminUpdatesView:         () => import('./views/AdminUpdatesView.js').then((m) => m.AdminUpdatesView),
   AdminMonitoringView:      () => import('./views/AdminMonitoringView.js').then((m) => m.AdminMonitoringView),
   AdminMcpSettingsView:     () => import('./views/AdminMcpSettingsView.js').then((m) => m.AdminMcpSettingsView),
@@ -103,6 +105,9 @@ const VIEWS = {
 // release. A bug in the view's own constructor is NOT marked: it stays the
 // error it is instead of passing for a network problem.
 class AssetLoadError extends Error {}
+
+// Admin screens gated on the admin role itself (isAdmin()), not a view id.
+const ADMIN_ONLY_PATHS = new Set(['/admin/roles', '/admin/monitoring', '/admin/mcp']);
 async function make(name, ...args) {
   let View;
   try {
@@ -141,6 +146,8 @@ const ROUTES = [
   { pattern: '/admin/users',     factory: async ()  => (isAuthenticated() && canSeeView('users')) ? make('AdminUsersView') : new HomeView() },
   { pattern: '/admin/analytics', factory: async ()  => (isAuthenticated() && canSeeView('analytics')) ? make('AdminAnalyticsView') : new HomeView() },
   { pattern: '/admin/general',   factory: async ()  => (isAuthenticated() && canSeeView('general')) ? make('AdminGeneralSettingsView') : new HomeView() },
+  { pattern: '/admin/checkout',  factory: async ()  => (isAuthenticated() && canSeeView('checkout')) ? make('AdminCheckoutSettingsView') : new HomeView() },
+  { pattern: '/admin/announcement', factory: async () => (isAuthenticated() && canSeeView('announcement')) ? make('AdminAnnouncementView') : new HomeView() },
   { pattern: '/admin/updates',   factory: async ()  => (isAuthenticated() && canSeeView('updates')) ? make('AdminUpdatesView') : new HomeView() },
   { pattern: '/admin/monitoring', factory: async () => (isAuthenticated() && isAdmin()) ? make('AdminMonitoringView') : new HomeView() },
   { pattern: '/admin/mcp', factory: async () => (isAuthenticated() && isAdmin()) ? make('AdminMcpSettingsView') : new HomeView() },
@@ -410,6 +417,8 @@ export class Router {
       '/admin/users':      'users',
       '/admin/analytics':  'analytics',
       '/admin/general':    'general',
+      '/admin/checkout':   'checkout',
+      '/admin/announcement': 'announcement',
       '/admin/updates':    'updates',
       '/admin/discounts':  'discounts',
       '/admin/sales':      'sales',
@@ -440,7 +449,16 @@ export class Router {
       navigateReplace('/' + getLocale() + '/');
       return;
     }
-    if (path === '/admin/roles' && (!isAuthenticated() || !isAdmin())) {
+    // Admin-only screens, and the projects board (its view or the editor
+    // carve-out). Their factories fall back to HomeView too, but in place —
+    // the home page painted under /admin/monitoring. The role × route harness
+    // (e2e/roles, harvest 2 lane 9) found monitoring, mcp and projects doing
+    // that; roles already redirected. Refuse them all the same way.
+    if (ADMIN_ONLY_PATHS.has(path) && (!isAuthenticated() || !isAdmin())) {
+      navigateReplace('/' + getLocale() + '/');
+      return;
+    }
+    if (path === '/admin/projects' && (!isAuthenticated() || !(canSeeView('projects') || canEdit()))) {
       navigateReplace('/' + getLocale() + '/');
       return;
     }

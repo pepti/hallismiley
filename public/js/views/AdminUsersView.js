@@ -41,12 +41,15 @@ export class AdminUsersView {
   constructor() {
     // Seeded from the query string, so a reload — or a link pasted to a
     // colleague — lands on the same page, sort and search.
-    const st = readListState({ page: 1, q: '', sort: 'created_at', dir: 'desc' });
+    const st = readListState({ page: 1, q: '', sort: 'created_at', dir: 'desc', status: '' });
     this._page  = Math.max(1, st.page);
     this._total = 0;
     this._roles = [];
     this._sort  = { field: st.sort, dir: st.dir === 'asc' ? 'asc' : 'desc' }; // default matches the server order
     this._q     = st.q;
+    // ?status=pending: sign-ups awaiting approval — the list the "Í dag" card
+    // links to (the server counts with the same predicate; harvest 2 lane 5).
+    this._status = st.status === 'pending' ? 'pending' : '';
     this._limit = readPageSize(VIEW_ID, DEFAULT_SIZE);
     this._detach = [];
   }
@@ -55,8 +58,8 @@ export class AdminUsersView {
   // lives in localStorage and is deliberately absent from the URL.
   _syncUrl() {
     syncListState(href('/admin/users'),
-      { page: this._page, q: this._q, sort: this._sort.field, dir: this._sort.dir },
-      { page: 1, q: '', sort: 'created_at', dir: 'desc' });
+      { page: this._page, q: this._q, sort: this._sort.field, dir: this._sort.dir, status: this._status },
+      { page: 1, q: '', sort: 'created_at', dir: 'desc', status: '' });
   }
 
   async render() {
@@ -80,6 +83,8 @@ export class AdminUsersView {
                placeholder="${t('adminUsers.searchPlaceholder')}"
                aria-label="${t('adminUsers.searchPlaceholder')}"
                autocomplete="off" value="${escHtml(this._q)}" />
+        ${this._status ? `<span class="filter-chip" id="users-status-chip">${escHtml(t('adminUsers.onlyPending'))}
+          <button type="button" class="filter-chip__clear" id="users-status-clear" aria-label="${escHtml(t('adminUsers.clearFilter'))}">×</button></span>` : ''}
       </div>
       <div class="admin-table-wrap" id="users-table-wrap">
         <div class="admin-loading">${t('form.loading')}</div>
@@ -89,6 +94,13 @@ export class AdminUsersView {
 
     this._el = el;
     this._bindSearch();
+    el.querySelector('#users-status-clear')?.addEventListener('click', () => {
+      this._status = '';
+      this._page = 1;
+      el.querySelector('#users-status-chip')?.remove();
+      this._syncUrl();
+      this._load();
+    });
 
     // Both bind to elements that survive _load()'s innerHTML repaint — the
     // table WRAP (the thead inside it is rebuilt every load) and the pager host.
@@ -121,6 +133,7 @@ export class AdminUsersView {
           sort:   this._sort.field,
           order:  this._sort.dir,
           ...(this._q ? { q: this._q } : {}),
+          ...(this._status ? { status: this._status } : {}),
         }),
         listRoles().catch(() => ({ roles: [] })),
       ]);

@@ -118,6 +118,13 @@ test.describe('Roles grid on a phone', () => {
         .map((n) => `${n.tagName.toLowerCase()}${n.id ? '#' + n.id : ''}.${String(n.className).trim().replace(/\s+/g, '.')}`);
     });
     expect(poking).toEqual([]);
+    // The narrowest phone too. The 375px overflow CI kept reporting (1px) was
+    // the NAV, not the page: the brand never shrank, so the account button's
+    // caret was pushed past the edge — by 53px at 320 on any machine before
+    // the brand column learnt to give way (layout.css, 2026-09-26).
+    await page.setViewportSize({ width: 320, height: 812 });
+    const narrow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(narrow).toBeLessThanOrEqual(0);
   });
 });
 
