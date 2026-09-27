@@ -4,8 +4,8 @@
   "role": "personal",
   "upstream": "https://github.com/orange-smiley/orangesmiley.git",
   "upstreamBranch": "master",
-  "rev": "cbee076b0fce5d2bf3993b36011ab3b589ff0331",
-  "syncedAt": "2026-09-27T05:54:24.070Z",
+  "rev": "96f9818801ae1999afa50d41c2fa77da2c4e1d03",
+  "syncedAt": "2026-09-27T06:28:19.329Z",
   "syncedPr": 174,
   "grafted": {
     "at": "2026-09-22",
@@ -72,6 +72,13 @@
       "regenerated": [
         "features/README.md"
       ]
+    },
+    {
+      "rev": "96f9818801ae1999afa50d41c2fa77da2c4e1d03",
+      "date": "2026-09-27",
+      "upstreamCommits": 2,
+      "conflicts": 4,
+      "note": "sync (same branch + PR #174) — the engine took the four fixes this sync reported (expenses page phone overflow via books-check--file; the role x route harness exempts identity.routes; the MCP tool list and the adminHome all-clear read the seam / park products): all four conflicts were the hs re-apply hunks, resolved to the engine side, so the three \"hallismiley re-apply (engine-sync 5)\" hunks are gone"
     }
   ]
 }

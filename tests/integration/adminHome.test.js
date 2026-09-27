@@ -221,14 +221,15 @@ describe('an admin', () => {
   });
 
   test('an all-clear instance: empty to-do list, no figures, no feed — still a 200', async () => {
-    // hallismiley re-apply (engine-sync 5, 2026-09-27; drop once the engine
-    // fixes the leak): this admin SEES `bins` and `inventory`, so any active
-    // product an earlier suite on the worker left behind is a to-do here —
+    // Found by the hallismiley sync (2026-09-27): for an admin who sees `bins`
+    // and `inventory`, any active product an earlier suite on the worker left
+    // behind is a to-do here —
     // unshelved (bins_unshelved: lane 5's adminSalesReport 'report-table',
     // booksInvoice 'vat-default-*', orderVatSnapshot 'vatsnap-table') or sold
     // out (out_of_stock: productMerge's 'Merge *-m'). cleanTables() leaves
-    // products alone and those suites never remove theirs. The engine's own
-    // product hides both views, so it never sees them. Both sources read
+    // products alone and those suites never remove theirs. Orange Smiley hides
+    // both views, so it never saw them. Deleting the strays is not an option
+    // (orders and append-only books reference them). Both sources read
     // active products only: park the strays inactive for this one request
     // and put them back after.
     const parked = (await db.query(

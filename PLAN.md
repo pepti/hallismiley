@@ -43,9 +43,9 @@ incidents that used to live in `CLAUDE.md` are in the same file, from
   test databases are `hs_…` now (product id from `engine.json`), made on the
   throwaway test server named by `TEST_PG_URL`, labelled and swept
   (`npm run test:db:clean`). Record: `engine.json` history and the sync PR.
-- 2026-09-27 — the same PR (#174) extended to engine `cbee076`: the
-  `moduleFlags` re-apply is dropped (the engine reads the public IA from the
-  seam); glacier/moss `--text-muted` alpha 0.55 → 0.58 and aurora's
+- 2026-09-27 — the same PR (#174) extended to engine `cbee076`, then
+  `96f9818`: no engine-test re-apply is left (the `moduleFlags` one and the
+  three this sync found are engine fixes now); glacier/moss `--text-muted` alpha 0.55 → 0.58 and aurora's
   `--accent-gradient` dark stop `#8A63E0` → `#8D67E1` clear 4.5 : 1
   ([engine-sync-5-2026-09-26](docs/history.d/2026-09-26-engine-sync-2026-09-26.md#engine-sync-5-2026-09-26)).
   Merging deploys www.hallismiley.is — Halli merges.

@@ -9,9 +9,9 @@ const { ALL, PUBLIC_ROUTES, ADMIN_ROUTES, parseRouter, mayOpen } = require('../.
 describe('e2e/lib/routes.js', () => {
   test('every router pattern is parsed, with the view it renders', () => {
     const listed = JSON.parse(fs.readFileSync(path.join(__dirname, '../../public/js/routePatterns.json'), 'utf8')).patterns;
-    // hallismiley re-apply (engine-sync 5, 2026-09-27; drop once the engine
-    // takes it): a product's own routes (identity.routes) may be absent from
-    // the JSON — the exemption tests/unit/routePatterns.test.js makes.
+    // A product's own routes (identity.routes; found by the hallismiley sync,
+    // 2026-09-27) may be absent from the JSON — the exemption
+    // tests/unit/routePatterns.test.js makes.
     const own = new Set(Object.keys(require('../../server/config/identity').productRoutes()));
     expect(ALL.map((r) => r.pattern).filter((p) => !own.has(p) || listed.includes(p))).toEqual(listed);
     for (const r of ALL) {

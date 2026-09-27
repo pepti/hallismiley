@@ -55,10 +55,9 @@ function loadRoutes() {
   const listed = JSON.parse(fs.readFileSync(PATTERNS, 'utf8')).patterns;
   const parsed = routes.map((r) => r.pattern);
   const missing = listed.filter((p) => !parsed.includes(p));
-  // hallismiley re-apply (engine-sync 5, 2026-09-27; drop once the engine
-  // takes it): a product's own routes (identity.routes, e.g. /aron13ara) reach
-  // the server through ssrMeta, not routePatterns.json — the exemption
-  // tests/unit/routePatterns.test.js already makes.
+  // A product's own routes (identity.routes, e.g. /aron13ara; found by the
+  // hallismiley sync, 2026-09-27) reach the server through ssrMeta, not
+  // routePatterns.json — the exemption tests/unit/routePatterns.test.js makes.
   const own = new Set(Object.keys(productRoutes()));
   const extra = parsed.filter((p) => !listed.includes(p) && !own.has(p));
   if (missing.length || extra.length) {
