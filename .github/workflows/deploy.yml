@@ -55,7 +55,7 @@ jobs:
           ref: ${{ env.DEPLOY_SHA }}
 
       - name: Azure Login (OIDC)
-        uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43 # v3
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3
         with:
           client-id:       ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id:       ${{ secrets.AZURE_TENANT_ID }}
@@ -71,7 +71,7 @@ jobs:
       # The default docker driver can't export a build cache; the
       # docker-container driver can, which is what makes cache-to below work.
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       # GHA layer cache so unchanged layers (notably the ~200 MB `npm ci`
       # node_modules layer) are reused across deploys instead of rebuilt and
@@ -99,7 +99,7 @@ jobs:
       # deliberately not passed — the Dockerfile reads it from package.json.
       - name: Build and push Docker image
         id: build
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: .
           push: true
